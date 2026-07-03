@@ -1,0 +1,38 @@
+:root { color-scheme: dark; }
+body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:#0f172a; color:#e5e7eb; }
+.app { max-width: 1280px; margin: 0 auto; padding: 28px; }
+.hero { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:24px; }
+h1 { margin:0; font-size:42px; letter-spacing:-1px; }
+p { color:#94a3b8; }
+.actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+button, .button { background:#2563eb; color:white; border:0; border-radius:10px; padding:10px 14px; display:flex; gap:8px; align-items:center; cursor:pointer; font-weight:700; }
+button.danger { background:#7f1d1d; }
+.cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:14px; margin-bottom:20px; }
+.card, .panel { background:#111827; border:1px solid #1f2937; border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.22); }
+.card span { display:block; color:#94a3b8; font-size:14px; }
+.card strong { font-size:30px; }
+.controls { display:grid; grid-template-columns: 1fr 170px 150px auto; gap:12px; margin-bottom:18px; }
+.search, select { box-sizing:border-box; padding:12px; border-radius:10px; border:1px solid #334155; background:#020617; color:white; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:10px; border-bottom:1px solid #1f2937; vertical-align:top; }
+th { color:#93c5fd; position:sticky; top:0; background:#111827; }
+td small { display:block; color:#94a3b8; margin-top:3px; }
+.flipfirst { color:#86efac; font-weight:800; }
+.worthlisting { color:#fde68a; font-weight:800; }
+.bundlecommon { color:#cbd5e1; }
+.footer { text-align:center; font-size:13px; }
+@media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
+
+.rowActions { display:flex; gap:8px; }
+.rowActions button { padding:7px 9px; }
+.needsCheck td { background: rgba(245, 158, 11, 0.08); }
+.modalBackdrop { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:center; justify-content:center; padding:20px; }
+.modal { width:min(850px, 95vw); max-height:90vh; overflow:auto; background:#111827; border:1px solid #334155; border-radius:18px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+.formGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
+label { display:flex; flex-direction:column; gap:6px; color:#cbd5e1; font-size:14px; }
+input, select, textarea { padding:10px; border-radius:10px; border:1px solid #334155; background:#020617; color:white; }
+textarea { min-height:80px; }
+.hint { font-size:14px; color:#fbbf24; }
+.secondary { background:#475569; }
+.right { justify-content:flex-end; }
+@media (max-width:800px) { .formGrid { grid-template-columns:1fr; } }
