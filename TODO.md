@@ -31,6 +31,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Update inventory status and add a sale record when a listing becomes Sold
 - [x] Import Sales Tracker JSON into inventory, marketplace listings, and price history
 - [x] Export the filtered Listings view to CSV
+- [x] Add a hosted in-app Quick Guide and `/README.md` for scanning, research, eBay listing, and sale tracking
 
 ## Beta Launch Blockers - Engineering
 

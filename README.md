@@ -18,5 +18,9 @@ Convex-backed inventory UI with schema, backend functions, docs, Excel import/ex
 - `docs/ROADMAP.md` tracks the version roadmap.
 - `TODO.md` tracks near-term implementation tasks.
 
+## Hosted Quick Guide
+
+The deployed app includes a Quick Guide view at `/#guide`. A plain hosted reference is also available at `/README.md`.
+
 ## Next Step
 Polish the product identity, then continue toward collections, saved eBay research, auth, and production deployment.

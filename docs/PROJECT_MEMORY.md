@@ -18,6 +18,7 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- Hosted Quick Guide added at `/#guide`, with a plain `/README.md` reference covering scan, research, internal draft, manual eBay publishing, sale tracking, and backups.
 - Sales Tracker's useful workflow is now merged into FlipTracker: marketplace listings, lifecycle statuses, listing prices/dates/platforms, price history, listing metrics, sold-profit tracking, CSV export, and old Sales Tracker JSON import.
 - FlipTracker is the only product base. The separate Sales Tracker repo is now a migration/reference source and can be archived after its data is exported.
 - Universal media barcode workflow started: camera UPC/EAN/ISBN scanning, manual barcode fallback, metadata lookup action, review form, condition/completeness, photo capture, heuristic listing recommendation, and eBay-ready draft fields saved on assets.

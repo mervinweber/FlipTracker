@@ -3,10 +3,19 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, Camera, Download, FolderPlus, ImagePlus, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Barcode, BookOpen, Camera, Download, FolderPlus, ImagePlus, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
+import QuickGuide from './components/QuickGuide';
+
+type AppView = 'Inventory' | 'Listings' | 'Guide';
+
+function viewFromHash(): AppView {
+  if (window.location.hash.toLowerCase() === '#guide') return 'Guide';
+  if (window.location.hash.toLowerCase() === '#listings') return 'Listings';
+  return 'Inventory';
+}
 
 type Asset = {
   _id: Id<'assets'>;
@@ -308,7 +317,7 @@ async function compressImage(file: File): Promise<string> {
 }
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'Inventory' | 'Listings'>('Inventory');
+  const [activeView, setActiveView] = useState<AppView>(viewFromHash);
   const [query, setQuery] = useState('');
   const [consoleFilter, setConsoleFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -353,6 +362,17 @@ export default function App() {
     document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || scannerOpen);
     return () => document.body.classList.remove('modalOpen');
   }, [editing, editingCollection, researchAsset, scannerOpen]);
+
+  useEffect(() => {
+    const syncView = () => setActiveView(viewFromHash());
+    window.addEventListener('hashchange', syncView);
+    return () => window.removeEventListener('hashchange', syncView);
+  }, []);
+
+  function changeView(view: AppView) {
+    setActiveView(view);
+    window.history.replaceState(null, '', view === 'Inventory' ? '#inventory' : `#${view.toLowerCase()}`);
+  }
 
   useEffect(() => {
     if (!scannerOpen || !videoRef.current) return;
@@ -541,7 +561,7 @@ export default function App() {
       currentPrice: price || undefined,
       notes: asset.ebayShipping ? `Shipping plan: ${asset.ebayShipping}` : undefined,
     });
-    setActiveView('Listings');
+    changeView('Listings');
   }
 
   async function deleteCollection(id: Id<'collections'>) {
@@ -661,8 +681,9 @@ export default function App() {
       </header>
 
       <nav className="viewTabs" aria-label="Primary views">
-        <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => setActiveView('Inventory')}><PackageSearch size={17}/> Inventory</button>
-        <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => setActiveView('Listings')}><LayoutList size={17}/> Listings</button>
+        <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
+        <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
+        <button className={activeView === 'Guide' ? 'active' : 'secondary'} onClick={() => changeView('Guide')}><BookOpen size={17}/> Quick Guide</button>
       </nav>
 
       {activeView === 'Inventory' ? <><section className="cards">
@@ -722,7 +743,7 @@ export default function App() {
             </table>
           </div>
         )}
-      </section></> : <ListingsPanel/>}
+      </section></> : activeView === 'Listings' ? <ListingsPanel/> : <QuickGuide/>}
 
       {scannerOpen ? (
         <div className="modalBackdrop">
