@@ -15,6 +15,7 @@ Convex-backed inventory UI with schema, backend functions, docs, Excel import/ex
 - `docs/PROJECT_MEMORY.md` is the project memory and restart point for future work.
 - `docs/PRODUCT_IDENTITY.md` tracks brand, design language, and UI direction.
 - `docs/GAME_METADATA_MODEL.md` tracks planned completeness, region, and condition fields.
+- `docs/EBAY_PRICING_PLAN.md` defines the free-beta eBay active-listing pricing workflow and paid-provider decision gate.
 - `docs/ROADMAP.md` tracks the version roadmap.
 - `TODO.md` tracks near-term implementation tasks.
 

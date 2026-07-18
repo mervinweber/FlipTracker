@@ -66,11 +66,15 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Manual fallback when lookup fails
 
 ## v0.5.1 Barcode Value Assist
-- [ ] Research pricing providers for barcode-resolved items
-- [ ] Use barcode lookup results to seed eBay sold-comps or PriceCharting-style value research
+- [x] Choose eBay active listings as the initial free-beta pricing source
+- [x] Document the eBay pricing plan and paid-provider decision gate
+- [ ] Connect server-side eBay Browse API credentials
+- [ ] Use barcode lookup results to seed eBay active-listing research
 - [ ] Suggest estimated low/high values with source and confidence
 - [ ] Cache lookup/value results in Convex to reduce repeat calls and API usage
 - [ ] Keep API keys, rate limits, and provider calls server-side in Convex actions
+- [ ] Add bounded bulk refresh with a review-before-apply queue
+- [ ] Keep active asking prices separate from manual or future automated sold comps
 
 ## v0.6 AI Photo Recognition
 - [ ] Photo/spine import workflow
@@ -107,6 +111,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Calculator library: break-even price, ROI, margin vs markup, promoted listing ROI, tax/export summaries
 - [ ] Sourcing history: save skipped items so bad buys can be learned from later
 - [ ] USB/Bluetooth barcode scanner support as keyboard input for desktop bulk intake
+- [ ] Add a paid pricing provider only after beta demand and subscription revenue justify the recurring cost
 
 
 ## v0.5.2 Media Listing Prep
