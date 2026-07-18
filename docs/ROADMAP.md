@@ -1,6 +1,19 @@
 # Roadmap
 
-## v0.2 Convex Foundation
+FlipTracker should grow deliberately from a focused personal resale tracker into a polished collector/reseller platform.
+
+## Product Lessons From Underpriced
+
+Underpriced is useful as a reference because it frames the reseller workflow around fast buy/skip decisions, not just inventory storage. Publicly visible ideas worth adapting for FlipTracker:
+
+- Sourcing mode should answer "buy or skip?" quickly.
+- Research should show sold comps, estimated fees, shipping drag, net profit, ROI, and confidence/red flags together.
+- Saved analyses should become inventory records without duplicate entry.
+- Every AI or automated estimate should include verification links and confidence signals.
+- Free utility-style calculators can later become focused in-app tools: break-even price, ROI, promoted listings ROI, shipping estimate, and fee comparison.
+- Mobile/PWA use matters because decisions happen at thrift stores, garage sales, and marketplace pickups.
+
+## v0.2 Convex Integration
 - [x] Add Convex dependency
 - [x] Add schema
 - [x] Add assets API
@@ -15,9 +28,112 @@
 - [ ] Add auth strategy
 - [ ] Deploy to Vercel
 
-## v0.3 Workflow
-- [ ] Collection detail page
-- [ ] Asset edit page route
+## v0.3 Collections
+- [x] Collections panel with purchase lot cards
+- [x] Purchase lots/collections table foundation
+- [x] Attach assets to collections
+- [x] Add item-level storage location / bin tracking
+- [x] Collection-level purchase price and source
+- [x] Collection profitability summary
+- [ ] Dedicated collection detail page
+- [ ] Lot calculator foundation
+
+## v0.4 eBay Research Workflow
+- [x] Saved research modal connected to `research.addValueCheck`
+- [x] Store sold-comps notes and value history
+- [x] Add external sold-search link per item
+- [x] Add current sold-comps workflow foundation
+- [ ] Show sold-comp count, confidence level, and verification links for each value check
+- [ ] Add fee, shipping, and net-profit estimate fields to value research
+- [ ] Add red flags for low comps, high shipping drag, missing parts, region mismatch, or low sell-through confidence
+- [ ] Track confidence and next review date
 - [ ] Strategy dashboard: Flip Now / Watch / Hold / Bundle
 - [ ] Research tab with saved value history
-- [ ] Lot calculator
+
+## v0.5 Barcode Scanner
+- [x] Barcode scanner prototype using `@zxing/browser`
+- [x] Support UPC-A, EAN-13, EAN-8, and ISBN inputs
+- [ ] Confirm UPC-E normalization and edge-case handling
+- [x] Add manual barcode entry fallback for camera failures
+- [x] Store raw barcode on inventory items
+- [x] First lookup flow for DVDs, Blu-rays, books, CDs, games, and other media
+- [x] Auto-fill title, type, format, and identifier metadata into a review screen
+- [x] Save lookup provider, confidence, and timestamp
+- [x] Save-to-inventory review workflow
+- [ ] Add sourcing mode for quick buy/skip decisions while shopping
+- [ ] Convert a saved sourcing analysis into an inventory item
+- [x] Mark low-confidence scans and changed value inputs as needing value check
+- [x] Manual fallback when lookup fails
+
+## v0.5.1 Barcode Value Assist
+- [ ] Research pricing providers for barcode-resolved items
+- [ ] Use barcode lookup results to seed eBay sold-comps or PriceCharting-style value research
+- [ ] Suggest estimated low/high values with source and confidence
+- [ ] Cache lookup/value results in Convex to reduce repeat calls and API usage
+- [ ] Keep API keys, rate limits, and provider calls server-side in Convex actions
+
+## v0.6 AI Photo Recognition
+- [ ] Photo/spine import workflow
+- [ ] Identify titles from shelf/spine photos
+- [ ] Confidence review queue
+- [ ] Analyze screenshots from marketplace listings as sourcing candidates
+- [ ] Keep AI identification editable with source/confidence metadata
+- [ ] Add missing games from new photos
+
+## v0.7 Collection Analyzer
+- [ ] "Should I buy this lot?" calculator
+- [ ] Suggested max offer calculator
+- [ ] Estimate list-first / bundle / hold split
+- [ ] Identify risk from missing completeness, region, or low confidence
+- [ ] Compare expected value against purchase price
+- [ ] Include platform fee, shipping, packaging, and time-cost assumptions in lot math
+- [ ] Output a buy/skip recommendation with reasons
+
+## v1.0 Public Release
+- [ ] Authentication and user-owned data
+- [ ] Production deployment
+- [ ] Polished product identity
+- [ ] Complete onboarding/import workflow
+- [ ] Data export and backup confidence
+- [ ] Public-facing documentation
+
+## Future Tracks
+- [ ] Richer game completeness model: disc only, case only, manual only, CIB, sealed, loose cartridge, replacement artwork
+- [ ] Region metadata: NTSC, PAL, NTSC-J, region-free, unknown
+- [ ] Storage organization filters: bin, shelf, room, listed rack, review pile
+- [ ] eBay listing integration research
+- [ ] Push inventory item to eBay draft listing
+- [ ] Listing utilities: title helper, category/item-specific checklist, cross-platform copy generator
+- [ ] Calculator library: break-even price, ROI, margin vs markup, promoted listing ROI, tax/export summaries
+- [ ] Sourcing history: save skipped items so bad buys can be learned from later
+- [ ] USB/Bluetooth barcode scanner support as keyboard input for desktop bulk intake
+
+
+## v0.5.2 Media Listing Prep
+- [x] Expand item model beyond games to DVDs, Blu-rays, CDs, books, and other media
+- [x] Add condition and completeness review fields for scanned media
+- [x] Add heuristic Sell Individually / Bundle / Skip recommendation
+- [x] Add eBay-ready title, description, category, condition, item specifics, price, and shipping settings
+- [x] Recalculate recommendation and listing details when key item/value fields change
+- [ ] Add verified pricing provider and sold-comp averaging
+- [ ] Add eBay draft creation after scanning workflow is stable
+
+## v0.5.3 Sales Tracker Merge
+- [x] Review Sales Tracker repo and choose FlipTracker as the combined app base
+- [x] Document merge strategy in `docs/SALES_TRACKER_MERGE_PLAN.md`
+- [x] Add marketplace listing lifecycle tables to Convex
+- [x] Add active listing, sold listing, platform, date, and price history fields
+- [x] Add Listings page using Sales Tracker's useful table/stats/filter patterns
+- [x] Add asset-to-listing draft workflow
+- [x] Add Sales Tracker JSON importer if there is existing listing data to preserve
+- [x] Add listings CSV export and sold-profit reporting
+
+## v0.5.4 Private Beta Hardening
+
+- [ ] Add authentication and user-owned data
+- [ ] Backfill existing records to the first owner
+- [ ] Move photos to Convex file storage
+- [ ] Add mutation/import error states and duplicate protection
+- [ ] Add listing lifecycle tests
+- [ ] Code-split the scanner and listing editor
+- [ ] Complete production Convex and Vercel smoke tests

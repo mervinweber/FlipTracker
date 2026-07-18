@@ -1,4 +1,6 @@
-export type ItemType = 'Video Game' | 'Pokemon Card' | 'Sports Card' | 'DVD' | 'Blu-ray' | 'Toy' | 'Misc';
+export type ItemType = 'Video Game' | 'DVD' | 'Blu-ray' | 'CD' | 'Book' | 'Pokemon Card' | 'Sports Card' | 'Toy' | 'Other Media' | 'Misc';
+
+export type ListingRecommendation = 'Sell Individually' | 'Bundle' | 'Skip' | 'Review';
 
 export type InventoryItem = {
   id?: number;
@@ -6,6 +8,20 @@ export type InventoryItem = {
   console?: string;
   title: string;
   edition?: string;
+  mediaFormat?: string;
+  upc?: string;
+  barcode?: string;
+  barcodeType?: string;
+  releaseYear?: string;
+  releaseDate?: string;
+  studio?: string;
+  rating?: string;
+  coverImageUrl?: string;
+  photoDataUrl?: string;
+  metadataSource?: string;
+  metadataConfidence?: string;
+  collectionName?: string;
+  storageLocation?: string;
   estLow?: number;
   estHigh?: number;
   localLow?: number;
@@ -15,18 +31,28 @@ export type InventoryItem = {
   valueSource?: 'Estimated' | 'User Override';
   needsValueCheck?: boolean;
   priority?: string;
+  strategy?: string;
+  listingRecommendation?: ListingRecommendation;
   status?: string;
   purchasePrice?: number;
   soldPrice?: number;
   fees?: number;
   shipping?: number;
   condition?: string;
+  completeness?: string;
   complete?: boolean;
   manual?: boolean;
   listed?: boolean;
   sold?: boolean;
   notes?: string;
   confidence?: string;
+  ebayTitle?: string;
+  ebayDescription?: string;
+  ebayCategory?: string;
+  ebayCondition?: string;
+  ebayItemSpecifics?: string;
+  ebayPrice?: number;
+  ebayShipping?: string;
   createdAt: string;
   updatedAt: string;
 };

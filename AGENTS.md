@@ -17,6 +17,22 @@ Build FlipTracker: a local-first PWA for tracking resale inventory, starting wit
 - PWA-ready
 
 ## Agent Workflow
+- Read `docs/PROJECT_MEMORY.md` at the start of substantial work.
+- Check `docs/PRODUCT_IDENTITY.md` before changing major UI patterns.
 - Track next steps in TODO.md.
 - Update SETUP.md when install/run steps change.
 - Add notes to docs/ when adding larger features.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

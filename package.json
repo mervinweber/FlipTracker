@@ -8,14 +8,15 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "@zxing/browser": "^0.2.1",
+    "convex": "latest",
+    "dexie": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "dexie": "latest",
-    "xlsx": "latest",
-    "lucide-react": "latest",
-    "convex": "latest"
+    "typescript": "latest",
+    "vite": "latest",
+    "xlsx": "latest"
   },
   "devDependencies": {
     "@types/react": "latest",

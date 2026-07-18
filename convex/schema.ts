@@ -18,7 +18,20 @@ export default defineSchema({
     console: v.optional(v.string()),
     title: v.string(),
     edition: v.optional(v.string()),
+    mediaFormat: v.optional(v.string()),
+    upc: v.optional(v.string()),
+    barcodeType: v.optional(v.string()),
+    releaseYear: v.optional(v.string()),
+    releaseDate: v.optional(v.string()),
+    studio: v.optional(v.string()),
+    rating: v.optional(v.string()),
+    coverImageUrl: v.optional(v.string()),
+    photoDataUrl: v.optional(v.string()),
+    metadataSource: v.optional(v.string()),
+    metadataConfidence: v.optional(v.string()),
+    metadataCheckedAt: v.optional(v.number()),
     collectionId: v.optional(v.id("collections")),
+    storageLocation: v.optional(v.string()),
     estimatedLow: v.optional(v.number()),
     estimatedHigh: v.optional(v.number()),
     userLow: v.optional(v.number()),
@@ -30,21 +43,33 @@ export default defineSchema({
     localHigh: v.optional(v.number()),
     priority: v.optional(v.string()),
     strategy: v.optional(v.string()),
+    listingRecommendation: v.optional(v.string()),
     status: v.optional(v.string()),
     purchasePrice: v.optional(v.number()),
     soldPrice: v.optional(v.number()),
     fees: v.optional(v.number()),
     shipping: v.optional(v.number()),
     condition: v.optional(v.string()),
+    completeness: v.optional(v.string()),
     complete: v.optional(v.boolean()),
     manual: v.optional(v.boolean()),
     barcode: v.optional(v.string()),
+    ebayTitle: v.optional(v.string()),
+    ebayDescription: v.optional(v.string()),
+    ebayCategory: v.optional(v.string()),
+    ebayCondition: v.optional(v.string()),
+    ebayItemSpecifics: v.optional(v.string()),
+    ebayPrice: v.optional(v.number()),
+    ebayShipping: v.optional(v.string()),
     notes: v.optional(v.string()),
     confidence: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_console", ["console"])
+    .index("by_type", ["type"])
+    .index("by_barcode", ["barcode"])
+    .index("by_upc", ["upc"])
     .index("by_status", ["status"])
     .index("by_collection", ["collectionId"])
     .searchIndex("search_title", { searchField: "title", filterFields: ["type", "console", "status"] }),
@@ -60,6 +85,49 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_asset", ["assetId"]),
+
+  marketplaceListings: defineTable({
+    assetId: v.id("assets"),
+    platform: v.string(),
+    status: v.string(),
+    sku: v.optional(v.string()),
+    externalListingId: v.optional(v.string()),
+    listingUrl: v.optional(v.string()),
+    title: v.string(),
+    description: v.optional(v.string()),
+    category: v.optional(v.string()),
+    condition: v.optional(v.string()),
+    itemSpecifics: v.optional(v.string()),
+    listedPrice: v.optional(v.number()),
+    currentPrice: v.optional(v.number()),
+    soldPrice: v.optional(v.number()),
+    shippingCharged: v.optional(v.number()),
+    shippingCost: v.optional(v.number()),
+    fees: v.optional(v.number()),
+    listedDate: v.optional(v.string()),
+    soldDate: v.optional(v.string()),
+    buyer: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_assetId", ["assetId"])
+    .index("by_status", ["status"])
+    .index("by_platform", ["platform"])
+    .index("by_platform_and_status", ["platform", "status"])
+    .index("by_listedDate", ["listedDate"])
+    .index("by_soldDate", ["soldDate"]),
+
+  listingPriceHistory: defineTable({
+    listingId: v.id("marketplaceListings"),
+    assetId: v.id("assets"),
+    date: v.number(),
+    price: v.number(),
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_listingId", ["listingId"])
+    .index("by_assetId", ["assetId"]),
 
   valueHistory: defineTable({
     assetId: v.id("assets"),
