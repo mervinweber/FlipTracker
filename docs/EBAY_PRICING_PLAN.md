@@ -2,9 +2,11 @@
 
 ## Decision
 
-FlipTracker will use eBay listings as its first automated pricing source during the free beta.
+FlipTracker will pursue eBay listings as its first automated pricing source during the free beta.
 
-The first integration will use eBay's broadly available Browse API to retrieve active listings. Active listings represent seller asking prices, not completed-sale values. FlipTracker must label them as `Active eBay Listings` or `Asking Price Range` and must not present them as sold comps or verified market value.
+The first integration candidate is eBay's Browse API, which retrieves active listings. Active listings represent seller asking prices, not completed-sale values. FlipTracker must label them as `Active eBay Listings` or `Asking Price Range` and must not present them as sold comps or verified market value.
+
+The API does not require a paid data subscription, but production use is restricted. Sandbox testing is available with an eBay developer account; production Buy/Browse API access requires an eBay application review and may require eBay Partner Network approval and agreements. Approval is not guaranteed.
 
 Paid pricing providers are deferred until:
 
@@ -35,6 +37,10 @@ The existing eBay sold/completed search link remains available for manual verifi
 ## Phase 1 - eBay Developer Connection
 
 - Create an eBay Developers Program application.
+- Create an eBay Partner Network account if required for the production Browse API application.
+- Build a reviewable sandbox proof of the search workflow.
+- Submit the Buy API production-access/application growth check.
+- Treat production approval as a dependency, not an assumption.
 - Store eBay client credentials only in Convex environment variables.
 - Obtain eBay application access tokens server-side through the client-credentials flow.
 - Never expose eBay secrets through `VITE_` environment variables or browser requests.
@@ -44,6 +50,8 @@ Official references:
 
 - Browse API: https://developer.ebay.com/api-docs/buy/static/api-browse.html
 - OAuth client credentials: https://developer.ebay.com/api-docs/static/oauth-client-credentials-grant.html
+- Buy API production requirements: https://developer.ebay.com/api-docs/buy/buy-requirements.html
+- Application growth check: https://developer.ebay.com/api-docs/static/gs_request-an-application-growth.html
 
 ## Phase 2 - Active Listing Lookup
 
@@ -98,6 +106,16 @@ The pricing provider layer should return one normalized result shape regardless 
 - Category-specific sources for books, movies, music, or cards when justified.
 
 When actual sold data is available, FlipTracker should show active asking prices and sold prices separately rather than blending them without explanation.
+
+## No-Approval Fallback
+
+If eBay does not approve production Browse API access during beta:
+
+- Keep one-click eBay active and sold/completed search links.
+- Generate strong search queries from UPC, title, edition, format, region, and completeness.
+- Let users enter or approve observed values manually.
+- Build the review queue and value-history model now so an approved or paid provider can be connected later.
+- Do not depend on unofficial scraping endpoints or unreviewed marketplace APIs for production.
 
 ## eBay Listing And Order Integration
 

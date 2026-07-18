@@ -60,6 +60,10 @@ These must be completed in code before the beta URL is shared with other users.
 - [x] Choose eBay active listings as the free-beta automated pricing source
 - [x] Document the provider and upgrade plan in `docs/EBAY_PRICING_PLAN.md`
 - [ ] Create an eBay Developers Program application
+- [ ] Create an eBay Partner Network account if required for Browse API production access
+- [ ] Build the Browse API search proof in eBay Sandbox
+- [ ] Submit the free application growth check / Buy API production-access request
+- [ ] Confirm production approval before depending on automated eBay pricing
 - [ ] Add server-side eBay client-credentials OAuth in a Convex action
 - [ ] Store eBay credentials only in Convex environment variables
 - [ ] Search the Browse API by UPC/GTIN, with title/edition fallback
@@ -72,6 +76,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Preserve user overrides and require review before applying bulk changes
 - [ ] Keep the manual eBay sold/completed search link for verification
 - [ ] Defer paid providers until beta usage and a paid subscription model justify the cost
+- [ ] If production Browse access is denied, ship generated eBay search links plus manual review rather than unofficial scraping
 
 ## Owner Checklist - Accounts And Security
 

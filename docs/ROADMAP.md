@@ -69,6 +69,8 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Choose eBay active listings as the initial free-beta pricing source
 - [x] Document the eBay pricing plan and paid-provider decision gate
 - [ ] Connect server-side eBay Browse API credentials
+- [ ] Build and demonstrate the search workflow in eBay Sandbox
+- [ ] Apply for eBay Buy/Browse API production access and complete the application growth check
 - [ ] Use barcode lookup results to seed eBay active-listing research
 - [ ] Suggest estimated low/high values with source and confidence
 - [ ] Cache lookup/value results in Convex to reduce repeat calls and API usage

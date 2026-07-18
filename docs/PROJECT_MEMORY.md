@@ -59,7 +59,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Design the app like a product from the start, not a rough internal utility.
 - Use Underpriced as a product reference for fast reseller buy/skip decisions, fee/shipping-aware profit checks, confidence/red-flag signals, and saved sourcing analyses.
 - Treat barcode scanning as two separate features: camera/barcode capture first, then metadata/value lookup through provider-backed services.
-- Use eBay Browse API active listings as the first automated pricing signal during free beta. Clearly label these as asking prices, preserve manual sold-result verification, and do not silently overwrite user values.
+- Pursue eBay Browse API active listings as the first automated pricing signal during free beta. It has no data subscription fee, but production access requires eBay approval and is not guaranteed. Clearly label results as asking prices, preserve manual sold-result verification, and do not silently overwrite user values.
 - Defer PriceCharting and other paid pricing providers until tester demand, product polish, and a paid FlipTracker subscription can support the cost.
 
 ## Coding Conventions
