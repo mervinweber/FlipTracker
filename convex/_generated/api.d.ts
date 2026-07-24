@@ -14,6 +14,7 @@ import type * as listings from "../listings.js";
 import type * as mediaLookup from "../mediaLookup.js";
 import type * as reports from "../reports.js";
 import type * as research from "../research.js";
+import type * as sourcing from "../sourcing.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   mediaLookup: typeof mediaLookup;
   reports: typeof reports;
   research: typeof research;
+  sourcing: typeof sourcing;
 }>;
 
 /**

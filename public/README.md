@@ -20,6 +20,16 @@ FlipTracker tracks games, DVDs, Blu-rays, CDs, books, and other resale media fro
 
 Changing the title, UPC, edition, condition, or completeness marks the item for another value check.
 
+## Decide whether to buy
+
+1. Open **Sourcing** and select **New Analysis**.
+2. Enter the exact title, edition, condition, purchase cost, active listing count, and sold count for the last 90 days.
+3. Enter comparable sold prices one per line. Use `24.99 + 4.50` when shipping was charged separately.
+4. Review median price, expected profit, ROI, sell-through, estimated days to sell, rarity, liquidity, and confidence.
+5. Open **Details** to inspect the calculation and verify the item on eBay before buying.
+
+**Load Demo Examples** adds clearly labeled illustrative records showing common, uncommon, niche, and low-confidence outcomes. They are not current eBay market data. Rarity measures supply; liquidity measures likely sales speed.
+
 ## Create and post an eBay listing
 
 1. Select **Draft** on the inventory item.

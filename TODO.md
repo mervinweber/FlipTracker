@@ -78,6 +78,22 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Defer paid providers until beta usage and a paid subscription model justify the cost
 - [ ] If production Browse access is denied, ship generated eBay search links plus manual review rather than unofficial scraping
 
+## Sourcing Decision Engine
+
+- [x] Add Convex sourcing analysis and sold-observation tables
+- [x] Calculate shipping-inclusive average, median, and trimmed average sold prices
+- [x] Calculate sell-through proxy, estimated days to sell, rarity, liquidity, profit, and ROI
+- [x] Add deterministic Buy / Maybe / Pass recommendations with confidence and reasons
+- [x] Add manual sold-price, active-count, sold-count, and cost entry
+- [x] Add one-click eBay sold-search verification from each analysis
+- [x] Add common, uncommon, niche, and low-confidence illustrative demo records
+- [x] Add create, detail, and delete workflows in a dedicated Sourcing view
+- [ ] Convert a saved sourcing analysis into a new inventory item
+- [ ] Link a sourcing analysis to an existing inventory item
+- [ ] Replace manual listing counts and sold observations with approved provider data when available
+- [ ] Add stale-analysis dates and refresh reminders
+- [ ] Add configurable category fee and shipping presets
+
 ## Owner Checklist - Accounts And Security
 
 - [ ] Choose the beta authentication provider; Clerk is the current recommended default for a React/Vite + Convex beta
@@ -217,7 +233,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Fee, shipping, and net-profit estimates in value research
 - [ ] Richer game completeness and region fields
 - [ ] Batch photo/spine recognition workflow
-- [ ] Sourcing mode with Buy / Skip recommendation
+- [x] Sourcing mode with Buy / Maybe / Pass recommendation
 - [ ] eBay OAuth and draft creation after the internal listing workflow is stable
 - [ ] Read-only eBay listing audit before any automated edit/publish behavior
 - [ ] Final logo, PWA icons, typography, and onboarding polish

@@ -31,6 +31,19 @@ Scan / Add -> Inventory Asset -> Internal Listing Draft -> Active Marketplace Li
 
 The old Sales Tracker frontend is not merged mechanically. Its useful lifecycle, metrics, filters, CSV export, and JSON migration concepts are rebuilt in FlipTracker's React and Convex architecture.
 
+## Sourcing Decision Workflow
+
+```text
+Manual eBay observations + acquisition costs
+                    |
+                    v
+Convex sourcing mutation -> deterministic metrics -> Sourcing dashboard
+```
+
+`sourcingAnalyses` stores the saved inputs and calculated decision snapshot. `sourcingComps` stores each observed sold price separately, including item price, shipping, and delivered total. The server calculates median and average sold price, sell-through proxy, estimated days to sell, rarity, liquidity, expected fees, profit, ROI, confidence, and Buy / Maybe / Pass.
+
+This workflow is provider-independent and currently uses manual observations. The demo records are explicitly marked illustrative. An approved eBay or paid provider can later feed the same normalized calculation layer without changing the decision UI.
+
 ## Security Boundary
 
 Authentication and owner-scoped data are not implemented yet. Current Convex functions are public application APIs without per-user authorization. A shared beta requires an auth provider, `ConvexProviderWithAuth`, `convex/auth.config.ts`, owner fields/indexes, and server-side ownership checks on every user-data function.

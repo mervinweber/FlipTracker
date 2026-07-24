@@ -3,16 +3,18 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, BookOpen, Camera, Download, FolderPlus, ImagePlus, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
 import QuickGuide from './components/QuickGuide';
+import SourcingPanel from './components/SourcingPanel';
 
-type AppView = 'Inventory' | 'Listings' | 'Guide';
+type AppView = 'Inventory' | 'Listings' | 'Sourcing' | 'Guide';
 
 function viewFromHash(): AppView {
   if (window.location.hash.toLowerCase() === '#guide') return 'Guide';
+  if (window.location.hash.toLowerCase() === '#sourcing') return 'Sourcing';
   if (window.location.hash.toLowerCase() === '#listings') return 'Listings';
   return 'Inventory';
 }
@@ -683,6 +685,7 @@ export default function App() {
       <nav className="viewTabs" aria-label="Primary views">
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
+        <button className={activeView === 'Sourcing' ? 'active' : 'secondary'} onClick={() => changeView('Sourcing')}><Gauge size={17}/> Sourcing</button>
         <button className={activeView === 'Guide' ? 'active' : 'secondary'} onClick={() => changeView('Guide')}><BookOpen size={17}/> Quick Guide</button>
       </nav>
 
@@ -743,7 +746,7 @@ export default function App() {
             </table>
           </div>
         )}
-      </section></> : activeView === 'Listings' ? <ListingsPanel/> : <QuickGuide/>}
+      </section></> : activeView === 'Listings' ? <ListingsPanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
 
       {scannerOpen ? (
         <div className="modalBackdrop">

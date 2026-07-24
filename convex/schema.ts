@@ -129,6 +129,58 @@ export default defineSchema({
     .index("by_listingId", ["listingId"])
     .index("by_assetId", ["assetId"]),
 
+  sourcingAnalyses: defineTable({
+    assetId: v.optional(v.id("assets")),
+    demoKey: v.optional(v.string()),
+    isDemo: v.boolean(),
+    title: v.string(),
+    format: v.optional(v.string()),
+    edition: v.optional(v.string()),
+    condition: v.optional(v.string()),
+    completeness: v.optional(v.string()),
+    upc: v.optional(v.string()),
+    sourceLabel: v.string(),
+    purchaseCost: v.number(),
+    shippingCost: v.number(),
+    packagingCost: v.number(),
+    feePercent: v.number(),
+    activeCount: v.number(),
+    soldCount90: v.number(),
+    compCount: v.number(),
+    averageSold: v.number(),
+    medianSold: v.number(),
+    trimmedAverageSold: v.number(),
+    sellThroughPercent: v.number(),
+    estimatedDaysToSell: v.optional(v.number()),
+    rarityScore: v.number(),
+    liquidityScore: v.number(),
+    confidence: v.string(),
+    expectedSalePrice: v.number(),
+    expectedFees: v.number(),
+    expectedProfit: v.number(),
+    roiPercent: v.number(),
+    recommendation: v.string(),
+    recommendationReason: v.string(),
+    notes: v.optional(v.string()),
+    analyzedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_assetId", ["assetId"])
+    .index("by_recommendation", ["recommendation"])
+    .index("by_demoKey", ["demoKey"])
+    .index("by_analyzedAt", ["analyzedAt"]),
+
+  sourcingComps: defineTable({
+    analysisId: v.id("sourcingAnalyses"),
+    source: v.string(),
+    itemPrice: v.number(),
+    shipping: v.number(),
+    deliveredPrice: v.number(),
+    observedAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_analysisId", ["analysisId"]),
+
   valueHistory: defineTable({
     assetId: v.id("assets"),
     source: v.string(),

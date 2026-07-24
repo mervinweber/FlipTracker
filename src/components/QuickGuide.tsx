@@ -1,4 +1,4 @@
-import { Barcode, Box, CircleDollarSign, ExternalLink, FileText, LayoutList, Search, ShoppingBag } from 'lucide-react';
+import { Barcode, Box, CircleDollarSign, ExternalLink, FileText, Gauge, LayoutList, Search, ShoppingBag } from 'lucide-react';
 
 const steps = [
   { icon: Barcode, label: 'Scan', detail: 'Capture the UPC, EAN, or ISBN.' },
@@ -32,21 +32,29 @@ export default function QuickGuide() {
           <li>Select <strong>Save to Inventory</strong>.</li>
         </ol></div></section>
 
-        <section><div className="guideNumber">2</div><div><h3>Research the value</h3><ol>
+        <section><div className="guideNumber">2</div><div><h3>Make a sourcing decision</h3><ol>
+          <li>Open <strong>Sourcing</strong> and select <strong>New Analysis</strong>.</li>
+          <li>Enter the exact title, edition, condition, purchase cost, active listing count, and 90-day sold count.</li>
+          <li>Enter several comparable sold prices, including shipping when it was charged separately.</li>
+          <li>Review median price, expected profit, ROI, sell-through, estimated days to sell, rarity, liquidity, and confidence.</li>
+          <li>Treat Buy, Maybe, or Pass as a decision aid and verify the exact item on eBay before purchasing.</li>
+        </ol><p className="guideNote"><Gauge size={15}/> Rarity means low supply. Liquidity means likely speed of sale. A rare item can still be slow and uncertain.</p></div></section>
+
+        <section><div className="guideNumber">3</div><div><h3>Research the value</h3><ol>
           <li>From Inventory, select <strong>Research</strong> to open an eBay sold/completed-items search.</li>
           <li>Compare the same format, edition, region, condition, and completeness.</li>
           <li>Select <strong>Log Value</strong> to save the observed low/high range, source, confidence, URL, and notes.</li>
           <li>Use User Low and User High when your research should override the estimate.</li>
         </ol><p className="guideNote">Changing the title, UPC, edition, condition, or completeness marks the item for another value check.</p></div></section>
 
-        <section><div className="guideNumber">3</div><div><h3>Create the listing draft</h3><ol>
+        <section><div className="guideNumber">4</div><div><h3>Create the listing draft</h3><ol>
           <li>Find the item in Inventory and select <strong>Draft</strong>.</li>
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
           <li>Open <strong>Listings</strong>, edit the draft, and verify every field before posting.</li>
           <li>Add an SKU when useful; the storage location remains visible for fulfillment.</li>
         </ol></div></section>
 
-        <section><div className="guideNumber">4</div><div><h3>Post it to eBay</h3><ol>
+        <section><div className="guideNumber">5</div><div><h3>Post it to eBay</h3><ol>
           <li>Open eBay Seller Hub and start a new listing.</li>
           <li>Copy the prepared title, description, category, condition, item specifics, price, and shipping plan from the FlipTracker draft.</li>
           <li>Upload and review the actual item photos, then publish through eBay.</li>
@@ -54,14 +62,14 @@ export default function QuickGuide() {
           <li>Change the status to <strong>Active</strong> and confirm the listed date and current price.</li>
         </ol><p className="guideNote"><ShoppingBag size={15}/> FlipTracker does not publish directly to eBay yet. eBay OAuth and draft creation are planned after the internal workflow is stable.</p></div></section>
 
-        <section><div className="guideNumber">5</div><div><h3>Track price changes and the sale</h3><ol>
+        <section><div className="guideNumber">6</div><div><h3>Track price changes and the sale</h3><ol>
           <li>Edit Current Price whenever a listing is reduced and enter a reason. FlipTracker preserves the price history.</li>
           <li>When sold, change the listing status to <strong>Sold</strong>.</li>
           <li>Enter sold price, shipping charged, actual shipping cost, marketplace fees, buyer, and sold date.</li>
           <li>Save the listing. FlipTracker updates inventory status, sales history, revenue, and net profit.</li>
         </ol></div></section>
 
-        <section><div className="guideNumber">6</div><div><h3>Back up and migrate data</h3><ol>
+        <section><div className="guideNumber">7</div><div><h3>Back up and migrate data</h3><ol>
           <li>Use <strong>Export Excel</strong> from Inventory for an inventory backup.</li>
           <li>Use <strong>Export CSV</strong> from Listings for listing and sales records.</li>
           <li>Use <strong>Import Old JSON</strong> only for a Sales Tracker JSON export. It creates new records and does not deduplicate.</li>

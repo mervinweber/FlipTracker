@@ -165,8 +165,44 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 .guideLink { display:inline-flex; align-items:center; gap:6px; margin-top:12px; color:#93c5fd; font-weight:800; }
 .badge.sell-individually { border-color:rgba(34,197,94,.55); color:#86efac; background:rgba(34,197,94,.1); }
 .badge.skip { border-color:rgba(153,27,27,.7); color:#fecaca; background:rgba(153,27,27,.16); }
+.sourcingPage { display:grid; gap:18px; }
+.sourcingCards { margin-bottom:0; }
+.metric.decisionBuy::before { background:var(--success); }
+.metric.decisionMaybe::before { background:var(--warning); }
+.metric.decisionPass::before { background:#ef4444; }
+.demoNotice { display:flex; align-items:flex-start; gap:8px; margin:0; padding:12px 14px; border:1px solid rgba(59,130,246,.45); border-radius:var(--radius); background:rgba(59,130,246,.08); color:#bfdbfe; font-size:13px; font-weight:700; line-height:1.45; }
+.demoNotice svg { flex:0 0 auto; margin-top:1px; }
+.demoLabel { width:max-content; padding:2px 6px; border-radius:4px; background:rgba(59,130,246,.13); color:#93c5fd; font-weight:800; text-transform:uppercase; }
+.sourcingTablePanel { padding:0; overflow:hidden; }
+.sourcingTablePanel .panelHeader { padding:18px 18px 0; }
+.decisionBadge { display:inline-flex; align-items:center; justify-content:center; min-width:64px; min-height:28px; border:1px solid var(--border); border-radius:999px; padding:3px 10px; font-size:12px; font-weight:900; }
+.decisionBadge.buy { border-color:rgba(34,197,94,.55); color:#86efac; background:rgba(34,197,94,.1); }
+.decisionBadge.maybe { border-color:rgba(245,158,11,.55); color:#fde68a; background:rgba(245,158,11,.1); }
+.decisionBadge.pass { border-color:rgba(239,68,68,.55); color:#fecaca; background:rgba(239,68,68,.1); }
+.lossValue { color:#fca5a5; font-weight:900; }
+.analysisSummary { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px; margin-bottom:18px; overflow:hidden; border:1px solid var(--border); border-radius:var(--radius); background:var(--border); }
+.analysisSummary > div { min-width:0; padding:13px; background:var(--surface-3); }
+.analysisSummary span, .analysisSummary strong { display:block; }
+.analysisSummary span { margin-bottom:5px; color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase; }
+.analysisSummary strong { font-size:17px; }
+.detailColumns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; }
+.detailColumns > section, .compSection { border-top:1px solid var(--border); padding-top:16px; }
+.detailColumns h3, .compSection h3 { margin:0 0 12px; font-size:15px; color:#93c5fd; }
+.detailList { margin:0; }
+.detailList > div { display:flex; justify-content:space-between; gap:14px; padding:8px 0; border-bottom:1px solid var(--border); }
+.detailList dt { color:var(--muted); }
+.detailList dd { margin:0; font-weight:800; text-align:right; }
+.inlineButton { display:inline-flex; width:max-content; }
+.compSection { margin-top:18px; }
+.compGrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
+.compGrid > div { display:flex; justify-content:space-between; gap:10px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); font-size:12px; }
+.compGrid span { color:var(--muted); }
+.compInput { min-height:168px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+label small { color:var(--muted); font-weight:500; line-height:1.4; }
 @media (max-width:900px) { .scannerGrid, .reviewLayout { grid-template-columns:1fr; } .mediaPreview { position:static; } .cameraFrame, .cameraFrame video { min-height:260px; } }
 @media (max-width:1050px) { .listingCards, .listingControls { grid-template-columns:1fr 1fr; } .listingControls .searchWrap, .listingTools { grid-column:1 / -1; } }
 @media (max-width:560px) { .viewTabs, .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } }
 @media (max-width:900px) { .workflowStrip { grid-template-columns:1fr; } .workflowStep { border-right:0; border-bottom:1px solid var(--border); } .workflowStep:last-child { border-bottom:0; } }
 @media (max-width:620px) { .guideHeader { flex-direction:column; } .guideContent > section { grid-template-columns:1fr; } }
+@media (max-width:800px) { .analysisSummary, .detailColumns, .compGrid { grid-template-columns:1fr 1fr; } }
+@media (max-width:560px) { .analysisSummary, .detailColumns, .compGrid { grid-template-columns:1fr; } }

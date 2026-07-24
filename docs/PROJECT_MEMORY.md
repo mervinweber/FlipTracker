@@ -18,6 +18,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- Dedicated Sourcing view added with manual sold observations, active/sold counts, shipping-inclusive median and average, sell-through proxy, estimated days to sell, rarity, liquidity, expected profit, ROI, confidence, and Buy / Maybe / Pass.
+- Six illustrative sourcing records cover common liquid, common low-margin, uncommon liquid, niche low-supply, and rare low-confidence decisions. They are demo data, not live eBay market results.
 - Hosted Quick Guide added at `/#guide`, with a plain `/README.md` reference covering scan, research, internal draft, manual eBay publishing, sale tracking, and backups.
 - Sales Tracker's useful workflow is now merged into FlipTracker: marketplace listings, lifecycle statuses, listing prices/dates/platforms, price history, listing metrics, sold-profit tracking, CSV export, and old Sales Tracker JSON import.
 - FlipTracker is the only product base. The separate Sales Tracker repo is now a migration/reference source and can be archived after its data is exported.
@@ -61,6 +63,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Treat barcode scanning as two separate features: camera/barcode capture first, then metadata/value lookup through provider-backed services.
 - Pursue eBay Browse API active listings as the first automated pricing signal during free beta. It has no data subscription fee, but production access requires eBay approval and is not guaranteed. Clearly label results as asking prices, preserve manual sold-result verification, and do not silently overwrite user values.
 - Defer PriceCharting and other paid pricing providers until tester demand, product polish, and a paid FlipTracker subscription can support the cost.
+- Keep sourcing decisions deterministic and inspectable. Median reduces outlier impact; rarity and liquidity remain separate; low confidence prevents an automatic Buy even when a single comp looks profitable.
 
 ## Coding Conventions
 
@@ -81,7 +84,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Should region be a simple field or a normalized value list?
 - Should storage location start as a single free-text field or split into area/bin/shelf fields?
 - What is the right first eBay integration: sold-comps research, draft listing creation, or full listing publish?
-- Should FlipTracker have a dedicated sourcing mode separate from inventory mode?
+- How should a saved sourcing decision be converted into inventory without duplicate entry?
 - Which calculators belong in-app first: break-even, ROI, fee/shipping, promoted listing ROI, or lot analyzer?
 - Should completeness be a single required field or a checklist of included parts?
 - Which barcode metadata providers should be used for UPC/EAN/ISBN lookup?
@@ -103,9 +106,8 @@ Convex is the current application backend. Excel import/export remains a portabi
 
 1. Finish the Convex UI migration polish.
 2. Decide on product identity: logo direction, palette, typography, UI language.
-3. Add a dedicated collection detail page and lot calculator.
-4. Add saved eBay research/value history display and richer comp fields.
-5. Pick and implement auth.
-6. Add richer game metadata: completeness, region, platform variants.
-7. Add item-level storage location / bin tracking once schema and import/export can persist it.
-8. Add barcode scanner intake, starting with raw barcode capture and manual fallback before automatic value population.
+3. Convert accepted sourcing decisions into inventory records.
+4. Add a dedicated collection detail page and lot calculator.
+5. Add saved eBay research/value history display and richer comp fields.
+6. Pick and implement auth.
+7. Add richer game metadata: completeness, region, platform variants.

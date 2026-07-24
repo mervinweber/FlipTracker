@@ -87,6 +87,9 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Add missing games from new photos
 
 ## v0.7 Collection Analyzer
+- [x] Add standalone sourcing decision foundation with Buy / Maybe / Pass
+- [x] Calculate sold median/average, sell-through, days to sell, rarity, liquidity, profit, ROI, and confidence
+- [x] Save manual sold observations and illustrative common/uncommon examples in Convex
 - [ ] "Should I buy this lot?" calculator
 - [ ] Suggested max offer calculator
 - [ ] Estimate list-first / bundle / hold split
@@ -94,6 +97,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Compare expected value against purchase price
 - [ ] Include platform fee, shipping, packaging, and time-cost assumptions in lot math
 - [ ] Output a buy/skip recommendation with reasons
+- [ ] Convert accepted sourcing analyses into inventory or collection-lot candidates
 
 ## v1.0 Public Release
 - [ ] Authentication and user-owned data

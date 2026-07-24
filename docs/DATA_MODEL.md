@@ -48,6 +48,16 @@ An asset may have multiple marketplace listing records over time or across platf
 
 One immutable price event connected to a marketplace listing and its asset. Initial listing prices and later changes are stored with a timestamp and optional reason.
 
+## sourcingAnalyses
+
+One saved acquisition decision. It stores exact item identity, acquisition and fulfillment assumptions, active and 90-day sold counts, calculated market metrics, confidence, recommendation, and explanatory notes. `isDemo` and `demoKey` keep illustrative examples identifiable and make seeding repeatable.
+
+Rarity is derived from active supply. Liquidity combines sell-through and recent sold velocity. They are intentionally separate because a scarce item is not necessarily fast-selling.
+
+## sourcingComps
+
+One observed sold-price input connected to a sourcing analysis. Item price, shipping, delivered price, source label, and observation time are preserved so users can inspect the evidence behind the summary. Each analysis is limited to 100 observations.
+
 ## Sales Tracker Migration
 
 The Listings view accepts the JSON format exported by the old Sales Tracker app. Each imported item creates one new asset and one listing per platform, with price history copied to child records. The importer does not deduplicate and is limited to 200 source records per run.

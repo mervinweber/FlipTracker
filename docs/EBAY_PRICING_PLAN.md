@@ -34,6 +34,12 @@ User review and optional value override
 
 The existing eBay sold/completed search link remains available for manual verification.
 
+## Implemented Manual Decision Layer
+
+The Sourcing view now accepts manual sold-price observations, active listing count, 90-day sold count, purchase cost, expected shipping, packaging, and fee percentage. Convex calculates a repeatable Buy / Maybe / Pass snapshot with median, average, sell-through proxy, estimated days to sell, rarity, liquidity, profit, ROI, and confidence.
+
+This is not an automated eBay feed. It is the normalized decision layer that a future approved provider will populate. Illustrative demo records remain visibly labeled and must not be treated as current market values.
+
 ## Phase 1 - eBay Developer Connection
 
 - Create an eBay Developers Program application.
