@@ -66,8 +66,9 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .badge { display:inline-flex; align-items:center; min-height:24px; width:max-content; max-width:150px; border:1px solid var(--border); border-radius:999px; padding:2px 9px; color:#cbd5e1; background:#020617; font-size:12px; font-weight:900; white-space:nowrap; }
 .badge.needs-check { border-color:rgba(245,158,11,.65); color:#fbbf24; background:rgba(245,158,11,.12); }
 .badge.user-override { border-color:rgba(20,184,166,.6); color:#5eead4; background:rgba(20,184,166,.1); }
-.badge.flip-now, .badge.list-first { border-color:rgba(34,197,94,.55); color:#86efac; background:rgba(34,197,94,.1); }
-.badge.watch, .badge.worth-listing { border-color:rgba(245,158,11,.55); color:#fde68a; background:rgba(245,158,11,.1); }
+.badge.flip-now, .badge.flip-first, .badge.list-first, .badge.sell-individually { border-color:rgba(34,197,94,.8); color:#bbf7d0; background:rgba(34,197,94,.18); box-shadow:0 0 0 1px rgba(34,197,94,.12), 0 4px 14px rgba(34,197,94,.12); }
+.badge.watch, .badge.worth-listing { border-color:rgba(245,158,11,.75); color:#fef3c7; background:rgba(245,158,11,.17); box-shadow:0 0 0 1px rgba(245,158,11,.1), 0 4px 14px rgba(245,158,11,.1); }
+.badge.flip-now::before, .badge.flip-first::before, .badge.list-first::before, .badge.sell-individually::before, .badge.watch::before, .badge.worth-listing::before { content:""; width:6px; height:6px; flex:0 0 auto; margin-right:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; }
 .badge.hold { border-color:rgba(148,163,184,.45); color:#cbd5e1; }
 .badge.bundle { border-color:rgba(168,85,247,.45); color:#d8b4fe; background:rgba(168,85,247,.1); }
 .badge.sold { border-color:rgba(34,197,94,.55); color:#86efac; background:rgba(34,197,94,.1); }
