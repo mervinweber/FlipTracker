@@ -402,15 +402,13 @@ export default function App() {
     let cancelled = false;
     const reader = new BrowserMultiFormatReader();
     setScanError('');
-    reader.decodeFromVideoDevice(undefined, videoRef.current, (result, error, controls) => {
+    reader.decodeFromVideoDevice(undefined, videoRef.current, (result, _error, controls) => {
       if (controls) scannerControls.current = controls;
       if (result && !cancelled) {
         const code = result.getText();
         setManualBarcode(code);
         controls.stop();
         void lookupBarcode(code);
-      } else if (error && String(error.name) !== 'NotFoundException') {
-        setScanError('Camera scan is having trouble. Enter the barcode manually if needed.');
       }
     }).catch(() => setScanError('Camera access failed. Check browser permissions or enter the barcode manually.'));
 
@@ -787,7 +785,7 @@ export default function App() {
               <div className="cameraFrame"><video ref={videoRef} muted playsInline /></div>
               <div className="scannerPanel">
                 <label>Manual Barcode<input inputMode="numeric" value={manualBarcode} onChange={e => setManualBarcode(e.target.value)} placeholder="Scan or type UPC/EAN/ISBN"/></label>
-                {scanError ? <p className="warningText">{scanError}</p> : <p>Use the camera or enter a barcode manually. You will review and correct the item before saving.</p>}
+                {scanError ? <p className="warningText">{scanError}</p> : <p>Aim at the full barcode and hold steady. You can also enter the code manually.</p>}
                 <div className="actions right"><button className="secondary" onClick={() => setEditing(blankAsset())}>Manual Add</button><button onClick={() => lookupBarcode()} disabled={isLookingUp}><Search size={16}/>{isLookingUp ? 'Looking Up...' : 'Lookup'}</button></div>
               </div>
             </div>
