@@ -75,7 +75,9 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Add checkbox selection and bounded `Refresh Selected` workflow
 - [ ] Cache lookups and track stale/failed results
 - [ ] Preserve user overrides and require review before applying bulk changes
-- [ ] Keep the manual eBay sold/completed search link for verification
+- [x] Keep a one-click eBay sold/completed search link for quick verification
+- [x] Show Terapeak Product Research only when the working item value is $50 or more
+- [ ] Make the Terapeak threshold configurable per user after authentication/settings exist
 - [ ] Defer paid providers until beta usage and a paid subscription model justify the cost
 - [ ] If production Browse access is denied, ship generated eBay search links plus manual review rather than unofficial scraping
 

@@ -49,7 +49,8 @@ export default function QuickGuide() {
         </ol><p className="guideNote"><Gauge size={15}/> Rarity means low supply. Liquidity means likely speed of sale. A rare item can still be slow and uncertain.</p></div></section>
 
         <section><div className="guideNumber">4</div><div><h3>Research the value</h3><ol>
-          <li>From Inventory, select <strong>Research</strong> to open an eBay sold/completed-items search.</li>
+          <li>From Inventory, select <strong>Sold Comps</strong> to open an eBay sold/completed-items search.</li>
+          <li>For items valued at $50 or more, select <strong>Terapeak</strong> for deeper eBay Product Research.</li>
           <li>Compare the same format, edition, region, condition, and completeness.</li>
           <li>Select <strong>Log Value</strong> to save the observed low/high range, source, confidence, URL, and notes.</li>
           <li>Use User Low and User High when your research should override the estimate.</li>

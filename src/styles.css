@@ -121,6 +121,7 @@ textarea { min-height:92px; resize:vertical; }
 .checkRow span { display:flex; flex-direction:column; gap:2px; }
 .checkRow small { color:var(--muted); font-weight:600; line-height:1.35; }
 .reviewToggle { margin-top:12px; }
+.researchActions { margin-top:12px; justify-content:flex-start; }
 .secondary { background:#475569; }
 .right { justify-content:flex-end; }
 @media (max-width:800px) { .formGrid, .sectionGrid, .checkGroup, .collectionGrid { grid-template-columns:1fr; } .span2 { grid-column:auto; } .collectionCard { grid-template-columns:1fr; } .collectionStats { text-align:left; } }

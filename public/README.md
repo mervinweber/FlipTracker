@@ -23,10 +23,11 @@ Direct eBay publishing is not enabled yet. It requires secure seller OAuth, eBay
 
 ## Research the value
 
-1. Select **Research** on an inventory item to open an eBay sold-items search.
-2. Compare the same edition, region, condition, and completeness.
-3. Select **Log Value** to save the range, source, confidence, URL, and notes.
-4. Enter User Low and User High to override the estimate after your own research.
+1. Select **Sold Comps** on any inventory item to open eBay's completed and sold listings.
+2. When the working value is $50 or more, select **Terapeak** for deeper eBay Product Research.
+3. Compare the same edition, region, condition, and completeness.
+4. Select **Log Value** to save the range, source, confidence, URL, and notes.
+5. Enter User Low and User High to override the estimate after your own research.
 
 Changing the title, UPC, edition, condition, or completeness marks the item for another value check.
 

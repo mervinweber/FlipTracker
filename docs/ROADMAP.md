@@ -43,6 +43,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Store sold-comps notes and value history
 - [x] Add external sold-search link per item
 - [x] Add current sold-comps workflow foundation
+- [x] Add quick sold-comps links for all items and surface Terapeak research at $50+
 - [ ] Show sold-comp count, confidence level, and verification links for each value check
 - [ ] Add fee, shipping, and net-profit estimate fields to value research
 - [ ] Add red flags for low comps, high shipping drag, missing parts, region mismatch, or low sell-through confidence

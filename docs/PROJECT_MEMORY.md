@@ -37,7 +37,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 - Value override fields are preserved.
 - Editing a title marks the item as needing value review.
 - Users can manually mark an item as needing a value check.
-- Research button opens an eBay sold/completed search.
+- Sold Comps opens an eBay sold/completed search.
+- Quick Sold Comps is available for every item. Terapeak Product Research is intentionally shown only when the working estimated, override, observed, or draft price reaches $50.
 - First product identity pass added: brand mark, design tokens, metric cards, and status/strategy badges.
 - Game metadata planning started in `docs/GAME_METADATA_MODEL.md`.
 - Collections panel added with collection create/edit/delete, asset assignment, purchase price/source/location, and estimated profit summaries.

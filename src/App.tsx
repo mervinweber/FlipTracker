@@ -114,6 +114,25 @@ type LookupResult = {
 const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Other Media', 'Pokemon Card', 'Sports Card', 'Toy', 'Misc'];
 const CONDITIONS = ['New', 'Like New', 'Very Good', 'Good', 'Acceptable', 'For Parts'];
 const COMPLETENESS = ['Complete', 'Disc Only', 'Case Only', 'Case + Disc', 'No Manual', 'Sealed', 'Loose', 'Incomplete'];
+const TERAPEAK_VALUE_THRESHOLD = 50;
+
+function researchValue(item: Partial<Asset>, ...candidateValues: Array<number | undefined>) {
+  const assetValue = item.valueSource === 'User Override'
+    ? item.userHigh || item.userLow
+    : item.estimatedHigh || item.estimatedLow;
+  return Math.max(0, item.ebayPrice || 0, assetValue || 0, ...candidateValues.map(value => value || 0));
+}
+
+function shouldShowTerapeak(item: Partial<Asset>, ...candidateValues: Array<number | undefined>) {
+  return researchValue(item, ...candidateValues) >= TERAPEAK_VALUE_THRESHOLD;
+}
+
+function researchQuery(item: Partial<Asset>) {
+  const barcode = item.upc || item.barcode;
+  return barcode || [item.title, item.edition, item.mediaFormat || item.console || item.type]
+    .filter(Boolean)
+    .join(' ');
+}
 
 function effectiveLow(item: Asset) {
   return item.valueSource === 'User Override' ? item.userLow || 0 : item.estimatedLow || 0;
@@ -630,9 +649,14 @@ export default function App() {
     });
   }
 
-  function openValueResearch(asset: Asset) {
-    const search = encodeURIComponent(`${asset.title} ${asset.mediaFormat || asset.console || asset.type || ''}`);
+  function openQuickSoldComps(asset: Partial<Asset>) {
+    const search = encodeURIComponent(researchQuery(asset));
     window.open(`https://www.ebay.com/sch/i.html?_nkw=${search}&LH_Sold=1&LH_Complete=1`, '_blank');
+  }
+
+  function openTerapeakResearch(asset: Partial<Asset>) {
+    const search = encodeURIComponent(researchQuery(asset));
+    window.open(`https://www.ebay.com/sh/research?marketplace=EBAY-US&keywords=${search}`, '_blank');
   }
 
   function openResearchLog(asset: Asset) {
@@ -743,7 +767,7 @@ export default function App() {
                     <td><span className={badgeClass(item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td><span className={badgeClass(String(item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="rowActions"><button onClick={() => setEditing(item)}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button onClick={() => openValueResearch(item)}>Research</button><button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></td>
+                    <td className="rowActions"><button onClick={() => setEditing(item)}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -814,7 +838,7 @@ export default function App() {
                   <label>User High<input type="number" value={editing.userHigh || ''} onChange={e => updateEditing({ userHigh:toNumber(e.target.value), valueSource:'User Override', needsValueCheck:false })}/></label>
                   <label>Value Source<select value={editing.valueSource || 'Estimated'} onChange={e => updateEditing({ valueSource:e.target.value })}><option>Estimated</option><option>User Override</option></select></label>
                   <label>Recommendation<select value={editing.listingRecommendation || 'Review'} onChange={e => updateEditing({ listingRecommendation:e.target.value }, false)}>{['Sell Individually','Bundle','Skip','Review'].map(s => <option key={s}>{s}</option>)}</select></label>
-                </div><label className="checkRow reviewToggle"><input type="checkbox" checked={!!editing.needsValueCheck} onChange={e => updateEditing({ needsValueCheck:e.target.checked }, false)}/><span><strong>Needs value check</strong><small>Included in the value review queue.</small></span></label></div>
+                </div><div className="actions researchActions"><button type="button" className="secondary" onClick={() => openQuickSoldComps(editing)}><Search size={16}/> Sold Comps</button>{shouldShowTerapeak(editing) ? <button type="button" className="secondary" onClick={() => openTerapeakResearch(editing)}><Gauge size={16}/> Terapeak</button> : null}</div><label className="checkRow reviewToggle"><input type="checkbox" checked={!!editing.needsValueCheck} onChange={e => updateEditing({ needsValueCheck:e.target.checked }, false)}/><span><strong>Needs value check</strong><small>Included in the value review queue.</small></span></label></div>
 
                 <div className="formSection span2"><h3>eBay Listing Draft Fields</h3><div className="sectionGrid">
                   <label className="span2">eBay Title<input value={editing.ebayTitle || ''} onChange={e => updateEditing({ ebayTitle:e.target.value }, false)}/></label>
@@ -840,7 +864,7 @@ export default function App() {
       ) : null}
 
       {researchAsset ? (
-        <div className="modalBackdrop"><section className="modal"><header className="modalHeader"><div><h2>Log Value Check</h2><span className="statusPill warning">{researchAsset.title}</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setResearchAsset(null)}><X size={18}/></button></header><div className="formGrid"><label>Source<input value={researchDraft.source} onChange={e => setResearchDraft({...researchDraft, source:e.target.value})}/></label><label>Confidence<select value={researchDraft.confidence} onChange={e => setResearchDraft({...researchDraft, confidence:e.target.value})}>{['High','Medium','Low'].map(c => <option key={c}>{c}</option>)}</select></label><label>Low<input type="number" value={researchDraft.low || ''} onChange={e => setResearchDraft({...researchDraft, low:toNumber(e.target.value)})}/></label><label>High<input type="number" value={researchDraft.high || ''} onChange={e => setResearchDraft({...researchDraft, high:toNumber(e.target.value)})}/></label><label>Observed Price<input type="number" value={researchDraft.observedPrice || ''} onChange={e => setResearchDraft({...researchDraft, observedPrice:toNumber(e.target.value)})}/></label><label>Recommendation<select value={researchDraft.recommendation || 'Review'} onChange={e => setResearchDraft({...researchDraft, recommendation:e.target.value})}>{['Sell Individually','Bundle','Skip','List First','Worth Listing','Hold','Review'].map(r => <option key={r}>{r}</option>)}</select></label><label className="span2">URL<input value={researchDraft.url || ''} onChange={e => setResearchDraft({...researchDraft, url:e.target.value})}/></label><label className="span2">Notes<textarea value={researchDraft.notes || ''} onChange={e => setResearchDraft({...researchDraft, notes:e.target.value})}/></label></div><div className="actions right"><button className="secondary" onClick={() => openValueResearch(researchAsset)}>Open eBay</button><button className="secondary" onClick={() => setResearchAsset(null)}>Cancel</button><button onClick={saveResearchLog}><Save size={16}/> Save Value</button></div></section></div>
+        <div className="modalBackdrop"><section className="modal"><header className="modalHeader"><div><h2>Log Value Check</h2><span className="statusPill warning">{researchAsset.title}</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setResearchAsset(null)}><X size={18}/></button></header><div className="formGrid"><label>Source<input value={researchDraft.source} onChange={e => setResearchDraft({...researchDraft, source:e.target.value})}/></label><label>Confidence<select value={researchDraft.confidence} onChange={e => setResearchDraft({...researchDraft, confidence:e.target.value})}>{['High','Medium','Low'].map(c => <option key={c}>{c}</option>)}</select></label><label>Low<input type="number" value={researchDraft.low || ''} onChange={e => setResearchDraft({...researchDraft, low:toNumber(e.target.value)})}/></label><label>High<input type="number" value={researchDraft.high || ''} onChange={e => setResearchDraft({...researchDraft, high:toNumber(e.target.value)})}/></label><label>Observed Price<input type="number" value={researchDraft.observedPrice || ''} onChange={e => setResearchDraft({...researchDraft, observedPrice:toNumber(e.target.value)})}/></label><label>Recommendation<select value={researchDraft.recommendation || 'Review'} onChange={e => setResearchDraft({...researchDraft, recommendation:e.target.value})}>{['Sell Individually','Bundle','Skip','List First','Worth Listing','Hold','Review'].map(r => <option key={r}>{r}</option>)}</select></label><label className="span2">URL<input value={researchDraft.url || ''} onChange={e => setResearchDraft({...researchDraft, url:e.target.value})}/></label><label className="span2">Notes<textarea value={researchDraft.notes || ''} onChange={e => setResearchDraft({...researchDraft, notes:e.target.value})}/></label></div><div className="actions right"><button className="secondary" onClick={() => openQuickSoldComps(researchAsset)}>Sold Comps</button>{shouldShowTerapeak(researchAsset, researchDraft.low, researchDraft.high, researchDraft.observedPrice) ? <button className="secondary" onClick={() => openTerapeakResearch(researchAsset)}>Terapeak</button> : null}<button className="secondary" onClick={() => setResearchAsset(null)}>Cancel</button><button onClick={saveResearchLog}><Save size={16}/> Save Value</button></div></section></div>
       ) : null}
 
       <p className="footer">Scan saves to inventory first. Bulk Intake can create internal eBay drafts automatically; direct publishing requires an eBay seller connection.</p>
