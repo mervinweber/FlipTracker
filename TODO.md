@@ -11,6 +11,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] User price overrides and `needsValueCheck` behavior
 - [x] Universal media model for games, DVDs, Blu-rays, CDs, books, and other media
 - [x] Mobile UPC/EAN/ISBN camera scanning with manual fallback
+- [x] USB scanner bulk intake with serial lookup queue, duplicate-copy support, unique SKUs, and automatic internal eBay drafts
 - [x] Metadata review and correction screen
 - [x] Condition, completeness, storage bin, photo, and eBay preparation fields
 - [x] Collections/purchase-lot foundation
@@ -234,6 +235,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Richer game completeness and region fields
 - [ ] Batch photo/spine recognition workflow
 - [x] Sourcing mode with Buy / Maybe / Pass recommendation
+- [ ] Import and populate the category-specific Create Drafts template downloaded from eBay Seller Hub Reports
 - [ ] eBay OAuth and draft creation after the internal listing workflow is stable
 - [ ] Read-only eBay listing audit before any automated edit/publish behavior
 - [ ] Final logo, PWA icons, typography, and onboarding polish

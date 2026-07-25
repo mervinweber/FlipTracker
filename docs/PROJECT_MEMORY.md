@@ -18,6 +18,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- USB scanner Bulk Intake added: serial barcode queue, reusable stack defaults, duplicate-copy tracking, unique SKU generation, low-confidence review rows, and optional automatic internal eBay drafts.
+
 - Dedicated Sourcing view added with manual sold observations, active/sold counts, shipping-inclusive median and average, sell-through proxy, estimated days to sell, rarity, liquidity, expected profit, ROI, confidence, and Buy / Maybe / Pass.
 - Six illustrative sourcing records cover common liquid, common low-margin, uncommon liquid, niche low-supply, and rare low-confidence decisions. They are demo data, not live eBay market results.
 - Hosted Quick Guide added at `/#guide`, with a plain `/README.md` reference covering scan, research, internal draft, manual eBay publishing, sale tracking, and backups.

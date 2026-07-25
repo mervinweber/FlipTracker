@@ -1,0 +1,119 @@
+import { v } from "convex/values";
+import { mutation } from "./_generated/server";
+
+const optionalText = v.optional(v.string());
+
+export const createScannedItem = mutation({
+  args: {
+    type: v.string(),
+    title: v.string(),
+    mediaFormat: optionalText,
+    edition: optionalText,
+    upc: v.string(),
+    barcodeType: optionalText,
+    releaseYear: optionalText,
+    releaseDate: optionalText,
+    studio: optionalText,
+    rating: optionalText,
+    coverImageUrl: optionalText,
+    metadataSource: optionalText,
+    metadataConfidence: optionalText,
+    collectionId: v.optional(v.id("collections")),
+    storageLocation: optionalText,
+    purchasePrice: v.optional(v.number()),
+    condition: v.string(),
+    completeness: v.string(),
+    ebayTitle: v.string(),
+    ebayDescription: optionalText,
+    ebayCategory: optionalText,
+    ebayCondition: optionalText,
+    ebayItemSpecifics: optionalText,
+    ebayPrice: v.optional(v.number()),
+    ebayShipping: optionalText,
+    createDraft: v.boolean(),
+    skuPrefix: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const title = args.title.trim();
+    const upc = args.upc.trim();
+    if (!title) throw new Error("Title is required.");
+    if (!upc) throw new Error("UPC/barcode is required.");
+    if (args.purchasePrice !== undefined && args.purchasePrice < 0) throw new Error("Purchase price cannot be negative.");
+    if (args.ebayPrice !== undefined && args.ebayPrice < 0) throw new Error("Listing price cannot be negative.");
+
+    const now = Date.now();
+    const existingCopies = await ctx.db.query("assets").withIndex("by_upc", (q) => q.eq("upc", upc)).take(100);
+    const assetId = await ctx.db.insert("assets", {
+      type: args.type,
+      title,
+      edition: args.edition,
+      mediaFormat: args.mediaFormat,
+      upc,
+      barcode: upc,
+      barcodeType: args.barcodeType,
+      releaseYear: args.releaseYear,
+      releaseDate: args.releaseDate,
+      studio: args.studio,
+      rating: args.rating,
+      coverImageUrl: args.coverImageUrl,
+      metadataSource: args.metadataSource,
+      metadataConfidence: args.metadataConfidence,
+      metadataCheckedAt: now,
+      collectionId: args.collectionId,
+      storageLocation: args.storageLocation,
+      purchasePrice: args.purchasePrice,
+      condition: args.condition,
+      completeness: args.completeness,
+      complete: args.completeness === "Complete" || args.completeness === "Sealed",
+      valueSource: "Estimated",
+      needsValueCheck: true,
+      status: "Inventory",
+      listingRecommendation: "Review",
+      strategy: "Review",
+      ebayTitle: args.ebayTitle.trim().slice(0, 80),
+      ebayDescription: args.ebayDescription,
+      ebayCategory: args.ebayCategory,
+      ebayCondition: args.ebayCondition,
+      ebayItemSpecifics: args.ebayItemSpecifics,
+      ebayPrice: args.ebayPrice,
+      ebayShipping: args.ebayShipping,
+      confidence: args.metadataConfidence,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const prefix = args.skuPrefix.trim().replace(/[^A-Za-z0-9-]/g, "").slice(0, 18) || "FT";
+    const sku = `${prefix}-${String(assetId).slice(-8).toUpperCase()}`;
+    if (!args.createDraft) return { assetId, listingId: null, sku, copyNumber: existingCopies.length + 1 };
+
+    const listingId = await ctx.db.insert("marketplaceListings", {
+      assetId,
+      platform: "eBay",
+      status: "Draft",
+      sku,
+      title: args.ebayTitle.trim().slice(0, 80) || title.slice(0, 80),
+      description: args.ebayDescription,
+      category: args.ebayCategory,
+      condition: args.ebayCondition,
+      itemSpecifics: args.ebayItemSpecifics,
+      listedPrice: args.ebayPrice,
+      currentPrice: args.ebayPrice,
+      notes: args.ebayShipping ? `Shipping plan: ${args.ebayShipping}` : undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (args.ebayPrice !== undefined) {
+      await ctx.db.insert("listingPriceHistory", {
+        listingId,
+        assetId,
+        date: now,
+        price: args.ebayPrice,
+        reason: "Initial bulk-intake draft price",
+        createdAt: now,
+      });
+    }
+
+    return { assetId, listingId, sku, copyNumber: existingCopies.length + 1 };
+  },
+});

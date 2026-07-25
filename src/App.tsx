@@ -3,18 +3,20 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
 import QuickGuide from './components/QuickGuide';
+import BulkIntakePanel from './components/BulkIntakePanel';
 import SourcingPanel from './components/SourcingPanel';
 
-type AppView = 'Inventory' | 'Listings' | 'Sourcing' | 'Guide';
+type AppView = 'Inventory' | 'Listings' | 'Bulk' | 'Sourcing' | 'Guide';
 
 function viewFromHash(): AppView {
   if (window.location.hash.toLowerCase() === '#guide') return 'Guide';
   if (window.location.hash.toLowerCase() === '#sourcing') return 'Sourcing';
+  if (window.location.hash.toLowerCase() === '#bulk') return 'Bulk';
   if (window.location.hash.toLowerCase() === '#listings') return 'Listings';
   return 'Inventory';
 }
@@ -675,6 +677,7 @@ export default function App() {
         </div>
         <div className="actions">
           <button onClick={() => setScannerOpen(true)}><Barcode size={16}/> Scan Media</button>
+          <button onClick={() => changeView('Bulk')}><Keyboard size={16}/> Scan Stack</button>
           <button onClick={() => setEditing(blankAsset())}><Plus size={16}/> Add Item</button>
           <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Collection</button>
           <label className="button"><Upload size={16}/> Import Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => onImport(e.target.files?.[0])}/></label>
@@ -685,6 +688,7 @@ export default function App() {
       <nav className="viewTabs" aria-label="Primary views">
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
+        <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
         <button className={activeView === 'Sourcing' ? 'active' : 'secondary'} onClick={() => changeView('Sourcing')}><Gauge size={17}/> Sourcing</button>
         <button className={activeView === 'Guide' ? 'active' : 'secondary'} onClick={() => changeView('Guide')}><BookOpen size={17}/> Quick Guide</button>
       </nav>
@@ -746,7 +750,7 @@ export default function App() {
             </table>
           </div>
         )}
-      </section></> : activeView === 'Listings' ? <ListingsPanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
+      </section></> : activeView === 'Listings' ? <ListingsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
 
       {scannerOpen ? (
         <div className="modalBackdrop">
@@ -839,7 +843,7 @@ export default function App() {
         <div className="modalBackdrop"><section className="modal"><header className="modalHeader"><div><h2>Log Value Check</h2><span className="statusPill warning">{researchAsset.title}</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setResearchAsset(null)}><X size={18}/></button></header><div className="formGrid"><label>Source<input value={researchDraft.source} onChange={e => setResearchDraft({...researchDraft, source:e.target.value})}/></label><label>Confidence<select value={researchDraft.confidence} onChange={e => setResearchDraft({...researchDraft, confidence:e.target.value})}>{['High','Medium','Low'].map(c => <option key={c}>{c}</option>)}</select></label><label>Low<input type="number" value={researchDraft.low || ''} onChange={e => setResearchDraft({...researchDraft, low:toNumber(e.target.value)})}/></label><label>High<input type="number" value={researchDraft.high || ''} onChange={e => setResearchDraft({...researchDraft, high:toNumber(e.target.value)})}/></label><label>Observed Price<input type="number" value={researchDraft.observedPrice || ''} onChange={e => setResearchDraft({...researchDraft, observedPrice:toNumber(e.target.value)})}/></label><label>Recommendation<select value={researchDraft.recommendation || 'Review'} onChange={e => setResearchDraft({...researchDraft, recommendation:e.target.value})}>{['Sell Individually','Bundle','Skip','List First','Worth Listing','Hold','Review'].map(r => <option key={r}>{r}</option>)}</select></label><label className="span2">URL<input value={researchDraft.url || ''} onChange={e => setResearchDraft({...researchDraft, url:e.target.value})}/></label><label className="span2">Notes<textarea value={researchDraft.notes || ''} onChange={e => setResearchDraft({...researchDraft, notes:e.target.value})}/></label></div><div className="actions right"><button className="secondary" onClick={() => openValueResearch(researchAsset)}>Open eBay</button><button className="secondary" onClick={() => setResearchAsset(null)}>Cancel</button><button onClick={saveResearchLog}><Save size={16}/> Save Value</button></div></section></div>
       ) : null}
 
-      <p className="footer">Scan saves to inventory first. eBay draft creation comes after the scanning workflow is stable.</p>
+      <p className="footer">Scan saves to inventory first. Bulk Intake can create internal eBay drafts automatically; direct publishing requires an eBay seller connection.</p>
     </main>
   );
 }

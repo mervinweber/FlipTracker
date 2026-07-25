@@ -11,6 +11,16 @@ FlipTracker tracks games, DVDs, Blu-rays, CDs, books, and other resale media fro
 5. Enter condition, completeness, storage location/bin, purchase price, and an item photo.
 6. Select **Save to Inventory**.
 
+## Scan a stack with a USB scanner
+
+1. Open **Bulk Intake** or select **Scan Stack**.
+2. Set the condition, completeness, collection, storage bin, cost per item, SKU prefix, and shipping defaults.
+3. Leave **Create eBay draft** enabled and scan each UPC. Configure the scanner to send Enter or Tab after the code.
+4. Keep scanning while the queue works. Each physical copy receives a separate inventory record and unique SKU.
+5. Review amber rows, then open **Listings** to finish pricing, photos, and the manual eBay posting step.
+
+Direct eBay publishing is not enabled yet. It requires secure seller OAuth, eBay business policies, and authenticated FlipTracker users.
+
 ## Research the value
 
 1. Select **Research** on an inventory item to open an eBay sold-items search.

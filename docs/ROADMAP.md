@@ -64,6 +64,8 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Convert a saved sourcing analysis into an inventory item
 - [x] Mark low-confidence scans and changed value inputs as needing value check
 - [x] Manual fallback when lookup fails
+- [x] Add serial USB scanner queue with per-stack defaults and automatic internal eBay drafts
+- [x] Assign a unique SKU to every scanned physical copy, including duplicate UPCs
 
 ## v0.5.1 Barcode Value Assist
 - [x] Choose eBay active listings as the initial free-beta pricing source
@@ -116,7 +118,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Listing utilities: title helper, category/item-specific checklist, cross-platform copy generator
 - [ ] Calculator library: break-even price, ROI, margin vs markup, promoted listing ROI, tax/export summaries
 - [ ] Sourcing history: save skipped items so bad buys can be learned from later
-- [ ] USB/Bluetooth barcode scanner support as keyboard input for desktop bulk intake
+- [x] USB/Bluetooth barcode scanner support as keyboard input for desktop bulk intake
 - [ ] Add a paid pricing provider only after beta demand and subscription revenue justify the recurring cost
 
 

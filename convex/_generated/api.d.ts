@@ -10,6 +10,7 @@
 
 import type * as assets from "../assets.js";
 import type * as collections from "../collections.js";
+import type * as intake from "../intake.js";
 import type * as listings from "../listings.js";
 import type * as mediaLookup from "../mediaLookup.js";
 import type * as reports from "../reports.js";
@@ -25,6 +26,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   assets: typeof assets;
   collections: typeof collections;
+  intake: typeof intake;
   listings: typeof listings;
   mediaLookup: typeof mediaLookup;
   reports: typeof reports;

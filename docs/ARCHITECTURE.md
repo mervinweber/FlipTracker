@@ -44,6 +44,14 @@ Convex sourcing mutation -> deterministic metrics -> Sourcing dashboard
 
 This workflow is provider-independent and currently uses manual observations. The demo records are explicitly marked illustrative. An approved eBay or paid provider can later feed the same normalized calculation layer without changing the decision UI.
 
+## USB Bulk Intake Workflow
+
+```text
+USB scanner -> focused keyboard input -> serial metadata queue -> atomic Convex mutation -> asset + optional internal eBay draft
+```
+
+Each scan creates one physical `assets` record. Duplicate UPCs are allowed and receive separate copy numbers and SKUs. The asset and optional `marketplaceListings` draft are written in one mutation so partial intake records are not left behind. Direct eBay publishing remains outside this transaction until seller OAuth and authenticated ownership are implemented.
+
 ## Security Boundary
 
 Authentication and owner-scoped data are not implemented yet. Current Convex functions are public application APIs without per-user authorization. A shared beta requires an auth provider, `ConvexProviderWithAuth`, `convex/auth.config.ts`, owner fields/indexes, and server-side ownership checks on every user-data function.
