@@ -352,6 +352,7 @@ export default function App() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [manualBarcode, setManualBarcode] = useState('');
   const [scanError, setScanError] = useState('');
+  const [scannerAttempt, setScannerAttempt] = useState(0);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControls = useRef<IScannerControls | null>(null);
@@ -402,22 +403,53 @@ export default function App() {
     let cancelled = false;
     const reader = new BrowserMultiFormatReader();
     setScanError('');
-    reader.decodeFromVideoDevice(undefined, videoRef.current, (result, _error, controls) => {
-      if (controls) scannerControls.current = controls;
+
+    if (!window.isSecureContext) {
+      setScanError('Camera scanning requires HTTPS on a phone. Open the deployed Vercel app, or enter the barcode manually.');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScanError('This browser does not provide camera access. Try Safari or Chrome, or enter the barcode manually.');
+      return;
+    }
+
+    void reader.decodeFromConstraints({
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    }, videoRef.current, (result, _error, controls) => {
       if (result && !cancelled) {
         const code = result.getText();
         setManualBarcode(code);
         controls.stop();
         void lookupBarcode(code);
       }
-    }).catch(() => setScanError('Camera access failed. Check browser permissions or enter the barcode manually.'));
+    }).then((controls) => {
+      if (cancelled) controls.stop();
+      else scannerControls.current = controls;
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      const name = error instanceof DOMException ? error.name : '';
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setScanError('Camera permission is blocked. Allow camera access for this site in browser settings, then select Retry Camera.');
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        setScanError('No usable camera was found on this device. Enter the barcode manually if needed.');
+      } else if (name === 'NotReadableError' || name === 'AbortError') {
+        setScanError('The camera is busy in another app or browser tab. Close it there, then select Retry Camera.');
+      } else {
+        setScanError('The camera could not start. Close other camera apps, check browser permission, then select Retry Camera.');
+      }
+    });
 
     return () => {
       cancelled = true;
       scannerControls.current?.stop();
       scannerControls.current = null;
     };
-  }, [scannerOpen]);
+  }, [scannerOpen, scannerAttempt]);
 
   const consoles = useMemo(() => {
     const values = Array.from(new Set(rows.map((item) => item.console || '').filter(Boolean))).sort();
@@ -782,11 +814,11 @@ export default function App() {
               <button className="iconButton secondary" aria-label="Close" onClick={() => setScannerOpen(false)}><X size={18}/></button>
             </header>
             <div className="scannerGrid">
-              <div className="cameraFrame"><video ref={videoRef} muted playsInline /></div>
+              <div className="cameraFrame"><video ref={videoRef} muted playsInline autoPlay /></div>
               <div className="scannerPanel">
                 <label>Manual Barcode<input inputMode="numeric" value={manualBarcode} onChange={e => setManualBarcode(e.target.value)} placeholder="Scan or type UPC/EAN/ISBN"/></label>
                 {scanError ? <p className="warningText">{scanError}</p> : <p>Aim at the full barcode and hold steady. You can also enter the code manually.</p>}
-                <div className="actions right"><button className="secondary" onClick={() => setEditing(blankAsset())}>Manual Add</button><button onClick={() => lookupBarcode()} disabled={isLookingUp}><Search size={16}/>{isLookingUp ? 'Looking Up...' : 'Lookup'}</button></div>
+                <div className="actions right">{scanError ? <button className="secondary" onClick={() => setScannerAttempt((attempt) => attempt + 1)}><Camera size={16}/> Retry Camera</button> : null}<button className="secondary" onClick={() => setEditing(blankAsset())}>Manual Add</button><button onClick={() => lookupBarcode()} disabled={isLookingUp}><Search size={16}/>{isLookingUp ? 'Looking Up...' : 'Lookup'}</button></div>
               </div>
             </div>
           </section>
