@@ -18,6 +18,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- eBay seller connection added: authorization-code OAuth through Convex HTTP, server-only refresh/access token storage, automatic token refresh, seller business-policy/location setup, category defaults, and creation/update of unpublished Inventory API offers. Publishing is intentionally not implemented.
+- Because full FlipTracker user authentication is still open, sensitive eBay actions are temporarily gated by a private `FLIPTRACKER_ADMIN_KEY`. This is a single-seller beta measure, not a multi-user authorization model.
 - USB scanner Bulk Intake added: serial barcode queue, reusable stack defaults, duplicate-copy tracking, unique SKU generation, low-confidence review rows, and optional automatic internal eBay drafts.
 
 - Dedicated Sourcing view added with manual sold observations, active/sold counts, shipping-inclusive median and average, sell-through proxy, estimated days to sell, rarity, liquidity, expected profit, ROI, confidence, and Buy / Maybe / Pass.
@@ -68,6 +70,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Pursue eBay Browse API active listings as the first automated pricing signal during free beta. It has no data subscription fee, but production access requires eBay approval and is not guaranteed. Clearly label results as asking prices, preserve manual sold-result verification, and do not silently overwrite user values.
 - Defer PriceCharting and other paid pricing providers until tester demand, product polish, and a paid FlipTracker subscription can support the cost.
 - Keep sourcing decisions deterministic and inspectable. Median reduces outlier impact; rarity and liquidity remain separate; low confidence prevents an automatic Buy even when a single comp looks profitable.
+- Keep eBay creation and eBay publishing separate. FlipTracker may create an unpublished offer after explicit seller authorization, but publishing remains absent until photos, category validation, account ownership, and a final confirmation step are reliable.
 
 ## Coding Conventions
 
@@ -87,7 +90,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - What is the best game completeness model: flags, enum, or contents checklist?
 - Should region be a simple field or a normalized value list?
 - Should storage location start as a single free-text field or split into area/bin/shelf fields?
-- What is the right first eBay integration: sold-comps research, draft listing creation, or full listing publish?
+- When should eBay publishing be enabled, and what validation/confirmation checklist must block it?
 - How should a saved sourcing decision be converted into inventory without duplicate entry?
 - Which calculators belong in-app first: break-even, ROI, fee/shipping, promoted listing ROI, or lot analyzer?
 - Should completeness be a single required field or a checklist of included parts?
@@ -103,6 +106,8 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Saved research/value-check history display is not implemented yet.
 - Production deployment and auth strategy are still open.
 - Current Convex functions are not authenticated or owner-scoped. Do not share a public beta until this is fixed.
+- eBay seller writes are protected by a temporary seller key, but the rest of the app remains unscoped. Replace this gate with real authenticated ownership before adding beta users.
+- Captured photos are not uploaded to eBay yet; unpublished offers currently use eligible HTTPS cover art only.
 - The production build passes with a bundle-size warning; scanner and listing code should be split before broader release.
 - `xlsx` currently has a high-severity npm advisory with no available upstream fix. Excel remains required, so beta imports should be trusted-only while a replacement or isolation strategy is evaluated.
 
@@ -113,5 +118,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 3. Convert accepted sourcing decisions into inventory records.
 4. Add a dedicated collection detail page and lot calculator.
 5. Add saved eBay research/value history display and richer comp fields.
-6. Pick and implement auth.
-7. Add richer game metadata: completeness, region, platform variants.
+6. Configure and smoke test the eBay Sandbox seller connection with one DVD and one book.
+7. Pick and implement auth.
+8. Move photos to Convex storage and eBay image upload before adding publish.
+9. Add richer game metadata: completeness, region, platform variants.

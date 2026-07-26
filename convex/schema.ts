@@ -108,6 +108,12 @@ export default defineSchema({
     soldDate: v.optional(v.string()),
     buyer: v.optional(v.string()),
     notes: v.optional(v.string()),
+    ebayCategoryId: v.optional(v.string()),
+    ebayOfferId: v.optional(v.string()),
+    ebayInventorySku: v.optional(v.string()),
+    ebayDraftStatus: v.optional(v.string()),
+    ebayDraftCreatedAt: v.optional(v.number()),
+    ebayLastError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -117,6 +123,44 @@ export default defineSchema({
     .index("by_platform_and_status", ["platform", "status"])
     .index("by_listedDate", ["listedDate"])
     .index("by_soldDate", ["soldDate"]),
+
+  ebayConnections: defineTable({
+    singletonKey: v.string(),
+    environment: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.string(),
+    scopes: v.string(),
+    accessTokenExpiresAt: v.number(),
+    refreshTokenExpiresAt: v.optional(v.number()),
+    connectedAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_singletonKey", ["singletonKey"]),
+
+  ebayOauthStates: defineTable({
+    stateHash: v.string(),
+    environment: v.string(),
+    returnUrl: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_stateHash", ["stateHash"]),
+
+  ebaySettings: defineTable({
+    singletonKey: v.string(),
+    environment: v.string(),
+    marketplaceId: v.string(),
+    currency: v.string(),
+    merchantLocationKey: v.optional(v.string()),
+    fulfillmentPolicyId: v.optional(v.string()),
+    paymentPolicyId: v.optional(v.string()),
+    returnPolicyId: v.optional(v.string()),
+    dvdCategoryId: v.optional(v.string()),
+    blurayCategoryId: v.optional(v.string()),
+    bookCategoryId: v.optional(v.string()),
+    cdCategoryId: v.optional(v.string()),
+    gameCategoryId: v.optional(v.string()),
+    otherCategoryId: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_singletonKey", ["singletonKey"]),
 
   listingPriceHistory: defineTable({
     listingId: v.id("marketplaceListings"),

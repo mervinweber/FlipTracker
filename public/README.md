@@ -17,9 +17,9 @@ FlipTracker tracks games, DVDs, Blu-rays, CDs, books, and other resale media fro
 2. Set the condition, completeness, collection, storage bin, cost per item, SKU prefix, and shipping defaults.
 3. Leave **Create eBay draft** enabled and scan each UPC. Configure the scanner to send Enter or Tab after the code.
 4. Keep scanning while the queue works. Each physical copy receives a separate inventory record and unique SKU.
-5. Review amber rows, then open **Listings** to finish pricing, photos, and the manual eBay posting step.
+5. Review amber rows, then open **Listings** to finish pricing and create unpublished eBay offers.
 
-Direct eBay publishing is not enabled yet. It requires secure seller OAuth, eBay business policies, and authenticated FlipTracker users.
+Direct eBay publishing is not enabled. FlipTracker can connect a seller account and prepare unpublished eBay offers, but a scan cannot make a listing live.
 
 ## Research the value
 
@@ -45,12 +45,14 @@ Changing the title, UPC, edition, condition, or completeness marks the item for 
 
 1. Select **Draft** on the inventory item.
 2. Open **Listings** and review the prepared title, description, category, condition, item specifics, price, and shipping plan.
-3. Open eBay Seller Hub and create a new listing.
-4. Copy the prepared information from FlipTracker, upload the actual photos, and publish through eBay.
-5. Return to FlipTracker and add the eBay item ID and listing URL.
-6. Change the listing status to **Active** and confirm its listed date and current price.
+3. In **eBay Seller Connection**, enter the private seller key and connect the eBay seller account.
+4. Select the seller's inventory location, payment/shipping/return policies, and numeric category defaults, then save.
+5. Select the cloud-upload button on an eBay draft to create or refresh its unpublished eBay offer.
+6. Review every field and upload actual item photos. Captured FlipTracker photos are not sent to eBay yet.
+7. Finish and publish manually through eBay Seller Hub, then add the live eBay item ID and URL to FlipTracker.
+8. Change the listing status to **Active** and confirm its listed date and current price.
 
-FlipTracker prepares and tracks listings but does not publish directly to eBay yet.
+FlipTracker does not call eBay's publish endpoint. Unpublished offer creation and live publication remain separate actions by design.
 
 ## Record a sale
 

@@ -44,6 +44,20 @@ One marketplace listing attempt connected to an asset. It stores platform, lifec
 
 An asset may have multiple marketplace listing records over time or across platforms. Listing status is deliberately separate from the asset's physical inventory status.
 
+For eBay, `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve the unpublished-offer sync state without treating it as a live listing.
+
+## ebayConnections
+
+The single-seller beta's server-only eBay OAuth record. It stores environment, access/refresh tokens, scopes, expiry times, and connection timestamps. No public query returns the tokens.
+
+## ebayOauthStates
+
+Short-lived, single-use hashes for eBay OAuth CSRF protection. The callback consumes and deletes the matching state before exchanging the authorization code.
+
+## ebaySettings
+
+Seller defaults for marketplace/currency, inventory location, business policies, and numeric category IDs by media format. These defaults prepare offers consistently but do not publish them.
+
 ## listingPriceHistory
 
 One immutable price event connected to a marketplace listing and its asset. Initial listing prices and later changes are stored with a timestamp and optional reason.

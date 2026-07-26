@@ -22,6 +22,7 @@ const listingFields = {
   soldDate: v.optional(v.string()),
   buyer: v.optional(v.string()),
   notes: v.optional(v.string()),
+  ebayCategoryId: v.optional(v.string()),
 };
 
 const listingPatch = {
@@ -45,6 +46,7 @@ const listingPatch = {
   soldDate: v.optional(v.string()),
   buyer: v.optional(v.string()),
   notes: v.optional(v.string()),
+  ebayCategoryId: v.optional(v.string()),
 };
 
 export const list = query({

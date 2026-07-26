@@ -114,8 +114,8 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Richer game completeness model: disc only, case only, manual only, CIB, sealed, loose cartridge, replacement artwork
 - [ ] Region metadata: NTSC, PAL, NTSC-J, region-free, unknown
 - [ ] Storage organization filters: bin, shelf, room, listed rack, review pile
-- [ ] eBay listing integration research
-- [ ] Push inventory item to eBay draft listing
+- [x] eBay listing integration research
+- [x] Push inventory item to an unpublished eBay offer
 - [ ] Listing utilities: title helper, category/item-specific checklist, cross-platform copy generator
 - [ ] Calculator library: break-even price, ROI, margin vs markup, promoted listing ROI, tax/export summaries
 - [ ] Sourcing history: save skipped items so bad buys can be learned from later
@@ -130,7 +130,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Add eBay-ready title, description, category, condition, item specifics, price, and shipping settings
 - [x] Recalculate recommendation and listing details when key item/value fields change
 - [ ] Add verified pricing provider and sold-comp averaging
-- [ ] Add eBay draft creation after scanning workflow is stable
+- [x] Add eBay unpublished-offer creation after scanning workflow is stable
 
 ## v0.5.3 Sales Tracker Merge
 - [x] Review Sales Tracker repo and choose FlipTracker as the combined app base
@@ -151,3 +151,18 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Add listing lifecycle tests
 - [ ] Code-split the scanner and listing editor
 - [ ] Complete production Convex and Vercel smoke tests
+
+## v0.5.5 eBay Seller Drafts
+
+- [x] Add eBay authorization-code OAuth callback through Convex HTTP actions
+- [x] Store and refresh seller tokens only in Convex
+- [x] Add temporary private seller-key gate before full user authentication
+- [x] Load eBay payment, fulfillment, return, and inventory-location choices
+- [x] Store media category defaults and listing-level category overrides
+- [x] Create or refresh SKU-backed eBay inventory items
+- [x] Create or refresh unpublished eBay offers without publishing
+- [x] Preserve eBay offer ID, sync status, timestamp, and errors on the listing
+- [ ] Upload captured item photos to Convex storage and eBay Media/Picture Services
+- [ ] Add an eBay offer validation/fee preview screen
+- [ ] Add bounded bulk offer creation with per-item failure handling
+- [ ] Add a separately confirmed publish action only after auth and photo validation

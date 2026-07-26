@@ -19,7 +19,7 @@ Phone camera / manual UPC -> React scanner -> Convex mediaLookup action -> revie
 
 The PWA uses `@zxing/browser` for camera barcode scanning and keeps a manual barcode fallback. Metadata lookup currently runs through a Convex action: Open Library for ISBN/book metadata and UPCItemDB trial lookup for UPC/EAN media metadata when available.
 
-The app saves scanned items to inventory first. Generated eBay listing fields are stored on the asset, but eBay draft creation is intentionally deferred until the scan/review workflow is stable.
+The app saves scanned items to inventory first. Generated eBay listing fields are stored on the asset and copied into an internal marketplace draft.
 
 ## Combined Inventory And Sales Workflow
 
@@ -50,8 +50,18 @@ This workflow is provider-independent and currently uses manual observations. Th
 USB scanner -> focused keyboard input -> serial metadata queue -> atomic Convex mutation -> asset + optional internal eBay draft
 ```
 
-Each scan creates one physical `assets` record. Duplicate UPCs are allowed and receive separate copy numbers and SKUs. The asset and optional `marketplaceListings` draft are written in one mutation so partial intake records are not left behind. Direct eBay publishing remains outside this transaction until seller OAuth and authenticated ownership are implemented.
+Each scan creates one physical `assets` record. Duplicate UPCs are allowed and receive separate copy numbers and SKUs. The asset and optional `marketplaceListings` draft are written in one mutation so partial intake records are not left behind.
+
+## eBay Seller Workflow
+
+```text
+Internal eBay draft -> Seller-key gate -> eBay OAuth -> Inventory item -> Unpublished offer
+```
+
+OAuth authorization returns through `convex/http.ts`. Refresh and access tokens are stored only in `ebayConnections`; the browser receives connection status and policy names, never tokens. `ebaySettings` stores the selected marketplace, inventory location, payment/fulfillment/return policies, and per-format category defaults.
+
+Creating an eBay draft writes or refreshes the SKU-backed Inventory API item, then creates or updates an unpublished offer. The publish endpoint is intentionally absent. The listing stores the returned offer ID, sync status, timestamp, and last error. A temporary `FLIPTRACKER_ADMIN_KEY` gate protects seller actions until full application authentication and owner scoping replace it.
 
 ## Security Boundary
 
-Authentication and owner-scoped data are not implemented yet. Current Convex functions are public application APIs without per-user authorization. A shared beta requires an auth provider, `ConvexProviderWithAuth`, `convex/auth.config.ts`, owner fields/indexes, and server-side ownership checks on every user-data function.
+Authentication and owner-scoped data are not implemented yet. Current inventory/listing functions are public application APIs without per-user authorization. Sensitive eBay actions require the private seller access key, use replay-resistant OAuth state, and keep tokens server-side, but this is only a single-seller private-beta boundary. A shared beta still requires an auth provider, `ConvexProviderWithAuth`, `convex/auth.config.ts`, owner fields/indexes, and server-side ownership checks on every user-data function.

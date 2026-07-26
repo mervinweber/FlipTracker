@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
-import { Download, ExternalLink, Pencil, Save, Search, Trash2, Upload, X } from 'lucide-react';
+import { useAction, useMutation, useQuery } from 'convex/react';
+import { CloudUpload, Download, ExternalLink, KeyRound, Link, Pencil, RefreshCw, Save, Search, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -27,11 +27,61 @@ type Listing = {
   soldDate?: string;
   buyer?: string;
   notes?: string;
+  ebayCategoryId?: string;
+  ebayOfferId?: string;
+  ebayInventorySku?: string;
+  ebayDraftStatus?: string;
+  ebayDraftCreatedAt?: number;
+  ebayLastError?: string;
   assetTitle: string;
   assetType?: string;
   purchasePrice?: number;
   storageLocation?: string;
   photoUrl?: string;
+};
+
+type EbaySetup = {
+  connected: boolean;
+  environment: 'sandbox' | 'production';
+  connectedAt?: number;
+  settings: Record<string, string | undefined>;
+  policies: {
+    fulfillment: { id: string; name: string }[];
+    payment: { id: string; name: string }[];
+    returns: { id: string; name: string }[];
+  };
+  locations: { key: string; name: string }[];
+  warning?: string;
+};
+
+type EbaySettings = {
+  marketplaceId: string;
+  currency: string;
+  merchantLocationKey: string;
+  fulfillmentPolicyId: string;
+  paymentPolicyId: string;
+  returnPolicyId: string;
+  dvdCategoryId: string;
+  blurayCategoryId: string;
+  bookCategoryId: string;
+  cdCategoryId: string;
+  gameCategoryId: string;
+  otherCategoryId: string;
+};
+
+const EMPTY_EBAY_SETTINGS: EbaySettings = {
+  marketplaceId: 'EBAY_US',
+  currency: 'USD',
+  merchantLocationKey: '',
+  fulfillmentPolicyId: '',
+  paymentPolicyId: '',
+  returnPolicyId: '',
+  dvdCategoryId: '',
+  blurayCategoryId: '',
+  bookCategoryId: '',
+  cdCategoryId: '',
+  gameCategoryId: '',
+  otherCategoryId: '',
 };
 
 const PLATFORMS = ['eBay', 'Mercari', 'Facebook Marketplace', 'Vinted', 'OfferUp', 'Craigslist', 'Poshmark', 'Depop', 'Etsy', 'Amazon', 'Other'];
@@ -96,17 +146,40 @@ export default function ListingsPanel() {
   const updateListing = useMutation(api.listings.update);
   const removeListing = useMutation(api.listings.remove);
   const importSalesTracker = useMutation(api.listings.importSalesTracker);
+  const beginEbayOauth = useAction(api.ebay.beginOauth);
+  const loadEbaySetup = useAction(api.ebay.loadSetup);
+  const saveEbaySettings = useAction(api.ebay.saveSettings);
+  const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
   const [platform, setPlatform] = useState('All');
   const [priceChangeReason, setPriceChangeReason] = useState('');
+  const [adminKey, setAdminKey] = useState(() => sessionStorage.getItem('fliptrackerSellerKey') || '');
+  const [ebaySetup, setEbaySetup] = useState<EbaySetup | null>(null);
+  const [ebaySettings, setEbaySettings] = useState<EbaySettings>(EMPTY_EBAY_SETTINGS);
+  const [ebayBusy, setEbayBusy] = useState(false);
+  const [offerBusy, setOfferBusy] = useState<Id<'marketplaceListings'> | null>(null);
+  const [ebayNotice, setEbayNotice] = useState('');
+  const [ebayError, setEbayError] = useState('');
 
   useEffect(() => {
     if (!editing) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
   }, [editing]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthResult = params.get('ebay');
+    if (!oauthResult) return;
+    setEbayNotice(oauthResult === 'connected' ? 'eBay seller account connected. Load the setup below to choose policies.' : '');
+    setEbayError(oauthResult === 'error' ? params.get('message') || 'eBay authorization failed.' : '');
+    params.delete('ebay');
+    params.delete('message');
+    const nextQuery = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`);
+  }, []);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -118,6 +191,107 @@ export default function ListingsPanel() {
 
   function patchEditing(patch: Partial<Listing>) {
     setEditing((current) => current ? { ...current, ...patch } : current);
+  }
+
+  function optionalText(value: string) {
+    return value.trim() || undefined;
+  }
+
+  function applyEbaySetup(setup: EbaySetup) {
+    setEbaySetup(setup);
+    setEbaySettings({
+      marketplaceId: setup.settings.marketplaceId || 'EBAY_US',
+      currency: setup.settings.currency || 'USD',
+      merchantLocationKey: setup.settings.merchantLocationKey || '',
+      fulfillmentPolicyId: setup.settings.fulfillmentPolicyId || '',
+      paymentPolicyId: setup.settings.paymentPolicyId || '',
+      returnPolicyId: setup.settings.returnPolicyId || '',
+      dvdCategoryId: setup.settings.dvdCategoryId || '',
+      blurayCategoryId: setup.settings.blurayCategoryId || '',
+      bookCategoryId: setup.settings.bookCategoryId || '',
+      cdCategoryId: setup.settings.cdCategoryId || '',
+      gameCategoryId: setup.settings.gameCategoryId || '',
+      otherCategoryId: setup.settings.otherCategoryId || '',
+    });
+  }
+
+  async function unlockEbaySetup() {
+    if (!adminKey) return;
+    setEbayBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const setup = await loadEbaySetup({ adminKey }) as EbaySetup;
+      sessionStorage.setItem('fliptrackerSellerKey', adminKey);
+      applyEbaySetup(setup);
+      if (setup.warning) setEbayError(setup.warning);
+    } catch (error) {
+      setEbaySetup(null);
+      setEbayError(error instanceof Error ? error.message : 'Could not load eBay setup.');
+    } finally {
+      setEbayBusy(false);
+    }
+  }
+
+  async function connectEbay() {
+    if (!adminKey) return;
+    setEbayBusy(true);
+    setEbayError('');
+    try {
+      sessionStorage.setItem('fliptrackerSellerKey', adminKey);
+      const result = await beginEbayOauth({ adminKey, returnUrl: `${window.location.origin}${window.location.pathname}${window.location.search}#listings` });
+      window.location.assign(result.authorizationUrl);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not start eBay authorization.');
+      setEbayBusy(false);
+    }
+  }
+
+  async function saveSetup() {
+    setEbayBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      await saveEbaySettings({
+        adminKey,
+        marketplaceId: ebaySettings.marketplaceId,
+        currency: ebaySettings.currency,
+        merchantLocationKey: optionalText(ebaySettings.merchantLocationKey),
+        fulfillmentPolicyId: optionalText(ebaySettings.fulfillmentPolicyId),
+        paymentPolicyId: optionalText(ebaySettings.paymentPolicyId),
+        returnPolicyId: optionalText(ebaySettings.returnPolicyId),
+        dvdCategoryId: optionalText(ebaySettings.dvdCategoryId),
+        blurayCategoryId: optionalText(ebaySettings.blurayCategoryId),
+        bookCategoryId: optionalText(ebaySettings.bookCategoryId),
+        cdCategoryId: optionalText(ebaySettings.cdCategoryId),
+        gameCategoryId: optionalText(ebaySettings.gameCategoryId),
+        otherCategoryId: optionalText(ebaySettings.otherCategoryId),
+      });
+      await unlockEbaySetup();
+      setEbayNotice('eBay draft defaults saved.');
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not save eBay setup.');
+    } finally {
+      setEbayBusy(false);
+    }
+  }
+
+  async function sendToEbay(listing: Listing) {
+    if (!adminKey) {
+      setEbayError('Unlock eBay seller tools first.');
+      return;
+    }
+    setOfferBusy(listing._id);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const result = await createEbayOffer({ adminKey, listingId: listing._id });
+      setEbayNotice(`${result.updated ? 'Updated' : 'Created'} eBay unpublished offer ${result.offerId} for SKU ${result.sku}.`);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not create the eBay draft.');
+    } finally {
+      setOfferBusy(null);
+    }
   }
 
   async function save() {
@@ -146,6 +320,7 @@ export default function ListingsPanel() {
       soldDate,
       buyer: editing.buyer || undefined,
       notes: editing.notes || undefined,
+      ebayCategoryId: editing.ebayCategoryId || undefined,
       priceChangeReason: priceChangeReason || undefined,
     });
     setEditing(null);
@@ -197,6 +372,36 @@ export default function ListingsPanel() {
         <div className="metric"><span>Avg. Days To Sell</span><strong>{stats ? stats.averageDaysToSell.toFixed(1) : '-'}</strong></div>
       </section>
 
+      <section className="panel ebaySetupPanel">
+        <div className="panelHeader">
+          <div><h2>eBay Seller Connection</h2><p>Authorize one seller account, choose its policies, then create unpublished offers from FlipTracker drafts.</p></div>
+          {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Connected · {ebaySetup.environment}</span> : <span className="statusPill"><KeyRound size={14}/> Seller only</span>}
+        </div>
+        <div className="ebayUnlockRow">
+          <label>Seller Access Key<input type="password" autoComplete="off" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} placeholder="Enter the private beta seller key"/></label>
+          <button className="secondary" disabled={!adminKey || ebayBusy} onClick={unlockEbaySetup}><Settings size={16}/> {ebayBusy ? 'Loading...' : 'Load Setup'}</button>
+          <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> {ebaySetup?.connected ? 'Reconnect eBay' : 'Connect eBay'}</button>
+        </div>
+        {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
+        {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
+        {ebaySetup?.connected ? (
+          <div className="ebaySettingsGrid">
+            <label>Inventory Location<select value={ebaySettings.merchantLocationKey} onChange={(event) => setEbaySettings((current) => ({ ...current, merchantLocationKey: event.target.value }))}><option value="">Choose location</option>{ebaySetup.locations.map((location) => <option key={location.key} value={location.key}>{location.name}</option>)}</select></label>
+            <label>Shipping Policy<select value={ebaySettings.fulfillmentPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, fulfillmentPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
+            <label>Payment Policy<select value={ebaySettings.paymentPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, paymentPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.payment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
+            <label>Return Policy<select value={ebaySettings.returnPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, returnPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.returns.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
+            <label>DVD Category ID<input inputMode="numeric" value={ebaySettings.dvdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, dvdCategoryId: event.target.value }))}/></label>
+            <label>Blu-ray Category ID<input inputMode="numeric" value={ebaySettings.blurayCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, blurayCategoryId: event.target.value }))}/></label>
+            <label>Book Category ID<input inputMode="numeric" value={ebaySettings.bookCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, bookCategoryId: event.target.value }))}/></label>
+            <label>CD Category ID<input inputMode="numeric" value={ebaySettings.cdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, cdCategoryId: event.target.value }))}/></label>
+            <label>Game Category ID<input inputMode="numeric" value={ebaySettings.gameCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, gameCategoryId: event.target.value }))}/></label>
+            <label>Other Media Category ID<input inputMode="numeric" value={ebaySettings.otherCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, otherCategoryId: event.target.value }))}/></label>
+            <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button></div>
+          </div>
+        ) : null}
+        <p className="ebaySafetyNote">FlipTracker creates an unpublished eBay offer only. Review photos, category, specifics, shipping, and price in eBay before publishing.</p>
+      </section>
+
       <section className="panel listingControls">
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search listings..." value={query} onChange={(event) => setQuery(event.target.value)}/></div>
         <select value={status} onChange={(event) => setStatus(event.target.value)}>{['All', ...STATUSES].map((value) => <option key={value}>{value}</option>)}</select>
@@ -214,12 +419,13 @@ export default function ListingsPanel() {
                 <tr key={listing._id}>
                   <td><span className="consoleTag">{listing.platform}</span></td>
                   <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small></td>
-                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span></td>
+                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.listedDate || ''}<small>{daysListed(listing)}</small></td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className={listing.status === 'Sold' && netProfit(listing) >= 0 ? 'profitValue' : ''}>{listing.status === 'Sold' ? money(netProfit(listing)) : ''}</td>
                   <td className="rowActions">
+                    {listing.platform === 'eBay' && listing.status === 'Draft' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id} aria-label={`Send ${listing.title} to eBay`} title={listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => setEditing(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
@@ -242,6 +448,7 @@ export default function ListingsPanel() {
             <label>Marketplace Item ID<input value={editing.externalListingId || ''} onChange={(event) => patchEditing({ externalListingId: event.target.value })}/></label>
             <label className="span2">Listing URL<input type="url" value={editing.listingUrl || ''} onChange={(event) => patchEditing({ listingUrl: event.target.value })}/></label>
             <label>Category<input value={editing.category || ''} onChange={(event) => patchEditing({ category: event.target.value })}/></label>
+            <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={(event) => patchEditing({ ebayCategoryId: event.target.value })}/></label>
             <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value })}/></label>
             <div className="formSection span2"><h3>Pricing & Dates</h3><div className="sectionGrid">
               <label>Original Price<input type="number" step="0.01" value={editing.listedPrice ?? ''} onChange={(event) => patchEditing({ listedPrice: optionalNumber(event.target.value) })}/></label>

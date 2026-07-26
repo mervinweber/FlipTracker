@@ -38,7 +38,7 @@ export default function QuickGuide() {
           <li>Leave <strong>Create eBay draft</strong> enabled, then scan each UPC. Most USB scanners type the code and press Enter automatically.</li>
           <li>Continue scanning while the queue processes. Every physical copy receives its own inventory record and unique SKU.</li>
           <li>Review amber rows before publishing, then open Listings to finish pricing and photos.</li>
-        </ol><p className="guideNote"><Keyboard size={15}/> Configure the scanner suffix as Enter or Tab. Direct eBay publishing requires the future secure seller connection.</p></div></section>
+        </ol><p className="guideNote"><Keyboard size={15}/> Configure the scanner suffix as Enter or Tab. These are internal drafts until you send them to the connected eBay account from Listings.</p></div></section>
 
         <section><div className="guideNumber">3</div><div><h3>Make a sourcing decision</h3><ol>
           <li>Open <strong>Sourcing</strong> and select <strong>New Analysis</strong>.</li>
@@ -60,16 +60,17 @@ export default function QuickGuide() {
           <li>Find the item in Inventory and select <strong>Draft</strong>.</li>
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
           <li>Open <strong>Listings</strong>, edit the draft, and verify every field before posting.</li>
+          <li>In eBay Seller Connection, enter the private seller key, connect the seller account, and save its location, business policies, and media category defaults.</li>
+          <li>Select the cloud-upload button on the draft to create or refresh its unpublished eBay offer.</li>
           <li>Add an SKU when useful; the storage location remains visible for fulfillment.</li>
-        </ol></div></section>
+        </ol><p className="guideNote"><ShoppingBag size={15}/> The eBay offer is not live. Captured item photos are not uploaded yet, so add and review actual photos before publishing.</p></div></section>
 
         <section><div className="guideNumber">6</div><div><h3>Post it to eBay</h3><ol>
-          <li>Open eBay Seller Hub and start a new listing.</li>
-          <li>Copy the prepared title, description, category, condition, item specifics, price, and shipping plan from the FlipTracker draft.</li>
-          <li>Upload and review the actual item photos, then publish through eBay.</li>
+          <li>Review the prepared title, description, category ID, condition, item specifics, price, policies, and actual item photos.</li>
+          <li>Until FlipTracker adds a validated publish step, finish and publish the listing manually through eBay Seller Hub.</li>
           <li>Return to FlipTracker and enter the eBay item ID and listing URL.</li>
           <li>Change the status to <strong>Active</strong> and confirm the listed date and current price.</li>
-        </ol><p className="guideNote"><ShoppingBag size={15}/> FlipTracker does not publish directly to eBay yet. eBay OAuth and draft creation are planned after the internal workflow is stable.</p></div></section>
+        </ol><p className="guideNote"><ShoppingBag size={15}/> FlipTracker deliberately does not call eBay's publish endpoint yet. A scan cannot accidentally make a listing live.</p></div></section>
 
         <section><div className="guideNumber">7</div><div><h3>Track price changes and the sale</h3><ol>
           <li>Edit Current Price whenever a listing is reduced and enter a reason. FlipTracker preserves the price history.</li>

@@ -34,6 +34,9 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Import Sales Tracker JSON into inventory, marketplace listings, and price history
 - [x] Export the filtered Listings view to CSV
 - [x] Add a hosted in-app Quick Guide and `/README.md` for scanning, research, eBay listing, and sale tracking
+- [x] Add eBay seller OAuth with replay-resistant callback state and server-only token storage
+- [x] Load eBay business policies and inventory locations into seller setup
+- [x] Create or refresh eBay Inventory API items and unpublished offers without publishing
 
 ## Beta Launch Blockers - Engineering
 
@@ -81,6 +84,24 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Make the Terapeak threshold configurable per user after authentication/settings exist
 - [ ] Defer paid providers until beta usage and a paid subscription model justify the cost
 - [ ] If production Browse access is denied, ship generated eBay search links plus manual review rather than unofficial scraping
+
+## eBay Seller Draft Creation
+
+- [x] Add eBay authorization-code OAuth through a Convex HTTP callback
+- [x] Refresh expired access tokens from the server-only refresh token
+- [x] Protect seller actions with a private beta seller key until user auth exists
+- [x] Select and save eBay inventory location and payment/fulfillment/return policies
+- [x] Save default numeric category IDs for DVDs, Blu-rays, books, CDs, games, and other media
+- [x] Create or update the SKU-backed eBay inventory item
+- [x] Create or update an unpublished eBay offer and save its offer ID/status/error
+- [x] Keep eBay publishing absent so a scan cannot accidentally create a live listing
+- [ ] Configure eBay Sandbox credentials and complete owner consent
+- [ ] Smoke test one DVD and one book against an eBay Sandbox seller
+- [ ] Configure Production credentials only after Sandbox succeeds
+- [ ] Move captured photos to Convex storage and upload them to eBay
+- [ ] Add offer validation and listing-fee preview
+- [ ] Add bounded bulk upload for selected drafts with retryable per-item failures
+- [ ] Add a separately confirmed publish action after user auth, photo upload, and validation are complete
 
 ## Sourcing Decision Engine
 
@@ -180,7 +201,9 @@ These must be completed in code before the beta URL is shared with other users.
 
 - [ ] Copy the production deployment URL printed by Convex or shown in Project Settings
 - [ ] Confirm the production deployment contains these tables:
-  `assets`, `collections`, `sales`, `valueHistory`, `researchChecks`, `marketplaceListings`, and `listingPriceHistory`
+  `assets`, `collections`, `sales`, `valueHistory`, `researchChecks`, `marketplaceListings`, `listingPriceHistory`, `ebayConnections`, `ebayOauthStates`, and `ebaySettings`
+- [ ] Configure the eBay Convex environment variables from `SETUP.md`; never put eBay secrets in Vercel or a `VITE_` variable
+- [ ] Register the production `.convex.site/ebay/callback` URL in the Production eBay RuName
 - [ ] Configure production auth environment values after auth is implemented
 - [ ] Do not manually import development data into production until owner IDs are present
 - [ ] If seed/import data is needed, export a backup first and test the import in development
@@ -239,7 +262,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Batch photo/spine recognition workflow
 - [x] Sourcing mode with Buy / Maybe / Pass recommendation
 - [ ] Import and populate the category-specific Create Drafts template downloaded from eBay Seller Hub Reports
-- [ ] eBay OAuth and draft creation after the internal listing workflow is stable
+- [x] eBay OAuth and unpublished-offer creation after the internal listing workflow is stable
 - [ ] Read-only eBay listing audit before any automated edit/publish behavior
 - [ ] Final logo, PWA icons, typography, and onboarding polish
 
@@ -250,5 +273,7 @@ These must be completed in code before the beta URL is shared with other users.
 - Photos are currently stored as compressed data URLs and should remain limited during development
 - Listing imports create new records and do not deduplicate
 - The app currently has no authentication or per-user ownership and must not be treated as a public multi-user beta yet
+- eBay seller actions have a temporary private seller-key gate, but this does not replace full user authentication and owner scoping
+- Captured item photos remain data URLs and are not uploaded into eBay unpublished offers yet
 - The production build passes but currently reports a JavaScript bundle-size warning
 - `npm audit --omit=dev` reports one high-severity issue in `xlsx` with no available fix; do not accept untrusted spreadsheet uploads during beta
