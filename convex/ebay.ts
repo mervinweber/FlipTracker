@@ -320,6 +320,7 @@ export const markDraftCreated = internalMutation({
       ebayDraftStatus: "Unpublished offer",
       ebayDraftCreatedAt: Date.now(),
       ebayLastError: undefined,
+      pricingStatus: "eBay Draft Created",
       updatedAt: Date.now(),
     });
   },

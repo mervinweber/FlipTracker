@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+function midpoint(low?: number, high?: number) {
+  if (low !== undefined && high !== undefined) return Math.round(((low + high) / 2) * 100) / 100;
+  return low ?? high;
+}
+
 const listingFields = {
   platform: v.string(),
   status: v.string(),
@@ -23,6 +28,8 @@ const listingFields = {
   buyer: v.optional(v.string()),
   notes: v.optional(v.string()),
   ebayCategoryId: v.optional(v.string()),
+  pricingStatus: v.optional(v.string()),
+  pricingSource: v.optional(v.string()),
 };
 
 const listingPatch = {
@@ -47,6 +54,8 @@ const listingPatch = {
   buyer: v.optional(v.string()),
   notes: v.optional(v.string()),
   ebayCategoryId: v.optional(v.string()),
+  pricingStatus: v.optional(v.string()),
+  pricingSource: v.optional(v.string()),
 };
 
 export const list = query({
@@ -63,6 +72,20 @@ export const list = query({
           purchasePrice: asset?.purchasePrice,
           storageLocation: asset?.storageLocation,
           photoUrl: asset?.photoDataUrl || asset?.coverImageUrl,
+          assetBarcode: asset?.upc || asset?.barcode,
+          mediaFormat: asset?.mediaFormat,
+          needsValueCheck: asset?.needsValueCheck,
+          listingRecommendation: asset?.listingRecommendation,
+          suggestedPrice: asset?.ebayPrice
+            ?? midpoint(asset?.userLow, asset?.userHigh)
+            ?? midpoint(asset?.estimatedLow, asset?.estimatedHigh),
+          suggestionSource: asset?.ebayPrice !== undefined
+            ? "Prepared eBay price"
+            : asset?.userLow !== undefined || asset?.userHigh !== undefined
+              ? "User value range"
+              : asset?.estimatedLow !== undefined || asset?.estimatedHigh !== undefined
+                ? "Estimated value range"
+                : undefined,
         };
       }),
     );
@@ -113,6 +136,8 @@ export const create = mutation({
     const listingId = await ctx.db.insert("marketplaceListings", {
       ...args,
       currentPrice: args.currentPrice ?? args.listedPrice,
+      pricingStatus: args.pricingStatus ?? (args.currentPrice !== undefined || args.listedPrice !== undefined ? "Ready for eBay" : "Ready for Pricing"),
+      pricingUpdatedAt: args.currentPrice !== undefined || args.listedPrice !== undefined ? now : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -156,7 +181,10 @@ export const update = mutation({
       });
     }
 
-    await ctx.db.patch(id, { ...patch, updatedAt: now });
+    const pricingPatch = patch.currentPrice !== undefined && patch.currentPrice > 0 && ["Draft", "Pending"].includes(patch.status ?? existing.status)
+      ? { pricingStatus: "Ready for eBay", pricingSource: patch.pricingSource ?? "Manual listing edit", pricingUpdatedAt: now }
+      : {};
+    await ctx.db.patch(id, { ...patch, ...pricingPatch, updatedAt: now });
     const nextStatus = patch.status ?? existing.status;
     if (nextStatus === "Active") {
       await ctx.db.patch(existing.assetId, { status: "Listed", updatedAt: now });
@@ -195,6 +223,51 @@ export const remove = mutation({
     for (const entry of history) await ctx.db.delete(entry._id);
     await ctx.db.delete(args.id);
     return null;
+  },
+});
+
+export const applyQueuePricing = mutation({
+  args: {
+    updates: v.array(v.object({
+      listingId: v.id("marketplaceListings"),
+      price: v.number(),
+      source: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    if (!args.updates.length) throw new Error("Choose at least one priced listing.");
+    if (args.updates.length > 100) throw new Error("Update up to 100 listings at a time.");
+    const now = Date.now();
+    for (const update of args.updates) {
+      if (!Number.isFinite(update.price) || update.price <= 0) throw new Error("Every approved listing needs a price above zero.");
+      const listing = await ctx.db.get(update.listingId);
+      if (!listing) throw new Error("A selected listing no longer exists.");
+      if (listing.platform.toLowerCase() !== "ebay" || !["Draft", "Pending"].includes(listing.status)) {
+        throw new Error(`${listing.title} is not an eBay Draft or Pending listing.`);
+      }
+      const normalizedPrice = Math.round(update.price * 100) / 100;
+      const previousPrice = listing.currentPrice ?? listing.listedPrice;
+      if (previousPrice !== normalizedPrice) {
+        await ctx.db.insert("listingPriceHistory", {
+          listingId: listing._id,
+          assetId: listing.assetId,
+          date: now,
+          price: normalizedPrice,
+          reason: "Pricing queue review",
+          createdAt: now,
+        });
+      }
+      await ctx.db.patch(listing._id, {
+        listedPrice: listing.listedPrice ?? normalizedPrice,
+        currentPrice: normalizedPrice,
+        pricingStatus: "Ready for eBay",
+        pricingSource: update.source,
+        pricingUpdatedAt: now,
+        ebayLastError: undefined,
+        updatedAt: now,
+      });
+    }
+    return { updated: args.updates.length };
   },
 });
 

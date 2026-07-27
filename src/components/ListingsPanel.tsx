@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { CloudUpload, Download, ExternalLink, KeyRound, Link, Pencil, RefreshCw, Save, Search, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -33,11 +33,31 @@ type Listing = {
   ebayDraftStatus?: string;
   ebayDraftCreatedAt?: number;
   ebayLastError?: string;
+  pricingStatus?: string;
+  pricingSource?: string;
+  pricingUpdatedAt?: number;
   assetTitle: string;
   assetType?: string;
+  assetBarcode?: string;
+  mediaFormat?: string;
+  needsValueCheck?: boolean;
+  listingRecommendation?: string;
+  suggestedPrice?: number;
+  suggestionSource?: string;
   purchasePrice?: number;
   storageLocation?: string;
   photoUrl?: string;
+};
+
+type PricingRow = {
+  listingId: Id<'marketplaceListings'>;
+  title: string;
+  barcode?: string;
+  format?: string;
+  currentPrice?: number;
+  suggestedPrice?: number;
+  suggestionSource?: string;
+  price: string;
 };
 
 type EbaySetup = {
@@ -128,6 +148,25 @@ function optionalNumber(value: string) {
   return value === '' ? undefined : Number(value);
 }
 
+function queueStatus(listing: Listing) {
+  if (listing.ebayOfferId || listing.pricingStatus === 'eBay Draft Created') return 'eBay Draft Created';
+  if (!['Draft', 'Pending'].includes(listing.status)) return listing.status;
+  if (listing.pricingStatus) return listing.pricingStatus;
+  return (listing.currentPrice ?? listing.listedPrice ?? 0) > 0 ? 'Ready for eBay' : 'Ready for Pricing';
+}
+
+function ebayResearchQuery(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
+  return listing.assetBarcode || `${listing.title} ${listing.mediaFormat || ''}`.trim();
+}
+
+function soldCompsUrl(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
+  return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(ebayResearchQuery(listing))}&LH_Sold=1&LH_Complete=1`;
+}
+
+function terapeakUrl(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
+  return `https://www.ebay.com/sh/research?marketplace=EBAY-US&keywords=${encodeURIComponent(ebayResearchQuery(listing))}`;
+}
+
 function PriceHistory({ listingId }: { listingId: Id<'marketplaceListings'> }) {
   const history = useQuery(api.listings.priceHistory, { listingId });
   if (!history?.length) return <p className="compactText">No price changes recorded yet.</p>;
@@ -146,6 +185,7 @@ export default function ListingsPanel() {
   const updateListing = useMutation(api.listings.update);
   const removeListing = useMutation(api.listings.remove);
   const importSalesTracker = useMutation(api.listings.importSalesTracker);
+  const applyQueuePricing = useMutation(api.listings.applyQueuePricing);
   const beginEbayOauth = useAction(api.ebay.beginOauth);
   const loadEbaySetup = useAction(api.ebay.loadSetup);
   const saveEbaySettings = useAction(api.ebay.saveSettings);
@@ -162,12 +202,15 @@ export default function ListingsPanel() {
   const [offerBusy, setOfferBusy] = useState<Id<'marketplaceListings'> | null>(null);
   const [ebayNotice, setEbayNotice] = useState('');
   const [ebayError, setEbayError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<Id<'marketplaceListings'>>>(new Set());
+  const [pricingRows, setPricingRows] = useState<PricingRow[] | null>(null);
+  const [queueBusy, setQueueBusy] = useState(false);
 
   useEffect(() => {
-    if (!editing) return;
+    if (!editing && !pricingRows) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [editing]);
+  }, [editing, pricingRows]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -188,6 +231,10 @@ export default function ListingsPanel() {
       return matchesQuery && (status === 'All' || listing.status === status) && (platform === 'All' || listing.platform === platform);
     });
   }, [listings, platform, query, status]);
+
+  const queueListings = useMemo(() => filtered.filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status)), [filtered]);
+  const selectedListings = useMemo(() => (listings || []).filter((listing) => selectedIds.has(listing._id)), [listings, selectedIds]);
+  const selectedReadyForEbay = useMemo(() => selectedListings.filter((listing) => queueStatus(listing) === 'Ready for eBay'), [selectedListings]);
 
   function patchEditing(patch: Partial<Listing>) {
     setEditing((current) => current ? { ...current, ...patch } : current);
@@ -294,6 +341,118 @@ export default function ListingsPanel() {
     }
   }
 
+  function toggleSelected(listingId: Id<'marketplaceListings'>) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(listingId)) next.delete(listingId);
+      else next.add(listingId);
+      return next;
+    });
+  }
+
+  function toggleQueueView() {
+    const queueIds = queueListings.map((listing) => listing._id);
+    const allSelected = queueIds.length > 0 && queueIds.every((id) => selectedIds.has(id));
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const id of queueIds) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function openPricingReview() {
+    const rows = selectedListings
+      .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) !== 'eBay Draft Created')
+      .map((listing) => {
+        const workingPrice = listing.currentPrice ?? listing.listedPrice ?? listing.suggestedPrice;
+        return {
+          listingId: listing._id,
+          title: listing.title,
+          barcode: listing.assetBarcode,
+          format: listing.mediaFormat,
+          currentPrice: listing.currentPrice ?? listing.listedPrice,
+          suggestedPrice: listing.suggestedPrice,
+          suggestionSource: listing.suggestionSource,
+          price: workingPrice !== undefined ? workingPrice.toFixed(2) : '',
+        };
+      });
+    if (!rows.length) {
+      setEbayError('Select at least one Draft or Pending eBay listing to price.');
+      return;
+    }
+    setPricingRows(rows);
+  }
+
+  function patchPricingRow(listingId: Id<'marketplaceListings'>, price: string) {
+    setPricingRows((current) => current?.map((row) => row.listingId === listingId ? { ...row, price } : row) ?? null);
+  }
+
+  async function saveQueuePricing() {
+    if (!pricingRows) return;
+    const validRows = pricingRows.filter((row) => Number.isFinite(Number(row.price)) && Number(row.price) > 0);
+    if (!validRows.length) {
+      setEbayError('Enter at least one approved price above zero.');
+      return;
+    }
+    setQueueBusy(true);
+    setEbayError('');
+    try {
+      const result = await applyQueuePricing({
+        updates: validRows.map((row) => ({
+          listingId: row.listingId,
+          price: Number(row.price),
+          source: row.suggestedPrice !== undefined && Number(row.price) === row.suggestedPrice
+            ? row.suggestionSource || 'Inventory suggestion'
+            : 'Manual comp review',
+        })),
+      });
+      setPricingRows(null);
+      setEbayNotice(`${result.updated} listing${result.updated === 1 ? '' : 's'} priced and ready for eBay.${validRows.length < pricingRows.length ? ' Unpriced rows remain in the pricing queue.' : ''}`);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not update queue pricing.');
+    } finally {
+      setQueueBusy(false);
+    }
+  }
+
+  async function sendSelectedToEbay() {
+    if (!adminKey) {
+      setEbayError('Enter the Seller Access Key before sending drafts to eBay.');
+      return;
+    }
+    if (!selectedReadyForEbay.length) {
+      setEbayError('Selected listings must have an approved price before they can be sent to eBay.');
+      return;
+    }
+    if (!confirm(`Create or refresh ${selectedReadyForEbay.length} unpublished eBay offer${selectedReadyForEbay.length === 1 ? '' : 's'}? Nothing will be published.`)) return;
+    setQueueBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    const succeeded: Id<'marketplaceListings'>[] = [];
+    const failures: string[] = [];
+    for (const listing of selectedReadyForEbay) {
+      try {
+        await createEbayOffer({ adminKey, listingId: listing._id });
+        succeeded.push(listing._id);
+      } catch (error) {
+        failures.push(`${listing.title}: ${error instanceof Error ? error.message : 'Upload failed'}`);
+      }
+    }
+    if (succeeded.length) {
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        for (const id of succeeded) next.delete(id);
+        return next;
+      });
+      setEbayNotice(`${succeeded.length} unpublished eBay offer${succeeded.length === 1 ? '' : 's'} created or refreshed.`);
+    }
+    if (failures.length) setEbayError(`${failures.length} item${failures.length === 1 ? '' : 's'} failed. ${failures.slice(0, 3).join(' ')}`);
+    setQueueBusy(false);
+  }
+
   async function save() {
     if (!editing?.title.trim()) return;
     const soldDate = editing.status === 'Sold' ? editing.soldDate || dateToday() : editing.soldDate;
@@ -372,6 +531,20 @@ export default function ListingsPanel() {
         <div className="metric"><span>Avg. Days To Sell</span><strong>{stats ? stats.averageDaysToSell.toFixed(1) : '-'}</strong></div>
       </section>
 
+      <section className="panel listingQueueBar">
+        <div className="queueSummary">
+          <div><p className="eyebrow">Listing queue</p><h2>Price, then send to eBay</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} selected and ready</p></div>
+          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Select</span><span>2. Update Pricing</span><span>3. Send to eBay Drafts</span></div>
+        </div>
+        <div className="actions queueActions">
+          <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear View' : 'Select Queue'}</button>
+          <button disabled={!selectedIds.size || queueBusy} onClick={openPricingReview}><DollarSign size={16}/> Update Pricing</button>
+          <button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Send to eBay Drafts${selectedReadyForEbay.length ? ` (${selectedReadyForEbay.length})` : ''}`}</button>
+        </div>
+        {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
+        {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
+      </section>
+
       <section className="panel ebaySetupPanel">
         <div className="panelHeader">
           <div><h2>eBay Seller Connection</h2><p>Authorize one seller account, choose its policies, then create unpublished offers from FlipTracker drafts.</p></div>
@@ -382,8 +555,6 @@ export default function ListingsPanel() {
           <button className="secondary" disabled={!adminKey || ebayBusy} onClick={unlockEbaySetup}><Settings size={16}/> {ebayBusy ? 'Loading...' : 'Load Setup'}</button>
           <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> {ebaySetup?.connected ? 'Reconnect eBay' : 'Connect eBay'}</button>
         </div>
-        {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
-        {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
         {ebaySetup?.connected ? (
           <div className="ebaySettingsGrid">
             <label>Inventory Location<select value={ebaySettings.merchantLocationKey} onChange={(event) => setEbaySettings((current) => ({ ...current, merchantLocationKey: event.target.value }))}><option value="">Choose location</option>{ebaySetup.locations.map((location) => <option key={location.key} value={location.key}>{location.name}</option>)}</select></label>
@@ -414,18 +585,18 @@ export default function ListingsPanel() {
         {listings === undefined ? <p className="panelMessage">Loading listings...</p> : filtered.length === 0 ? <div className="empty"><h2>No listings found</h2><p>Create a draft from an item in Inventory, then track it through sale.</p></div> : (
           <div className="tableWrap">
             <table>
-              <thead><tr><th>Platform</th><th>Title</th><th>Status</th><th>Price</th><th>Listed</th><th>Location</th><th>Net</th><th>Actions</th></tr></thead>
+              <thead><tr><th className="selectColumn"><input type="checkbox" aria-label="Select all queued listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/></th><th>Platform</th><th>Title</th><th>Queue</th><th>Status</th><th>Price</th><th>Location</th><th>Actions</th></tr></thead>
               <tbody>{filtered.map((listing) => (
                 <tr key={listing._id}>
+                  <td className="selectColumn">{listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <input type="checkbox" aria-label={`Select ${listing.title}`} checked={selectedIds.has(listing._id)} onChange={() => toggleSelected(listing._id)}/> : null}</td>
                   <td><span className="consoleTag">{listing.platform}</span></td>
                   <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small></td>
+                  <td><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
                   <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
-                  <td>{listing.listedDate || ''}<small>{daysListed(listing)}</small></td>
                   <td>{listing.storageLocation || ''}</td>
-                  <td className={listing.status === 'Sold' && netProfit(listing) >= 0 ? 'profitValue' : ''}>{listing.status === 'Sold' ? money(netProfit(listing)) : ''}</td>
                   <td className="rowActions">
-                    {listing.platform === 'eBay' && listing.status === 'Draft' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id} aria-label={`Send ${listing.title} to eBay`} title={listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
+                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy} aria-label={`Send ${listing.title} to eBay`} title={listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => setEditing(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
@@ -436,6 +607,26 @@ export default function ListingsPanel() {
           </div>
         )}
       </section>
+
+      {pricingRows ? (
+        <div className="modalBackdrop"><section className="modal wideModal pricingReviewModal">
+          <header className="modalHeader"><div><h2>Update Pricing</h2><span className="statusPill">{pricingRows.length} selected listing{pricingRows.length === 1 ? '' : 's'}</span></div><button className="iconButton secondary" aria-label="Close pricing review" onClick={() => setPricingRows(null)}><X size={18}/></button></header>
+          <p className="pricingIntro">Review the saved suggestion or research sold results, then enter the price you want on the eBay draft. Blank rows stay in Ready for Pricing.</p>
+          <div className="pricingReviewList">
+            {pricingRows.map((row) => {
+              const researchListing = { assetBarcode: row.barcode, title: row.title, mediaFormat: row.format };
+              const workingValue = Number(row.price) || row.suggestedPrice || row.currentPrice || 0;
+              return <article className="pricingReviewRow" key={row.listingId}>
+                <div className="pricingIdentity"><strong>{row.title}</strong><small>{[row.format, row.barcode].filter(Boolean).join(' · ')}</small>{row.suggestedPrice !== undefined ? <span>Suggested {money(row.suggestedPrice)} · {row.suggestionSource}</span> : <span className="needsPrice"><AlertTriangle size={13}/> No saved value; check comps</span>}</div>
+                <div className="pricingCompare"><span>Current<strong>{row.currentPrice !== undefined ? money(row.currentPrice) : 'Not priced'}</strong></span><span>Suggested<strong>{row.suggestedPrice !== undefined ? money(row.suggestedPrice) : 'Review'}</strong></span></div>
+                <label>Approved Price<input type="number" inputMode="decimal" min="0.01" step="0.01" value={row.price} onChange={(event) => patchPricingRow(row.listingId, event.target.value)} placeholder="0.00"/></label>
+                <div className="actions pricingResearch"><a className="button secondary" href={soldCompsUrl(researchListing)} target="_blank" rel="noreferrer"><Search size={15}/> Sold Comps</a>{workingValue >= 50 ? <a className="button secondary" href={terapeakUrl(researchListing)} target="_blank" rel="noreferrer"><ExternalLink size={15}/> Terapeak</a> : null}</div>
+              </article>;
+            })}
+          </div>
+          <div className="actions right"><button className="secondary" onClick={() => setPricingRows(null)}>Cancel</button><button disabled={queueBusy || !pricingRows.some((row) => Number(row.price) > 0)} onClick={saveQueuePricing}><DollarSign size={16}/> {queueBusy ? 'Updating...' : 'Apply Approved Prices'}</button></div>
+        </section></div>
+      ) : null}
 
       {editing ? (
         <div className="modalBackdrop"><section className="modal wideModal">

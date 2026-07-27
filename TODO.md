@@ -37,6 +37,9 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add eBay seller OAuth with replay-resistant callback state and server-only token storage
 - [x] Load eBay business policies and inventory locations into seller setup
 - [x] Create or refresh eBay Inventory API items and unpublished offers without publishing
+- [x] Add a selectable Draft/Pending queue with explicit Ready for Pricing and Ready for eBay states
+- [x] Add bulk pricing review with saved suggestions, sold-comps links, manual approval, and price history
+- [x] Add bounded batch creation of unpublished eBay offers with per-item failure handling
 
 ## Beta Launch Blockers - Engineering
 
@@ -78,7 +81,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Add individual `Refresh Price` and match-review UI
 - [ ] Add checkbox selection and bounded `Refresh Selected` workflow
 - [ ] Cache lookups and track stale/failed results
-- [ ] Preserve user overrides and require review before applying bulk changes
+- [x] Preserve user overrides and require review before applying bulk changes
 - [x] Keep a one-click eBay sold/completed search link for quick verification
 - [x] Show Terapeak Product Research only when the working item value is $50 or more
 - [ ] Make the Terapeak threshold configurable per user after authentication/settings exist
@@ -100,7 +103,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Configure Production credentials only after Sandbox succeeds
 - [ ] Move captured photos to Convex storage and upload them to eBay
 - [ ] Add offer validation and listing-fee preview
-- [ ] Add bounded bulk upload for selected drafts with retryable per-item failures
+- [x] Add bounded bulk upload for selected drafts with retryable per-item failures
 - [ ] Add a separately confirmed publish action after user auth, photo upload, and validation are complete
 
 ## Sourcing Decision Engine

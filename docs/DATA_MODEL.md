@@ -44,7 +44,7 @@ One marketplace listing attempt connected to an asset. It stores platform, lifec
 
 An asset may have multiple marketplace listing records over time or across platforms. Listing status is deliberately separate from the asset's physical inventory status.
 
-For eBay, `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve the unpublished-offer sync state without treating it as a live listing.
+For eBay, `pricingStatus`, `pricingSource`, and `pricingUpdatedAt` preserve the reviewed queue state. `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve the unpublished-offer sync state without treating it as a live listing.
 
 ## ebayConnections
 

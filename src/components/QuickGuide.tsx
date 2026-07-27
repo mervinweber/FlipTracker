@@ -59,9 +59,10 @@ export default function QuickGuide() {
         <section><div className="guideNumber">5</div><div><h3>Create the listing draft</h3><ol>
           <li>Find the item in Inventory and select <strong>Draft</strong>.</li>
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
-          <li>Open <strong>Listings</strong>, edit the draft, and verify every field before posting.</li>
+          <li>Open <strong>Listings</strong>, select the drafts you want to process, and choose <strong>Update Pricing</strong>.</li>
+          <li>Check sold comps, enter each approved price, and apply the updates. Blank rows stay in Ready for Pricing.</li>
           <li>In eBay Seller Connection, enter the private seller key, connect the seller account, and save its location, business policies, and media category defaults.</li>
-          <li>Select the cloud-upload button on the draft to create or refresh its unpublished eBay offer.</li>
+          <li>Choose <strong>Send to eBay Drafts</strong> to create or refresh unpublished offers for the selected Ready for eBay rows.</li>
           <li>Add an SKU when useful; the storage location remains visible for fulfillment.</li>
         </ol><p className="guideNote"><ShoppingBag size={15}/> The eBay offer is not live. Captured item photos are not uploaded yet, so add and review actual photos before publishing.</p></div></section>
 

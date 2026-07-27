@@ -55,12 +55,12 @@ Each scan creates one physical `assets` record. Duplicate UPCs are allowed and r
 ## eBay Seller Workflow
 
 ```text
-Internal eBay draft -> Seller-key gate -> eBay OAuth -> Inventory item -> Unpublished offer
+Internal eBay draft -> Ready for Pricing -> Pricing approval -> Ready for eBay -> Seller-key gate -> eBay OAuth -> Inventory item -> Unpublished offer
 ```
 
 OAuth authorization returns through `convex/http.ts`. Refresh and access tokens are stored only in `ebayConnections`; the browser receives connection status and policy names, never tokens. `ebaySettings` stores the selected marketplace, inventory location, payment/fulfillment/return policies, and per-format category defaults.
 
-Creating an eBay draft writes or refreshes the SKU-backed Inventory API item, then creates or updates an unpublished offer. The publish endpoint is intentionally absent. The listing stores the returned offer ID, sync status, timestamp, and last error. A temporary `FLIPTRACKER_ADMIN_KEY` gate protects seller actions until full application authentication and owner scoping replace it.
+Queue pricing is an explicit review action. It writes the approved current/listed price, records price history, and marks the internal draft Ready for eBay; blank rows remain Ready for Pricing. A bounded batch then writes or refreshes each SKU-backed Inventory API item and creates or updates its unpublished offer, continuing past individual failures. The publish endpoint is intentionally absent. The listing stores the returned offer ID, sync status, timestamp, and last error. A temporary `FLIPTRACKER_ADMIN_KEY` gate protects seller actions until full application authentication and owner scoping replace it.
 
 ## Security Boundary
 

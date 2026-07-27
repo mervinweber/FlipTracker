@@ -114,6 +114,9 @@ export default defineSchema({
     ebayDraftStatus: v.optional(v.string()),
     ebayDraftCreatedAt: v.optional(v.number()),
     ebayLastError: v.optional(v.string()),
+    pricingStatus: v.optional(v.string()),
+    pricingSource: v.optional(v.string()),
+    pricingUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

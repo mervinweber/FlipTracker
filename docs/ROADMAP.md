@@ -78,7 +78,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Suggest estimated low/high values with source and confidence
 - [ ] Cache lookup/value results in Convex to reduce repeat calls and API usage
 - [ ] Keep API keys, rate limits, and provider calls server-side in Convex actions
-- [ ] Add bounded bulk refresh with a review-before-apply queue
+- [x] Add bounded bulk pricing approval with a review-before-apply queue
 - [ ] Keep active asking prices separate from manual or future automated sold comps
 
 ## v0.6 AI Photo Recognition
@@ -162,7 +162,9 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Create or refresh SKU-backed eBay inventory items
 - [x] Create or refresh unpublished eBay offers without publishing
 - [x] Preserve eBay offer ID, sync status, timestamp, and errors on the listing
+- [x] Add selectable Ready for Pricing and Ready for eBay queue states
+- [x] Apply approved prices in bulk while preserving listing price history
 - [ ] Upload captured item photos to Convex storage and eBay Media/Picture Services
 - [ ] Add an eBay offer validation/fee preview screen
-- [ ] Add bounded bulk offer creation with per-item failure handling
+- [x] Add bounded bulk offer creation with per-item failure handling
 - [ ] Add a separately confirmed publish action only after auth and photo validation

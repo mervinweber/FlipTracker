@@ -106,7 +106,8 @@ For production, set the same variables on the production Convex deployment with 
 2. Enter the private Seller Access Key and select **Load Setup**.
 3. Select **Connect eBay**, sign in to the seller account, and approve access.
 4. Load setup again, select the inventory location and business policies, enter media category IDs, and save.
-5. Create an internal eBay draft from Inventory or Bulk Intake.
-6. In Listings, select the cloud-upload button on that draft.
+5. Create internal eBay drafts from Inventory or Bulk Intake.
+6. In Listings, select the queue and choose **Update Pricing**. Apply an approved price to each item you want to send.
+7. Choose **Send to eBay Drafts** to create or refresh the selected unpublished offers.
 
-FlipTracker creates or refreshes an eBay Inventory API item and an unpublished offer. It does not call eBay's publish endpoint. Captured data-URL photos are not uploaded to eBay yet; review and add actual item photos before a future publish step.
+FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. It does not call eBay's publish endpoint. Captured data-URL photos are not uploaded to eBay yet; review and add actual item photos before a future publish step.
