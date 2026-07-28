@@ -800,7 +800,7 @@ export default function App() {
         <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div></div>
         {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>No inventory yet</h2><p>Import your spreadsheet, add your first item, or scan media.</p></div> : (
           <div className="tableWrap">
-            <table>
+            <table className="inventoryTable">
               <thead><tr><th>Format</th><th>Title</th><th>Collection</th><th>Location</th><th>Value</th><th>Source</th><th>Plan</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {rows.slice().sort((a, b) => (a.console || a.mediaFormat || '').localeCompare(b.console || b.mediaFormat || '') || effectiveHigh(b) - effectiveHigh(a)).map((item) => (
@@ -813,7 +813,7 @@ export default function App() {
                     <td><span className={badgeClass(item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td><span className={badgeClass(String(item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="rowActions"><button onClick={() => setEditing(item)}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></td>
+                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => setEditing(item)}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
                   </tr>
                 ))}
               </tbody>

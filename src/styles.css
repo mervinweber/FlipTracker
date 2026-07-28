@@ -57,6 +57,16 @@ button.danger { background:var(--danger); }
 .inventoryPanel .panelHeader { padding:18px 18px 0; }
 .tableWrap { overflow:auto; }
 table { width:100%; border-collapse:collapse; font-size:14px; }
+.inventoryTable { min-width:1120px; table-layout:fixed; }
+.inventoryTable th:nth-child(1) { width:7%; }
+.inventoryTable th:nth-child(2) { width:14%; }
+.inventoryTable th:nth-child(3) { width:8%; }
+.inventoryTable th:nth-child(4) { width:8%; }
+.inventoryTable th:nth-child(5) { width:8%; }
+.inventoryTable th:nth-child(6) { width:10%; }
+.inventoryTable th:nth-child(7) { width:12%; }
+.inventoryTable th:nth-child(8) { width:8%; }
+.inventoryTable th:nth-child(9) { width:25%; }
 th, td { text-align:left; padding:11px 14px; border-bottom:1px solid #1f2937; vertical-align:middle; }
 th { color:#93c5fd; position:sticky; top:0; background:var(--surface); font-size:12px; text-transform:uppercase; letter-spacing:.06em; z-index:1; }
 td small { display:block; color:var(--muted); margin-top:3px; }
@@ -142,8 +152,10 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .photoReadiness small { margin-top:3px; color:var(--muted); line-height:1.35; }
 @media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards, .collectionGrid { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
 
-.rowActions { display:flex; gap:8px; }
+.rowActions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .rowActions button { padding:7px 9px; }
+.tableActionsCell { min-width:0; }
+.tableActionsCell .rowActions { gap:6px; }
 .needsCheck td { background: rgba(245, 158, 11, 0.08); }
 .modalBackdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; padding:20px; overflow:hidden; }
 .modal { position:relative; z-index:1001; width:min(760px, 95vw); max-height:min(90vh, 920px); overflow:auto; overscroll-behavior:contain; background:var(--surface); border:1px solid var(--border-strong); border-radius:18px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
