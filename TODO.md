@@ -44,6 +44,9 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Send package weight and dimensions to eBay for calculated or weight-aware shipping
 - [x] Restrict eBay catalog imagery to new/sealed items with a product identifier
 - [x] Require and upload an actual item photo to eBay Picture Services for used items
+- [x] Allow metadata stock covers for books while retaining actual-photo requirements for used discs and games
+- [x] Queue a reviewed single barcode scan directly as an internal eBay draft
+- [x] Add guided Sandbox inventory-location and business-policy provisioning
 
 ## Beta Launch Blockers - Engineering
 
@@ -71,19 +74,19 @@ These must be completed in code before the beta URL is shared with other users.
 
 - [x] Choose eBay active listings as the free-beta automated pricing source
 - [x] Document the provider and upgrade plan in `docs/EBAY_PRICING_PLAN.md`
-- [ ] Create an eBay Developers Program application
+- [x] Create an eBay Developers Program application
 - [ ] Create an eBay Partner Network account if required for Browse API production access
-- [ ] Build the Browse API search proof in eBay Sandbox
+- [x] Build the Browse API search proof in eBay Sandbox (Sandbox catalog coverage is sparse)
 - [ ] Submit the free application growth check / Buy API production-access request
 - [ ] Confirm production approval before depending on automated eBay pricing
-- [ ] Add server-side eBay client-credentials OAuth in a Convex action
-- [ ] Store eBay credentials only in Convex environment variables
-- [ ] Search the Browse API by UPC/GTIN, with title/edition fallback
+- [x] Add server-side eBay client-credentials OAuth in a Convex action
+- [x] Store eBay credentials only in Convex environment variables
+- [x] Search the Browse API by UPC/GTIN, with title/edition fallback
 - [ ] Normalize format, edition, condition, region, item price, and shipping
-- [ ] Label results as active asking prices, never sold comps
-- [ ] Calculate low, median, high, match count, and confidence
+- [x] Label results as active asking prices, never sold comps
+- [x] Calculate low, median, high, delivered median, match count, and confidence
 - [ ] Add individual `Refresh Price` and match-review UI
-- [ ] Add checkbox selection and bounded `Refresh Selected` workflow
+- [x] Add checkbox selection and bounded `Find Fair Value` workflow
 - [ ] Cache lookups and track stale/failed results
 - [x] Preserve user overrides and require review before applying bulk changes
 - [x] Keep a one-click eBay sold/completed search link for quick verification
@@ -102,7 +105,9 @@ These must be completed in code before the beta URL is shared with other users.
 - [x] Create or update the SKU-backed eBay inventory item
 - [x] Create or update an unpublished eBay offer and save its offer ID/status/error
 - [x] Keep eBay publishing absent so a scan cannot accidentally create a live listing
-- [ ] Configure eBay Sandbox credentials and complete owner consent
+- [x] Configure eBay Sandbox credentials and complete initial owner consent
+- [ ] Reconnect the Sandbox seller once to grant the new account-policy scope
+- [ ] Create the Sandbox inventory location and business policies from Seller Connection
 - [ ] Smoke test one DVD and one book against an eBay Sandbox seller
 - [ ] Configure Production credentials only after Sandbox succeeds
 - [x] Upload captured item photos directly to eBay Picture Services for unpublished offers

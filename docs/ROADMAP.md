@@ -71,10 +71,10 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 ## v0.5.1 Barcode Value Assist
 - [x] Choose eBay active listings as the initial free-beta pricing source
 - [x] Document the eBay pricing plan and paid-provider decision gate
-- [ ] Connect server-side eBay Browse API credentials
-- [ ] Build and demonstrate the search workflow in eBay Sandbox
+- [x] Connect server-side eBay Browse API credentials
+- [x] Build and demonstrate the search workflow in eBay Sandbox (real catalog coverage requires Production)
 - [ ] Apply for eBay Buy/Browse API production access and complete the application growth check
-- [ ] Use barcode lookup results to seed eBay active-listing research
+- [x] Use barcode lookup results to seed eBay active-listing research
 - [ ] Suggest estimated low/high values with source and confidence
 - [ ] Cache lookup/value results in Convex to reduce repeat calls and API usage
 - [ ] Keep API keys, rate limits, and provider calls server-side in Convex actions
@@ -169,6 +169,10 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Use eBay catalog matching only for eligible new/sealed media
 - [x] Upload actual used-item photos to eBay Picture Services
 - [x] Upload captured item photos to eBay Media/Picture Services
+- [x] Allow metadata stock covers for books while requiring actual photos for used discs and games
+- [x] Add guided Sandbox location and business-policy setup
+- [x] Queue a reviewed single barcode scan directly as an internal eBay draft
+- [x] Add bounded active-listing fair-value lookup with explicit approval
 - [ ] Move source photos to Convex storage instead of inline asset data
 - [ ] Add an eBay offer validation/fee preview screen
 - [x] Add bounded bulk offer creation with per-item failure handling

@@ -5,8 +5,11 @@ import { internal } from "./_generated/api";
 
 const EBAY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
+  "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/sell.account.readonly",
 ].join(" ");
+
+const EBAY_BROWSE_SCOPE = "https://api.ebay.com/oauth/api_scope";
 
 type EbayEnvironment = "sandbox" | "production";
 
@@ -20,6 +23,13 @@ type TokenResponse = {
 
 type Policy = { id: string; name: string };
 type Location = { key: string; name: string };
+type BrowseItem = {
+  title?: string;
+  itemWebUrl?: string;
+  condition?: string;
+  price?: { value?: string; currency?: string };
+  shippingOptions?: Array<{ shippingCost?: { value?: string; currency?: string } }>;
+};
 
 function environment(): EbayEnvironment {
   return process.env.EBAY_ENVIRONMENT?.toLowerCase() === "production" ? "production" : "sandbox";
@@ -51,6 +61,20 @@ function requireAdminKey(adminKey: string) {
 
 function basicAuthorization() {
   return `Basic ${btoa(`${requiredEnv("EBAY_CLIENT_ID")}:${requiredEnv("EBAY_CLIENT_SECRET")}`)}`;
+}
+
+async function applicationAccessToken() {
+  const body = new URLSearchParams({ grant_type: "client_credentials", scope: EBAY_BROWSE_SCOPE });
+  const response = await fetch(`${endpoints().api}/identity/v1/oauth2/token`, {
+    method: "POST",
+    headers: { Authorization: basicAuthorization(), "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const data = await responseBody(response);
+  if (!response.ok) throw new Error(ebayError(data, response.status));
+  const token = data as TokenResponse;
+  if (!token.access_token) throw new Error("eBay did not return an application access token.");
+  return token.access_token;
 }
 
 async function sha256(value: string) {
@@ -99,6 +123,97 @@ async function ebayFetch(accessToken: string, path: string, init: RequestInit = 
   const body = await responseBody(response);
   if (!response.ok) throw new Error(ebayError(body, response.status));
   return body;
+}
+
+async function browseFetch(accessToken: string, params: URLSearchParams) {
+  const response = await fetch(`${endpoints().api}/buy/browse/v1/item_summary/search?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    },
+  });
+  const body = await responseBody(response);
+  if (!response.ok) throw new Error(ebayError(body, response.status));
+  return (body as { itemSummaries?: BrowseItem[] } | undefined)?.itemSummaries ?? [];
+}
+
+function median(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function moneyRound(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function suggestedListingPrice(value: number) {
+  if (value <= 1) return moneyRound(value);
+  return moneyRound(Math.max(0.99, Math.floor(value) + 0.99));
+}
+
+function normalizedWords(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((word) => word.length > 2);
+}
+
+function credibleBrowseItems(items: BrowseItem[], title: string) {
+  const queryWords = new Set(normalizedWords(title));
+  const queryAllowsLot = /\b(lot|bundle|case only|disc only)\b/i.test(title);
+  return items.filter((item) => {
+    const price = Number(item.price?.value);
+    if (!Number.isFinite(price) || price <= 0 || !item.title) return false;
+    if (!queryAllowsLot && /\b(lot of|bundle|case only|disc only|replacement case)\b/i.test(item.title)) return false;
+    if (!queryWords.size) return true;
+    const itemWords = new Set(normalizedWords(item.title));
+    const overlap = [...queryWords].filter((word) => itemWords.has(word)).length;
+    return overlap >= Math.max(1, Math.ceil(queryWords.size * 0.45));
+  });
+}
+
+async function activePricingFor(accessToken: string, input: { title: string; barcode?: string; format?: string }) {
+  const barcode = input.barcode?.replace(/\D/g, "") ?? "";
+  const baseParams = { limit: "30", filter: "buyingOptions:{FIXED_PRICE}" };
+  let query = barcode || [input.title, input.format].filter(Boolean).join(" ");
+  let queryType = barcode ? "GTIN" : "Title";
+  let items: BrowseItem[] = [];
+  if ([8, 12, 13, 14].includes(barcode.length)) {
+    items = await browseFetch(accessToken, new URLSearchParams({ ...baseParams, gtin: barcode }));
+  }
+  if (!items.length) {
+    query = [input.title, input.format].filter(Boolean).join(" ");
+    queryType = "Title";
+    items = await browseFetch(accessToken, new URLSearchParams({ ...baseParams, q: query }));
+  }
+  const matches = credibleBrowseItems(items, input.title);
+  if (!matches.length) {
+    return { query, queryType, matchCount: 0, confidence: "Low", warning: "No credible active eBay matches were found." };
+  }
+  const itemPrices = matches.map((item) => Number(item.price?.value)).filter(Number.isFinite);
+  const deliveredPrices = matches.map((item) => {
+    const shipping = item.shippingOptions?.map((option) => Number(option.shippingCost?.value)).filter(Number.isFinite);
+    return Number(item.price?.value) + (shipping?.length ? Math.min(...shipping) : 0);
+  });
+  const activeMedian = moneyRound(median(itemPrices));
+  return {
+    query,
+    queryType,
+    matchCount: matches.length,
+    low: moneyRound(Math.min(...itemPrices)),
+    median: activeMedian,
+    high: moneyRound(Math.max(...itemPrices)),
+    deliveredMedian: moneyRound(median(deliveredPrices)),
+    suggestedPrice: suggestedListingPrice(activeMedian),
+    confidence: matches.length >= 8 ? "High" : matches.length >= 3 ? "Medium" : "Low",
+    source: `eBay Active Listings (${matches.length} matches)`,
+    warning: matches.length < 3 ? "Fewer than three credible matches; verify before publishing." : undefined,
+    samples: matches.slice(0, 3).map((item) => ({
+      title: item.title || "eBay listing",
+      price: moneyRound(Number(item.price?.value)),
+      url: item.itemWebUrl,
+    })),
+  };
 }
 
 function dataUrlFile(dataUrl: string) {
@@ -451,12 +566,17 @@ export const loadSetup = action({
     try {
       const accessToken = await refreshAccessToken(ctx);
       const marketplace = encodeURIComponent(settings?.marketplaceId ?? "EBAY_US");
-      const [fulfillmentBody, paymentBody, returnBody, locationBody] = await Promise.all([
+      const setupResults = await Promise.allSettled([
         ebayFetch(accessToken, `/sell/account/v1/fulfillment_policy?marketplace_id=${marketplace}`),
         ebayFetch(accessToken, `/sell/account/v1/payment_policy?marketplace_id=${marketplace}`),
         ebayFetch(accessToken, `/sell/account/v1/return_policy?marketplace_id=${marketplace}`),
         ebayFetch(accessToken, "/sell/inventory/v1/location?limit=100"),
       ]);
+      const failedSetupRequest = setupResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failedSetupRequest) throw failedSetupRequest.reason;
+      const [fulfillmentBody, paymentBody, returnBody, locationBody] = setupResults.map(
+        (result) => (result as PromiseFulfilledResult<unknown>).value,
+      );
       const fulfillment = (fulfillmentBody as { fulfillmentPolicies?: Array<{ fulfillmentPolicyId: string; name: string }> })?.fulfillmentPolicies ?? [];
       const payment = (paymentBody as { paymentPolicies?: Array<{ paymentPolicyId: string; name: string }> })?.paymentPolicies ?? [];
       const returns = (returnBody as { returnPolicies?: Array<{ returnPolicyId: string; name: string }> })?.returnPolicies ?? [];
@@ -504,6 +624,169 @@ export const saveSettings = action({
   },
 });
 
+export const lookupActivePricing = action({
+  args: { adminKey: v.string(), listingIds: v.array(v.id("marketplaceListings")) },
+  handler: async (ctx, args) => {
+    requireAdminKey(args.adminKey);
+    if (!args.listingIds.length) throw new Error("Select at least one listing to price.");
+    if (args.listingIds.length > 25) throw new Error("Price up to 25 listings at a time.");
+    const accessToken = await applicationAccessToken();
+    const results = [];
+    for (const listingId of args.listingIds) {
+      const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId });
+      if (!bundle) {
+        results.push({ listingId, matchCount: 0, confidence: "Low", warning: "Listing or inventory item was not found." });
+        continue;
+      }
+      try {
+        const summary = await activePricingFor(accessToken, {
+          title: bundle.listing.title || bundle.asset.title,
+          barcode: bundle.asset.upc || bundle.asset.barcode,
+          format: bundle.asset.mediaFormat || bundle.asset.type,
+        });
+        results.push({ listingId, ...summary });
+      } catch (error) {
+        results.push({
+          listingId,
+          matchCount: 0,
+          confidence: "Low",
+          warning: error instanceof Error ? error.message : "eBay active pricing lookup failed.",
+        });
+      }
+    }
+    return results;
+  },
+});
+
+export const provisionSandboxDefaults = action({
+  args: {
+    adminKey: v.string(),
+    postalCode: v.string(),
+    country: v.string(),
+    locationKey: v.string(),
+    locationName: v.string(),
+    mediaMailCost: v.number(),
+  },
+  handler: async (ctx, args) => {
+    requireAdminKey(args.adminKey);
+    if (environment() !== "sandbox") throw new Error("Automatic seller setup is limited to Sandbox.");
+    const postalCode = args.postalCode.trim();
+    const country = args.country.trim().toUpperCase();
+    const locationKey = args.locationKey.trim().replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 50);
+    const locationName = args.locationName.trim().slice(0, 64);
+    if (!postalCode) throw new Error("Enter the Sandbox seller postal code.");
+    if (!/^[A-Z]{2}$/.test(country)) throw new Error("Country must be a two-letter code such as US.");
+    if (!locationKey || !locationName) throw new Error("Enter an inventory location key and name.");
+    if (!Number.isFinite(args.mediaMailCost) || args.mediaMailCost < 0) throw new Error("Media Mail cost must be zero or higher.");
+
+    const accessToken = await refreshAccessToken(ctx);
+    const programsBody = await ebayFetch(accessToken, "/sell/account/v1/program/get_opted_in_programs") as { programs?: Array<{ programType?: string }> };
+    const optedIn = programsBody.programs?.some((program) => program.programType === "SELLING_POLICY_MANAGEMENT");
+    if (!optedIn) {
+      await ebayFetch(accessToken, "/sell/account/v1/program/opt_in", {
+        method: "POST",
+        body: JSON.stringify({ programType: "SELLING_POLICY_MANAGEMENT" }),
+      });
+    }
+
+    const locationsBody = await ebayFetch(accessToken, "/sell/inventory/v1/location?limit=100") as { locations?: Array<{ merchantLocationKey: string }> };
+    if (!locationsBody.locations?.some((location) => location.merchantLocationKey === locationKey)) {
+      await ebayFetch(accessToken, `/sell/inventory/v1/location/${encodeURIComponent(locationKey)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          location: { address: { postalCode, country } },
+          locationTypes: ["WAREHOUSE"],
+          name: locationName,
+          merchantLocationStatus: "ENABLED",
+        }),
+      });
+    }
+
+    const marketplace = "EBAY_US";
+    const fulfillmentBody = await ebayFetch(accessToken, `/sell/account/v1/fulfillment_policy?marketplace_id=${marketplace}`) as { fulfillmentPolicies?: Array<{ fulfillmentPolicyId: string; name: string }> };
+    const paymentBody = await ebayFetch(accessToken, `/sell/account/v1/payment_policy?marketplace_id=${marketplace}`) as { paymentPolicies?: Array<{ paymentPolicyId: string; name: string }> };
+    const returnBody = await ebayFetch(accessToken, `/sell/account/v1/return_policy?marketplace_id=${marketplace}`) as { returnPolicies?: Array<{ returnPolicyId: string; name: string }> };
+
+    let fulfillmentPolicyId = fulfillmentBody.fulfillmentPolicies?.[0]?.fulfillmentPolicyId;
+    if (!fulfillmentPolicyId) {
+      const created = await ebayFetch(accessToken, "/sell/account/v1/fulfillment_policy", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "FlipTracker Media Mail",
+          description: "FlipTracker Sandbox default for books, movies, music, and games.",
+          marketplaceId: marketplace,
+          categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES" }],
+          handlingTime: { value: 2, unit: "DAY" },
+          shippingOptions: [{
+            optionType: "DOMESTIC",
+            costType: "FLAT_RATE",
+            shippingServices: [{
+              sortOrder: 1,
+              shippingCarrierCode: "USPS",
+              shippingServiceCode: "USPSMedia",
+              shippingCost: { value: args.mediaMailCost.toFixed(2), currency: "USD" },
+              additionalShippingCost: { value: "1.00", currency: "USD" },
+              freeShipping: args.mediaMailCost === 0,
+            }],
+          }],
+        }),
+      }) as { fulfillmentPolicyId?: string };
+      fulfillmentPolicyId = created.fulfillmentPolicyId;
+    }
+
+    let paymentPolicyId = paymentBody.paymentPolicies?.[0]?.paymentPolicyId;
+    if (!paymentPolicyId) {
+      const created = await ebayFetch(accessToken, "/sell/account/v1/payment_policy", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "FlipTracker Immediate Payment",
+          marketplaceId: marketplace,
+          categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES" }],
+          immediatePay: true,
+        }),
+      }) as { paymentPolicyId?: string };
+      paymentPolicyId = created.paymentPolicyId;
+    }
+
+    let returnPolicyId = returnBody.returnPolicies?.[0]?.returnPolicyId;
+    if (!returnPolicyId) {
+      const created = await ebayFetch(accessToken, "/sell/account/v1/return_policy", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "FlipTracker 30 Day Returns",
+          marketplaceId: marketplace,
+          categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES" }],
+          returnsAccepted: true,
+          returnPeriod: { value: 30, unit: "DAY" },
+          refundMethod: "MONEY_BACK",
+          returnShippingCostPayer: "BUYER",
+        }),
+      }) as { returnPolicyId?: string };
+      returnPolicyId = created.returnPolicyId;
+    }
+
+    if (!fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) throw new Error("eBay did not return all three policy IDs.");
+    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+    await ctx.runMutation(internal.ebay.saveSettingsRecord, {
+      singletonKey: singletonKey(),
+      environment: environment(),
+      marketplaceId: settings?.marketplaceId ?? marketplace,
+      currency: settings?.currency ?? "USD",
+      merchantLocationKey: locationKey,
+      fulfillmentPolicyId,
+      paymentPolicyId,
+      returnPolicyId,
+      dvdCategoryId: settings?.dvdCategoryId,
+      blurayCategoryId: settings?.blurayCategoryId,
+      bookCategoryId: settings?.bookCategoryId,
+      cdCategoryId: settings?.cdCategoryId,
+      gameCategoryId: settings?.gameCategoryId,
+      otherCategoryId: settings?.otherCategoryId,
+    });
+    return { locationKey, fulfillmentPolicyId, paymentPolicyId, returnPolicyId };
+  },
+});
+
 export const createUnpublishedOffer = action({
   args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
   handler: async (ctx, args): Promise<{ offerId: string; sku: string; updated: boolean }> => {
@@ -538,21 +821,28 @@ export const createUnpublishedOffer = action({
         aspects,
       };
       const barcode = asset.upc || asset.barcode;
+      const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
       if (barcode) {
-        const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
         const digits = barcode.replace(/\D/g, "");
         if (isBook) product.isbn = [barcode.replace(/[^0-9X]/gi, "").toUpperCase()];
         else if (digits.length === 13) product.ean = [digits];
         else product.upc = [digits];
       }
       const ebayCondition = conditionForEbay(listing.condition || asset.condition);
-      const imageMode = listing.imageMode || (ebayCondition === "NEW" ? "eBay Catalog" : "Actual Item Photo");
+      const metadataCoverAllowed = isBook && Boolean(asset.coverImageUrl);
+      const imageMode = listing.imageMode || (ebayCondition === "NEW" || metadataCoverAllowed ? "eBay Catalog" : "Actual Item Photo");
       let imageUrl: string | undefined;
       let imageFingerprint: string | undefined;
       let imageSource = "eBay catalog match";
       if (imageMode === "eBay Catalog") {
-        if (ebayCondition !== "NEW") throw new Error("eBay does not allow stock or catalog photos for used items. Add an actual item photo.");
-        if (!barcode) throw new Error("A UPC, EAN, or ISBN is required for eBay catalog photo matching.");
+        if (metadataCoverAllowed) {
+          imageUrl = asset.coverImageUrl;
+          product.imageUrls = [imageUrl];
+          imageSource = "Metadata stock cover";
+        } else {
+          if (ebayCondition !== "NEW") throw new Error("Used discs require an actual item photo. Books with a metadata cover may use that stock image.");
+          if (!barcode) throw new Error("A UPC, EAN, or ISBN is required for eBay catalog photo matching.");
+        }
       } else {
         if (!asset.photoDataUrl) throw new Error("Used items require an actual item photo before they can be sent to eBay.");
         imageFingerprint = await sha256(asset.photoDataUrl);

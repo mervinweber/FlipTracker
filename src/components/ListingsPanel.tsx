@@ -69,7 +69,27 @@ type PricingRow = {
   currentPrice?: number;
   suggestedPrice?: number;
   suggestionSource?: string;
+  activeLow?: number;
+  activeMedian?: number;
+  activeHigh?: number;
+  deliveredMedian?: number;
+  matchCount?: number;
+  pricingConfidence?: string;
+  pricingWarning?: string;
   price: string;
+};
+
+type ActivePricingResult = {
+  listingId: Id<'marketplaceListings'>;
+  matchCount: number;
+  low?: number;
+  median?: number;
+  high?: number;
+  deliveredMedian?: number;
+  suggestedPrice?: number;
+  confidence: string;
+  source?: string;
+  warning?: string;
 };
 
 type EbaySetup = {
@@ -114,6 +134,14 @@ const EMPTY_EBAY_SETTINGS: EbaySettings = {
   cdCategoryId: '',
   gameCategoryId: '',
   otherCategoryId: '',
+};
+
+const EMPTY_SANDBOX_SETUP = {
+  postalCode: '',
+  country: 'US',
+  locationKey: 'fliptracker-home',
+  locationName: 'FlipTracker Inventory',
+  mediaMailCost: '4.99',
 };
 
 const PLATFORMS = ['eBay', 'Mercari', 'Facebook Marketplace', 'Vinted', 'OfferUp', 'Craigslist', 'Poshmark', 'Depop', 'Etsy', 'Amazon', 'Other'];
@@ -170,14 +198,24 @@ function queueStatus(listing: Listing) {
   if (!['Draft', 'Pending'].includes(listing.status)) return listing.status;
   if ((listing.currentPrice ?? listing.listedPrice ?? 0) <= 0) return 'Ready for Pricing';
   const imageMode = listing.imageMode || (isNewCondition(listing.condition) ? 'eBay Catalog' : 'Actual Item Photo');
+  const isBook = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book');
   const imageReady = imageMode === 'eBay Catalog'
-    ? isNewCondition(listing.condition) && listing.hasCatalogIdentifier
+    ? (isNewCondition(listing.condition) && listing.hasCatalogIdentifier) || (isBook && Boolean(listing.photoUrl))
     : listing.hasActualPhoto;
   return imageReady ? 'Ready for eBay' : 'Needs Photo';
 }
 
 function isNewCondition(condition?: string) {
   return ['new', 'brand new', 'sealed'].includes(condition?.trim().toLowerCase() || '');
+}
+
+function isBookListing(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
+  return `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book');
+}
+
+function canUseCatalogImage(listing: Pick<Listing, 'assetType' | 'mediaFormat' | 'photoUrl' | 'condition' | 'hasCatalogIdentifier'>) {
+  return (isNewCondition(listing.condition) && Boolean(listing.hasCatalogIdentifier))
+    || (isBookListing(listing) && Boolean(listing.photoUrl));
 }
 
 function ebayResearchQuery(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
@@ -214,6 +252,8 @@ export default function ListingsPanel() {
   const beginEbayOauth = useAction(api.ebay.beginOauth);
   const loadEbaySetup = useAction(api.ebay.loadSetup);
   const saveEbaySettings = useAction(api.ebay.saveSettings);
+  const provisionSandboxDefaults = useAction(api.ebay.provisionSandboxDefaults);
+  const lookupActivePricing = useAction(api.ebay.lookupActivePricing);
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [query, setQuery] = useState('');
@@ -230,6 +270,7 @@ export default function ListingsPanel() {
   const [selectedIds, setSelectedIds] = useState<Set<Id<'marketplaceListings'>>>(new Set());
   const [pricingRows, setPricingRows] = useState<PricingRow[] | null>(null);
   const [queueBusy, setQueueBusy] = useState(false);
+  const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
     if (!editing && !pricingRows) return;
@@ -260,6 +301,12 @@ export default function ListingsPanel() {
   const queueListings = useMemo(() => filtered.filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status)), [filtered]);
   const selectedListings = useMemo(() => (listings || []).filter((listing) => selectedIds.has(listing._id)), [listings, selectedIds]);
   const selectedReadyForEbay = useMemo(() => selectedListings.filter((listing) => queueStatus(listing) === 'Ready for eBay'), [selectedListings]);
+  const sellerDefaultsReady = Boolean(
+    ebaySettings.merchantLocationKey
+    && ebaySettings.fulfillmentPolicyId
+    && ebaySettings.paymentPolicyId
+    && ebaySettings.returnPolicyId,
+  );
 
   function patchEditing(patch: Partial<Listing>) {
     setEditing((current) => current ? { ...current, ...patch } : current);
@@ -267,7 +314,8 @@ export default function ListingsPanel() {
 
   function openListingEditor(listing: Listing) {
     const condition = listing.condition?.trim().toLowerCase() || '';
-    const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) ? 'eBay Catalog' : 'Actual Item Photo');
+    const isBookWithCover = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book') && Boolean(listing.photoUrl);
+    const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
     setEditing({ ...listing, imageMode });
   }
 
@@ -373,6 +421,31 @@ export default function ListingsPanel() {
     }
   }
 
+  async function createSandboxSetup() {
+    if (!adminKey) return;
+    setEbayBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      await provisionSandboxDefaults({
+        adminKey,
+        postalCode: sandboxSetup.postalCode,
+        country: sandboxSetup.country,
+        locationKey: sandboxSetup.locationKey,
+        locationName: sandboxSetup.locationName,
+        mediaMailCost: Number(sandboxSetup.mediaMailCost),
+      });
+      const setup = await loadEbaySetup({ adminKey }) as EbaySetup;
+      applyEbaySetup(setup);
+      setEbayNotice('Sandbox inventory location and default selling policies are ready.');
+      if (setup.warning) setEbayError(setup.warning);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not create Sandbox seller defaults.');
+    } finally {
+      setEbayBusy(false);
+    }
+  }
+
   async function sendToEbay(listing: Listing) {
     if (!adminKey) {
       setEbayError('Unlock eBay seller tools first.');
@@ -413,8 +486,8 @@ export default function ListingsPanel() {
     });
   }
 
-  function openPricingReview() {
-    const rows = selectedListings
+  async function openPricingReview() {
+    const baseRows = selectedListings
       .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) !== 'eBay Draft Created')
       .map((listing) => {
         const workingPrice = listing.currentPrice ?? listing.listedPrice ?? listing.suggestedPrice;
@@ -429,11 +502,46 @@ export default function ListingsPanel() {
           price: workingPrice !== undefined ? workingPrice.toFixed(2) : '',
         };
       });
-    if (!rows.length) {
+    if (!baseRows.length) {
       setEbayError('Select at least one Draft or Pending eBay listing to price.');
       return;
     }
-    setPricingRows(rows);
+    if (!adminKey) {
+      setPricingRows(baseRows);
+      setEbayError('Enter the Seller Access Key to retrieve live eBay asking prices. Saved estimates are shown instead.');
+      return;
+    }
+    setQueueBusy(true);
+    setEbayError('');
+    try {
+      const liveResults = await lookupActivePricing({
+        adminKey,
+        listingIds: baseRows.map((row) => row.listingId),
+      }) as ActivePricingResult[];
+      const byListing = new Map(liveResults.map((result) => [result.listingId, result]));
+      setPricingRows(baseRows.map((row) => {
+        const live = byListing.get(row.listingId);
+        const approvedPrice = row.currentPrice ?? live?.suggestedPrice ?? row.suggestedPrice;
+        return {
+          ...row,
+          suggestedPrice: live?.suggestedPrice ?? row.suggestedPrice,
+          suggestionSource: live?.source ?? row.suggestionSource,
+          activeLow: live?.low,
+          activeMedian: live?.median,
+          activeHigh: live?.high,
+          deliveredMedian: live?.deliveredMedian,
+          matchCount: live?.matchCount,
+          pricingConfidence: live?.confidence,
+          pricingWarning: live?.warning,
+          price: approvedPrice !== undefined ? approvedPrice.toFixed(2) : '',
+        };
+      }));
+    } catch (error) {
+      setPricingRows(baseRows);
+      setEbayError(error instanceof Error ? error.message : 'Could not retrieve active eBay pricing. Saved estimates are shown instead.');
+    } finally {
+      setQueueBusy(false);
+    }
   }
 
   function patchPricingRow(listingId: Id<'marketplaceListings'>, price: string) {
@@ -591,13 +699,13 @@ export default function ListingsPanel() {
 
       <section className="panel listingQueueBar">
         <div className="queueSummary">
-          <div><p className="eyebrow">Listing queue</p><h2>Price, then send to eBay</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} selected and ready</p></div>
-          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Select</span><span>2. Update Pricing</span><span>3. Send to eBay Drafts</span></div>
+          <div><p className="eyebrow">Listing queue</p><h2>Select, price, then create eBay drafts</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} selected and ready</p></div>
+          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Select</span><span>2. Find Fair Value</span><span>3. Create eBay Drafts</span></div>
         </div>
         <div className="actions queueActions">
           <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear View' : 'Select Queue'}</button>
-          <button disabled={!selectedIds.size || queueBusy} onClick={openPricingReview}><DollarSign size={16}/> Update Pricing</button>
-          <button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Send to eBay Drafts${selectedReadyForEbay.length ? ` (${selectedReadyForEbay.length})` : ''}`}</button>
+          <button disabled={!selectedIds.size || queueBusy} onClick={openPricingReview}><DollarSign size={16}/> {queueBusy ? 'Checking eBay...' : 'Find Fair Value'}</button>
+          <button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Create eBay Drafts${selectedReadyForEbay.length ? ` (${selectedReadyForEbay.length})` : ''}`}</button>
         </div>
         {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
@@ -628,6 +736,20 @@ export default function ListingsPanel() {
             <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button></div>
           </div>
         ) : null}
+        {ebaySetup?.connected && ebaySetup.environment === 'sandbox' && !sellerDefaultsReady ? (
+          <div className="sandboxSetupPanel">
+            <div><h3>Prepare Sandbox Seller</h3><p>Create the warehouse location and basic Media Mail, payment, and return policies needed by eBay drafts.</p></div>
+            <div className="sandboxSetupGrid">
+              <label>Seller Postal Code<input value={sandboxSetup.postalCode} onChange={(event) => setSandboxSetup((current) => ({ ...current, postalCode: event.target.value }))} placeholder="29401"/></label>
+              <label>Country<input maxLength={2} value={sandboxSetup.country} onChange={(event) => setSandboxSetup((current) => ({ ...current, country: event.target.value.toUpperCase() }))}/></label>
+              <label>Location Key<input value={sandboxSetup.locationKey} onChange={(event) => setSandboxSetup((current) => ({ ...current, locationKey: event.target.value }))}/></label>
+              <label>Location Name<input value={sandboxSetup.locationName} onChange={(event) => setSandboxSetup((current) => ({ ...current, locationName: event.target.value }))}/></label>
+              <label>Buyer Media Mail Charge<input type="number" min="0" step="0.01" value={sandboxSetup.mediaMailCost} onChange={(event) => setSandboxSetup((current) => ({ ...current, mediaMailCost: event.target.value }))}/></label>
+              <button disabled={ebayBusy || !sandboxSetup.postalCode.trim()} onClick={createSandboxSetup}><Package size={16}/> {ebayBusy ? 'Preparing...' : 'Create Sandbox Defaults'}</button>
+            </div>
+            <p className="ebaySafetyNote">Reconnect eBay once after this update so the account connection includes policy-management permission.</p>
+          </div>
+        ) : null}
         <p className="ebaySafetyNote">FlipTracker creates an unpublished eBay offer only. Review photos, category, specifics, shipping, and price in eBay before publishing.</p>
       </section>
 
@@ -653,12 +775,12 @@ export default function ListingsPanel() {
                   <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
-                  <td className="rowActions">
+                  <td className="tableActionsCell"><div className="rowActions">
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy} aria-label={`Send ${listing.title} to eBay`} title={listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
-                  </td>
+                  </div></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -669,14 +791,14 @@ export default function ListingsPanel() {
       {pricingRows ? (
         <div className="modalBackdrop"><section className="modal wideModal pricingReviewModal">
           <header className="modalHeader"><div><h2>Update Pricing</h2><span className="statusPill">{pricingRows.length} selected listing{pricingRows.length === 1 ? '' : 's'}</span></div><button className="iconButton secondary" aria-label="Close pricing review" onClick={() => setPricingRows(null)}><X size={18}/></button></header>
-          <p className="pricingIntro">Review the saved suggestion or research sold results, then enter the price you want on the eBay draft. Blank rows stay in Ready for Pricing.</p>
+          <p className="pricingIntro">FlipTracker uses the median of credible active eBay listings as an asking-price recommendation. These are active listings, not verified sold prices.</p>
           <div className="pricingReviewList">
             {pricingRows.map((row) => {
               const researchListing = { assetBarcode: row.barcode, title: row.title, mediaFormat: row.format };
               const workingValue = Number(row.price) || row.suggestedPrice || row.currentPrice || 0;
               return <article className="pricingReviewRow" key={row.listingId}>
-                <div className="pricingIdentity"><strong>{row.title}</strong><small>{[row.format, row.barcode].filter(Boolean).join(' · ')}</small>{row.suggestedPrice !== undefined ? <span>Suggested {money(row.suggestedPrice)} · {row.suggestionSource}</span> : <span className="needsPrice"><AlertTriangle size={13}/> No saved value; check comps</span>}</div>
-                <div className="pricingCompare"><span>Current<strong>{row.currentPrice !== undefined ? money(row.currentPrice) : 'Not priced'}</strong></span><span>Suggested<strong>{row.suggestedPrice !== undefined ? money(row.suggestedPrice) : 'Review'}</strong></span></div>
+                <div className="pricingIdentity"><strong>{row.title}</strong><small>{[row.format, row.barcode].filter(Boolean).join(' · ')}</small>{row.suggestedPrice !== undefined ? <span>Suggested {money(row.suggestedPrice)} · {row.suggestionSource}</span> : <span className="needsPrice"><AlertTriangle size={13}/> No reliable active match; check comps</span>}{row.pricingWarning ? <small className="warningText">{row.pricingWarning}</small> : null}</div>
+                <div className="pricingCompare"><span>Active Range<strong>{row.activeLow !== undefined ? `${money(row.activeLow)}–${money(row.activeHigh)}` : 'Not available'}</strong></span><span>Median Delivered<strong>{row.deliveredMedian !== undefined ? money(row.deliveredMedian) : 'Review'}</strong></span><span>Confidence<strong>{row.pricingConfidence || 'Saved value'}</strong></span><span>Matches<strong>{row.matchCount ?? '—'}</strong></span></div>
                 <label>Approved Price<input type="number" inputMode="decimal" min="0.01" step="0.01" value={row.price} onChange={(event) => patchPricingRow(row.listingId, event.target.value)} placeholder="0.00"/></label>
                 <div className="actions pricingResearch"><a className="button secondary" href={soldCompsUrl(researchListing)} target="_blank" rel="noreferrer"><Search size={15}/> Sold Comps</a>{workingValue >= 50 ? <a className="button secondary" href={terapeakUrl(researchListing)} target="_blank" rel="noreferrer"><ExternalLink size={15}/> Terapeak</a> : null}</div>
               </article>;
@@ -698,7 +820,7 @@ export default function ListingsPanel() {
             <label className="span2">Listing URL<input type="url" value={editing.listingUrl || ''} onChange={(event) => patchEditing({ listingUrl: event.target.value })}/></label>
             <label>Category<input value={editing.category || ''} onChange={(event) => patchEditing({ category: event.target.value })}/></label>
             <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={(event) => patchEditing({ ebayCategoryId: event.target.value })}/></label>
-            <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) ? editing.imageMode : 'Actual Item Photo' })}/></label>
+            <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
             <div className="formSection span2 ebayDeliverySection"><h3><Package size={17}/> Shipping & Photos</h3><div className="sectionGrid">
               <label>eBay Shipping Policy<select value={editing.fulfillmentPolicyId || ''} onChange={(event) => patchEditing({ fulfillmentPolicyId: event.target.value || undefined })}>
                 <option value="">Use seller default</option>
@@ -711,8 +833,8 @@ export default function ListingsPanel() {
               <label>Length (in)<input type="number" min="0.1" step="0.1" value={editing.packageLengthIn ?? ''} onChange={(event) => patchEditing({ packageLengthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
               <label>Width (in)<input type="number" min="0.1" step="0.1" value={editing.packageWidthIn ?? ''} onChange={(event) => patchEditing({ packageWidthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
               <label>Height (in)<input type="number" min="0.1" step="0.1" value={editing.packageHeightIn ?? ''} onChange={(event) => patchEditing({ packageHeightIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
-              <label>eBay Image Source<select value={editing.imageMode || 'Actual Item Photo'} onChange={(event) => patchEditing({ imageMode: event.target.value })}><option>Actual Item Photo</option><option disabled={!isNewCondition(editing.condition)}>eBay Catalog</option></select><small>{isNewCondition(editing.condition) ? 'Catalog matching uses the UPC/EAN/ISBN. Actual photos are also allowed.' : 'Used items require an actual photo; stock images are not allowed by eBay.'}</small></label>
-              <div className={`photoReadiness ${editing.imageMode === 'eBay Catalog' ? editing.hasCatalogIdentifier ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}`}><Camera size={18}/><div><strong>{editing.imageMode === 'eBay Catalog' ? editing.hasCatalogIdentifier ? 'Catalog identifier ready' : 'Barcode required' : editing.hasActualPhoto ? 'Actual photo ready' : 'Actual photo required'}</strong><small>{editing.ebayImageSource ? `Last eBay image: ${editing.ebayImageSource}` : 'Photo selection comes from the linked inventory item.'}</small></div></div>
+              <label>eBay Image Source<select value={editing.imageMode || 'Actual Item Photo'} onChange={(event) => patchEditing({ imageMode: event.target.value })}><option>Actual Item Photo</option><option disabled={!canUseCatalogImage(editing)}>eBay Catalog</option></select><small>{isBookListing(editing) && editing.photoUrl ? 'The metadata cover can be used as the stock image for this book.' : isNewCondition(editing.condition) ? 'Catalog matching uses the UPC/EAN/ISBN.' : 'Used discs remain flagged for an actual photo.'}</small></label>
+              <div className={`photoReadiness ${editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}`}><Camera size={18}/><div><strong>{editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? isBookListing(editing) ? 'Stock book cover ready' : 'Catalog identifier ready' : 'Catalog image unavailable' : editing.hasActualPhoto ? 'Actual photo ready' : 'Actual photo required'}</strong><small>{editing.ebayImageSource ? `Last eBay image: ${editing.ebayImageSource}` : 'Photo selection comes from the linked inventory item.'}</small></div></div>
             </div></div>
             <div className="formSection span2"><h3>Pricing & Dates</h3><div className="sectionGrid">
               <label>Original Price<input type="number" step="0.01" value={editing.listedPrice ?? ''} onChange={(event) => patchEditing({ listedPrice: optionalNumber(event.target.value) })}/></label>

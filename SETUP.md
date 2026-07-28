@@ -103,9 +103,10 @@ For production, set the same variables on the production Convex deployment with 
 
 ### 3. Prepare the eBay seller account
 
-1. Create payment, shipping/fulfillment, and return business policies in eBay.
-2. Make sure the seller has an enabled inventory location.
-3. Note the numeric eBay category IDs used for DVDs, Blu-rays, books, CDs, games, and other media. Category IDs can change, so FlipTracker stores these as seller settings instead of hard-coding them.
+1. Connect or reconnect the Sandbox seller after deploying this version. The consent must include inventory and account-policy access.
+2. In **Listings > Seller Connection**, use **Create Sandbox Defaults** to create an enabled inventory location plus payment, Media Mail fulfillment, and 30-day return policies. Enter the Sandbox seller's postal code first.
+3. If eBay reports that the Sandbox seller is not eligible for Business Policies, enable Business Policies for that test seller in eBay Sandbox and retry. Production seller policies should be reviewed and created in the seller account rather than generated automatically.
+4. Note the numeric eBay category IDs used for DVDs, Blu-rays, books, CDs, games, and other media. Category IDs can change, so FlipTracker stores these as seller settings instead of hard-coding them.
 
 ### 4. Connect and create a draft
 
@@ -113,10 +114,10 @@ For production, set the same variables on the production Convex deployment with 
 2. Enter the private Seller Access Key and select **Load Setup**.
 3. Select **Connect eBay**, sign in to the seller account, and approve access.
 4. Load setup again, select the inventory location and business policies, enter media category IDs, and save.
-5. Create internal eBay drafts from Inventory or Bulk Intake.
+5. Scan a single item and leave **Add to eBay draft queue** selected, or use Bulk Intake to create internal eBay drafts for a stack.
 6. In Listings, edit each draft that needs a different shipping policy or package preset. The fulfillment policy controls the buyer's shipping service and charge; package measurements support calculated or weight-aware shipping.
-7. For new/sealed media, choose **eBay Catalog** and confirm the UPC/EAN/ISBN. For used media, capture or upload an actual item photo on the linked inventory record.
-8. Select the queue and choose **Update Pricing**. Apply an approved price to each item you want to send.
-9. Choose **Send to eBay Drafts** to create or refresh the selected unpublished offers.
+7. For new/sealed media, choose **eBay Catalog** and confirm the UPC/EAN/ISBN. Books with a metadata cover can use that stock cover during the beta. Used DVDs, Blu-rays, CDs, and games still require an actual item photo before eBay draft creation.
+8. Select queue rows and choose **Find Fair Value**. FlipTracker retrieves active eBay asking prices, shows the range, median, shipping-aware median, match count, and confidence, then waits for approval. These are not sold comps.
+9. Apply the approved prices and choose **Create eBay Drafts** to create or refresh the selected unpublished offers.
 
-FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. Actual used-item photos are uploaded to eBay Picture Services when the draft is sent. Catalog imagery is requested only for new/sealed items. FlipTracker does not call eBay's publish endpoint, so review every offer before publishing in Seller Hub.
+FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. Actual used-item photos are uploaded to eBay Picture Services when the draft is sent. Metadata stock covers are currently permitted for books; other used media requires an actual photo. FlipTracker does not call eBay's publish endpoint, so review every offer before publishing in Seller Hub.

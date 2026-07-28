@@ -216,9 +216,10 @@ function listingSpecifics(item: Partial<Asset>) {
 function listingDeliveryDefaults(item: Partial<Asset>) {
   const format = `${item.mediaFormat || ''} ${item.type || ''}`.toLowerCase();
   const isSingleMediaCase = format.includes('dvd') || format.includes('blu') || format.includes('cd');
+  const isBookWithCover = format.includes('book') && Boolean(item.coverImageUrl);
   const isNew = ['new', 'brand new', 'sealed'].includes(item.condition?.trim().toLowerCase() || '') || item.completeness?.trim().toLowerCase() === 'sealed';
   return {
-    imageMode: isNew ? 'eBay Catalog' : 'Actual Item Photo',
+    imageMode: isNew || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo',
     shippingPreset: isSingleMediaCase ? 'Single Media Mailer' : undefined,
     packageType: isSingleMediaCase ? 'PACKAGE_THICK_ENVELOPE' : undefined,
     packageWeightOz: isSingleMediaCase ? 8 : undefined,
@@ -369,6 +370,7 @@ export default function App() {
   const [scanError, setScanError] = useState('');
   const [scannerAttempt, setScannerAttempt] = useState(0);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [createDraftAfterSave, setCreateDraftAfterSave] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControls = useRef<IScannerControls | null>(null);
 
@@ -524,6 +526,7 @@ export default function App() {
       scannerControls.current?.stop();
       setScannerOpen(false);
       setManualBarcode('');
+      setCreateDraftAfterSave(true);
       setEditing(draft);
     } catch (error) {
       setScanError(error instanceof Error ? error.message : 'Lookup failed. Enter details manually.');
@@ -589,8 +592,12 @@ export default function App() {
     if ('_id' in editing && editing._id) {
       await updateAsset({ id: editing._id as Id<'assets'>, ...patch });
     } else {
-      await createAsset(patch);
+      const assetId = await createAsset(patch);
+      if (createDraftAfterSave) {
+        await createListingDraft({ ...prepared, ...patch, _id: assetId } as Asset);
+      }
     }
+    setCreateDraftAfterSave(false);
     setEditing(null);
   }
 
@@ -746,9 +753,9 @@ export default function App() {
           </div>
         </div>
         <div className="actions">
-          <button onClick={() => setScannerOpen(true)}><Barcode size={16}/> Scan Media</button>
+          <button onClick={() => { setCreateDraftAfterSave(false); setScannerOpen(true); }}><Barcode size={16}/> Scan Media</button>
           <button onClick={() => changeView('Bulk')}><Keyboard size={16}/> Scan Stack</button>
-          <button onClick={() => setEditing(blankAsset())}><Plus size={16}/> Add Item</button>
+          <button onClick={() => { setCreateDraftAfterSave(false); setEditing(blankAsset()); }}><Plus size={16}/> Add Item</button>
           <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Collection</button>
           <label className="button"><Upload size={16}/> Import Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => onImport(e.target.files?.[0])}/></label>
           <button onClick={() => exportInventory(rows.map((item) => toInventoryForExport(item, collectionName(item.collectionId))))}><Download size={16}/> Export Excel</button>
@@ -813,7 +820,7 @@ export default function App() {
                     <td><span className={badgeClass(item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td><span className={badgeClass(String(item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => setEditing(item)}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
+                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -834,7 +841,7 @@ export default function App() {
               <div className="scannerPanel">
                 <label>Manual Barcode<input inputMode="numeric" value={manualBarcode} onChange={e => setManualBarcode(e.target.value)} placeholder="Scan or type UPC/EAN/ISBN"/></label>
                 {scanError ? <p className="warningText">{scanError}</p> : <p>Aim at the full barcode and hold steady. You can also enter the code manually.</p>}
-                <div className="actions right">{scanError ? <button className="secondary" onClick={() => setScannerAttempt((attempt) => attempt + 1)}><Camera size={16}/> Retry Camera</button> : null}<button className="secondary" onClick={() => setEditing(blankAsset())}>Manual Add</button><button onClick={() => lookupBarcode()} disabled={isLookingUp}><Search size={16}/>{isLookingUp ? 'Looking Up...' : 'Lookup'}</button></div>
+                <div className="actions right">{scanError ? <button className="secondary" onClick={() => setScannerAttempt((attempt) => attempt + 1)}><Camera size={16}/> Retry Camera</button> : null}<button className="secondary" onClick={() => { const barcode = manualBarcode.trim(); scannerControls.current?.stop(); setScannerOpen(false); setCreateDraftAfterSave(true); setEditing({ ...blankAsset(), barcode: barcode || undefined, upc: barcode || undefined }); }}>Manual Add</button><button onClick={() => lookupBarcode()} disabled={isLookingUp}><Search size={16}/>{isLookingUp ? 'Looking Up...' : 'Lookup'}</button></div>
               </div>
             </div>
           </section>
@@ -894,13 +901,13 @@ export default function App() {
                   <label>Shipping<input value={editing.ebayShipping || ''} onChange={e => updateEditing({ ebayShipping:e.target.value }, false)}/></label>
                   <label className="span2">Item Specifics<textarea value={editing.ebayItemSpecifics || ''} onChange={e => updateEditing({ ebayItemSpecifics:e.target.value }, false)}/></label>
                   <label className="span2">Description<textarea value={editing.ebayDescription || ''} onChange={e => updateEditing({ ebayDescription:e.target.value }, false)}/></label>
-                </div></div>
+                </div>{!('_id' in editing) ? <label className="checkRow reviewToggle"><input type="checkbox" checked={createDraftAfterSave} onChange={e => setCreateDraftAfterSave(e.target.checked)}/><span><strong>Add to eBay draft queue</strong><small>Generate the listing now, then find fair value and select it from Listings.</small></span></label> : null}</div>
 
                 <div className="formSection span2"><h3>Sale</h3><div className="sectionGrid"><label>Purchase Price<input type="number" value={editing.purchasePrice || ''} onChange={e => updateEditing({ purchasePrice:toNumber(e.target.value) }, false)}/></label><label>Sold Price<input type="number" value={editing.soldPrice || ''} onChange={e => updateEditing({ soldPrice:toNumber(e.target.value) }, false)}/></label></div></div>
                 <label className="span2">Notes<textarea value={editing.notes || ''} onChange={e => updateEditing({ notes:e.target.value })}/></label>
               </div>
             </div>
-            <div className="actions right"><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button onClick={saveAsset}><Save size={16}/> Save to Inventory</button></div>
+            <div className="actions right"><button className="secondary" onClick={() => { setCreateDraftAfterSave(false); setEditing(null); }}>Cancel</button><button onClick={saveAsset}><Save size={16}/> {createDraftAfterSave && !('_id' in editing) ? 'Save & Queue' : 'Save to Inventory'}</button></div>
           </section>
         </div>
       ) : null}

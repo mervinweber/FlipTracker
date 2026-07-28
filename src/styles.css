@@ -143,6 +143,12 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .pricingCompare strong { display:block; margin-top:3px; color:var(--text); font-size:14px; text-transform:none; }
 .pricingResearch { justify-content:flex-start; flex-wrap:nowrap; }
 .pricingResearch .button { padding:9px 10px; white-space:nowrap; }
+.sandboxSetupPanel { display:grid; gap:12px; margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+.sandboxSetupPanel h3, .sandboxSetupPanel p { margin:0; }
+.sandboxSetupPanel h3 { font-size:16px; }
+.sandboxSetupPanel p { color:var(--muted); font-size:13px; line-height:1.45; }
+.sandboxSetupGrid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)) auto; gap:12px; align-items:end; }
+.sandboxSetupGrid button { min-height:40px; white-space:nowrap; }
 .ebayDeliverySection h3 { display:flex; align-items:center; gap:7px; }
 .ebayDeliverySection label small { display:block; margin-top:5px; }
 .photoReadiness { min-height:74px; display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); }
@@ -150,7 +156,9 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .photoReadiness.missing { border-color:rgba(245,158,11,.6); color:#fde68a; }
 .photoReadiness strong, .photoReadiness small { display:block; }
 .photoReadiness small { margin-top:3px; color:var(--muted); line-height:1.35; }
+@media (max-width:1050px) { .sandboxSetupGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards, .collectionGrid { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
+@media (max-width:700px) { .sandboxSetupGrid { grid-template-columns:1fr; } }
 
 .rowActions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .rowActions button { padding:7px 9px; }

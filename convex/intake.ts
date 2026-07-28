@@ -98,7 +98,11 @@ export const createScannedItem = mutation({
       category: args.ebayCategory,
       condition: args.ebayCondition,
       itemSpecifics: args.ebayItemSpecifics,
-      imageMode: args.condition.trim().toLowerCase() === "new" || args.completeness.trim().toLowerCase() === "sealed" ? "eBay Catalog" : "Actual Item Photo",
+      imageMode: args.condition.trim().toLowerCase() === "new"
+        || args.completeness.trim().toLowerCase() === "sealed"
+        || (mediaFormat.includes("book") && Boolean(args.coverImageUrl))
+        ? "eBay Catalog"
+        : "Actual Item Photo",
       shippingPreset: isSingleMediaCase ? "Single Media Mailer" : undefined,
       packageType: isSingleMediaCase ? "PACKAGE_THICK_ENVELOPE" : undefined,
       packageWeightOz: isSingleMediaCase ? 8 : undefined,
