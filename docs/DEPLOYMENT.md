@@ -34,13 +34,17 @@ Import the GitHub repo.
 
 Use:
 - Framework: Vite
-- Build: `npm run build`
+- Build: `npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL`
 - Output: `dist`
 
-Add environment variables:
-- `VITE_CONVEX_URL`
+Add `CONVEX_DEPLOY_KEY` twice with environment-specific values:
 
-Use the production Convex URL for the Vercel Production environment. `CONVEX_DEPLOYMENT` is used by the local Convex CLI and is not a browser runtime variable. A Convex deploy key is sensitive and must never use the `VITE_` prefix.
+1. Generate a Production Deploy Key from the production deployment's Settings page in Convex. Add it to Vercel for **Production only**.
+2. Generate a Preview Deploy Key from the Convex project's Settings page. Add it to Vercel for **Preview only**.
+
+The Convex command supplies `VITE_CONVEX_URL` to the Vite build automatically. Production deploys update the production backend. Preview deploys create an isolated backend for the Git branch and do not share production or development data. `CONVEX_DEPLOYMENT` remains a local CLI setting. Deploy keys are sensitive and must never use a `VITE_` prefix.
+
+If a feature preview reports that no Convex deployment configuration was found, check that the Preview-scoped `CONVEX_DEPLOY_KEY` exists. A Production-only key is intentionally unavailable to preview builds.
 
 ## Beta Gate
 

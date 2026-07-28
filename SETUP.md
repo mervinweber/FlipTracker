@@ -37,6 +37,13 @@ npm run build
 
 See `docs/DEPLOYMENT.md`.
 
+Vercel uses `npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL`. Configure two separate Vercel secrets with the same name:
+
+- Production: a Convex **Production Deploy Key**, enabled only for Vercel Production.
+- Preview: a Convex **Preview Deploy Key**, enabled only for Vercel Preview.
+
+A feature-branch preview fails with "no Convex deployment configuration found" when only the Production key exists. Generate the Preview key from the Convex project's Settings page, add it directly in Vercel as `CONVEX_DEPLOY_KEY` for Preview, and redeploy the failed preview. Never reuse a development or production key for Preview.
+
 For the full ordered owner checklist, including security and smoke tests, follow `TODO.md` from "Beta Launch Blockers" onward.
 
 

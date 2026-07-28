@@ -220,9 +220,12 @@ These must be completed in code before the beta URL is shared with other users.
 
 - [ ] Import or open the GitHub repository in Vercel
 - [ ] Set Framework Preset to Vite
-- [ ] Set Build Command to `npm run build`
+- [ ] Set Build Command to `npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL`
 - [ ] Set Output Directory to `dist`
-- [ ] Set the Production environment variable:
+- [ ] Add a Convex Production Deploy Key as `CONVEX_DEPLOY_KEY`, scoped only to Vercel Production
+- [ ] Generate a Convex Preview Deploy Key from the project Settings page and add it as `CONVEX_DEPLOY_KEY`, scoped only to Vercel Preview
+- [ ] Let `npx convex deploy` provide `VITE_CONVEX_URL` during each production or preview build; do not hard-code a preview deployment URL
+- [ ] For manual frontend-only builds, set the Production environment variable:
 
   ```text
   VITE_CONVEX_URL=https://YOUR-PRODUCTION-DEPLOYMENT.convex.cloud
