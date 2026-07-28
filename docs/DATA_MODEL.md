@@ -44,7 +44,7 @@ One marketplace listing attempt connected to an asset. It stores platform, lifec
 
 An asset may have multiple marketplace listing records over time or across platforms. Listing status is deliberately separate from the asset's physical inventory status.
 
-For eBay, `pricingStatus`, `pricingSource`, and `pricingUpdatedAt` preserve the reviewed queue state. `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve the unpublished-offer sync state without treating it as a live listing.
+For eBay, `pricingStatus`, `pricingSource`, and `pricingUpdatedAt` preserve the reviewed queue state. `fulfillmentPolicyId` can override the seller default for one listing. `shippingPreset`, `packageType`, `packageWeightOz`, and the package dimension fields preserve reviewed shipment data sent with the eBay inventory item. `imageMode` chooses an actual item photo or an eligible eBay catalog match; `ebayImageUrl`, `ebayImageFingerprint`, and `ebayImageSource` preserve the Picture Services result and avoid duplicate uploads. `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve the unpublished-offer sync state without treating it as a live listing.
 
 ## ebayConnections
 

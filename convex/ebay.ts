@@ -33,6 +33,7 @@ function endpoints() {
   const isProduction = environment() === "production";
   return {
     api: isProduction ? "https://api.ebay.com" : "https://api.sandbox.ebay.com",
+    media: isProduction ? "https://apim.ebay.com" : "https://apim.sandbox.ebay.com",
     auth: isProduction ? "https://auth.ebay.com/oauth2/authorize" : "https://auth.sandbox.ebay.com/oauth2/authorize",
   };
 }
@@ -98,6 +99,37 @@ async function ebayFetch(accessToken: string, path: string, init: RequestInit = 
   const body = await responseBody(response);
   if (!response.ok) throw new Error(ebayError(body, response.status));
   return body;
+}
+
+function dataUrlFile(dataUrl: string) {
+  const match = /^data:(image\/(?:jpeg|png|gif|bmp|tiff|webp|avif|heic));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) throw new Error("The actual item photo is not a supported image. Capture or upload it again.");
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const extension = match[1] === "image/jpeg" ? "jpg" : match[1].slice("image/".length);
+  return { blob: new Blob([bytes], { type: match[1] }), filename: `fliptracker-item.${extension}` };
+}
+
+async function uploadActualPhoto(accessToken: string, dataUrl: string) {
+  const { blob, filename } = dataUrlFile(dataUrl);
+  const form = new FormData();
+  form.append("image", blob, filename);
+  const response = await fetch(`${endpoints().media}/commerce/media/v1_beta/image/create_image_from_file`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      "Content-Language": "en-US",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    },
+    body: form,
+  });
+  const body = await responseBody(response);
+  if (!response.ok) throw new Error(ebayError(body, response.status));
+  const imageUrl = (body as { imageUrl?: string } | undefined)?.imageUrl;
+  if (!imageUrl) throw new Error("eBay accepted the photo but did not return its Picture Services URL.");
+  return imageUrl;
 }
 
 async function refreshAccessToken(ctx: ActionCtx) {
@@ -310,6 +342,9 @@ export const markDraftCreated = internalMutation({
     sku: v.string(),
     offerId: v.string(),
     categoryId: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    imageFingerprint: v.optional(v.string()),
+    imageSource: v.string(),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.listingId, {
@@ -317,6 +352,9 @@ export const markDraftCreated = internalMutation({
       ebayInventorySku: args.sku,
       ebayOfferId: args.offerId,
       ebayCategoryId: args.categoryId,
+      ebayImageUrl: args.imageUrl,
+      ebayImageFingerprint: args.imageFingerprint,
+      ebayImageSource: args.imageSource,
       ebayDraftStatus: "Unpublished offer",
       ebayDraftCreatedAt: Date.now(),
       ebayLastError: undefined,
@@ -330,6 +368,22 @@ export const markDraftError = internalMutation({
   args: { listingId: v.id("marketplaceListings"), message: v.string() },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.listingId, { ebayLastError: args.message, updatedAt: Date.now() });
+  },
+});
+
+export const saveUploadedImage = internalMutation({
+  args: {
+    listingId: v.id("marketplaceListings"),
+    imageUrl: v.string(),
+    imageFingerprint: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.listingId, {
+      ebayImageUrl: args.imageUrl,
+      ebayImageFingerprint: args.imageFingerprint,
+      ebayImageSource: "Actual item photo",
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -465,6 +519,11 @@ export const createUnpublishedOffer = action({
     try {
       const accessToken = await refreshAccessToken(ctx);
       const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+      if (!settings?.merchantLocationKey) throw new Error("Choose an eBay inventory location in Seller Connection.");
+      const fulfillmentPolicyId = listing.fulfillmentPolicyId || settings.fulfillmentPolicyId;
+      if (!fulfillmentPolicyId) throw new Error("Choose an eBay shipping policy before sending this draft.");
+      if (!settings.paymentPolicyId) throw new Error("Choose an eBay payment policy in Seller Connection.");
+      if (!settings.returnPolicyId) throw new Error("Choose an eBay return policy in Seller Connection.");
       const sku = (listing.sku || `FT-${asset._id}`).slice(0, 50);
       const categoryId = validatedCategoryId(categoryForAsset(listing, asset, settings));
       const aspects = parseItemSpecifics(listing.itemSpecifics);
@@ -486,15 +545,59 @@ export const createUnpublishedOffer = action({
         else if (digits.length === 13) product.ean = [digits];
         else product.upc = [digits];
       }
-      if (asset.coverImageUrl?.startsWith("https://")) product.imageUrls = [asset.coverImageUrl];
+      const ebayCondition = conditionForEbay(listing.condition || asset.condition);
+      const imageMode = listing.imageMode || (ebayCondition === "NEW" ? "eBay Catalog" : "Actual Item Photo");
+      let imageUrl: string | undefined;
+      let imageFingerprint: string | undefined;
+      let imageSource = "eBay catalog match";
+      if (imageMode === "eBay Catalog") {
+        if (ebayCondition !== "NEW") throw new Error("eBay does not allow stock or catalog photos for used items. Add an actual item photo.");
+        if (!barcode) throw new Error("A UPC, EAN, or ISBN is required for eBay catalog photo matching.");
+      } else {
+        if (!asset.photoDataUrl) throw new Error("Used items require an actual item photo before they can be sent to eBay.");
+        imageFingerprint = await sha256(asset.photoDataUrl);
+        imageUrl = listing.ebayImageFingerprint === imageFingerprint ? listing.ebayImageUrl : undefined;
+        if (!imageUrl) {
+          imageUrl = await uploadActualPhoto(accessToken, asset.photoDataUrl);
+          await ctx.runMutation(internal.ebay.saveUploadedImage, {
+            listingId: listing._id,
+            imageUrl,
+            imageFingerprint,
+          });
+        }
+        product.imageUrls = [imageUrl];
+        imageSource = "Actual item photo";
+      }
+
+      const inventoryItem: Record<string, unknown> = {
+        availability: { shipToLocationAvailability: { quantity: 1 } },
+        condition: ebayCondition,
+        product,
+      };
+      if (listing.packageWeightOz !== undefined) {
+        if (!Number.isFinite(listing.packageWeightOz) || listing.packageWeightOz <= 0) throw new Error("Package weight must be above zero.");
+        const packageWeightAndSize: Record<string, unknown> = {
+          weight: { value: listing.packageWeightOz, unit: "OUNCE" },
+        };
+        if (listing.packageType) packageWeightAndSize.packageType = listing.packageType;
+        const dimensions = [listing.packageLengthIn, listing.packageWidthIn, listing.packageHeightIn];
+        if (dimensions.some((value) => value !== undefined)) {
+          if (dimensions.some((value) => value === undefined || !Number.isFinite(value) || value <= 0)) {
+            throw new Error("Enter package length, width, and height together, all above zero.");
+          }
+          packageWeightAndSize.dimensions = {
+            length: listing.packageLengthIn,
+            width: listing.packageWidthIn,
+            height: listing.packageHeightIn,
+            unit: "INCH",
+          };
+        }
+        inventoryItem.packageWeightAndSize = packageWeightAndSize;
+      }
 
       await ebayFetch(accessToken, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
         method: "PUT",
-        body: JSON.stringify({
-          availability: { shipToLocationAvailability: { quantity: 1 } },
-          condition: conditionForEbay(listing.condition || asset.condition),
-          product,
-        }),
+        body: JSON.stringify(inventoryItem),
       });
 
       const offer: Record<string, unknown> = {
@@ -505,12 +608,12 @@ export const createUnpublishedOffer = action({
         pricingSummary: { price: { value: price.toFixed(2), currency: settings?.currency ?? "USD" } },
       };
       if (categoryId) offer.categoryId = categoryId;
-      if (settings?.merchantLocationKey) offer.merchantLocationKey = settings.merchantLocationKey;
+      offer.merchantLocationKey = settings.merchantLocationKey;
       const policies: Record<string, string> = {};
-      if (settings?.fulfillmentPolicyId) policies.fulfillmentPolicyId = settings.fulfillmentPolicyId;
-      if (settings?.paymentPolicyId) policies.paymentPolicyId = settings.paymentPolicyId;
-      if (settings?.returnPolicyId) policies.returnPolicyId = settings.returnPolicyId;
-      if (Object.keys(policies).length) offer.listingPolicies = policies;
+      policies.fulfillmentPolicyId = fulfillmentPolicyId;
+      policies.paymentPolicyId = settings.paymentPolicyId;
+      policies.returnPolicyId = settings.returnPolicyId;
+      offer.listingPolicies = policies;
 
       let offerId = listing.ebayOfferId;
       const updated = Boolean(offerId);
@@ -528,7 +631,15 @@ export const createUnpublishedOffer = action({
         offerId = result?.offerId;
       }
       if (!offerId) throw new Error("eBay did not return an offer ID.");
-      await ctx.runMutation(internal.ebay.markDraftCreated, { listingId: args.listingId, sku, offerId, categoryId });
+      await ctx.runMutation(internal.ebay.markDraftCreated, {
+        listingId: args.listingId,
+        sku,
+        offerId,
+        categoryId,
+        imageUrl,
+        imageFingerprint,
+        imageSource,
+      });
       return { offerId, sku, updated };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not create the eBay draft.";

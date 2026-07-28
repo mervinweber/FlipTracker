@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, Package, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -28,6 +28,16 @@ type Listing = {
   buyer?: string;
   notes?: string;
   ebayCategoryId?: string;
+  fulfillmentPolicyId?: string;
+  shippingPreset?: string;
+  packageType?: string;
+  packageWeightOz?: number;
+  packageLengthIn?: number;
+  packageWidthIn?: number;
+  packageHeightIn?: number;
+  imageMode?: string;
+  ebayImageUrl?: string;
+  ebayImageSource?: string;
   ebayOfferId?: string;
   ebayInventorySku?: string;
   ebayDraftStatus?: string;
@@ -47,6 +57,8 @@ type Listing = {
   purchasePrice?: number;
   storageLocation?: string;
   photoUrl?: string;
+  hasActualPhoto?: boolean;
+  hasCatalogIdentifier?: boolean;
 };
 
 type PricingRow = {
@@ -106,6 +118,11 @@ const EMPTY_EBAY_SETTINGS: EbaySettings = {
 
 const PLATFORMS = ['eBay', 'Mercari', 'Facebook Marketplace', 'Vinted', 'OfferUp', 'Craigslist', 'Poshmark', 'Depop', 'Etsy', 'Amazon', 'Other'];
 const STATUSES = ['Draft', 'Active', 'Pending', 'Sold', 'Expired', 'Relisted', 'Cancelled'];
+const SHIPPING_PRESETS = {
+  'Single Media Mailer': { packageType: 'PACKAGE_THICK_ENVELOPE', packageWeightOz: 8, packageLengthIn: 10, packageWidthIn: 7, packageHeightIn: 1 },
+  '2-4 Media Mailer': { packageType: 'PARCEL_OR_PADDED_ENVELOPE', packageWeightOz: 32, packageLengthIn: 10, packageWidthIn: 8, packageHeightIn: 3 },
+  'Media Box': { packageType: 'MAILING_BOX', packageWeightOz: 64, packageLengthIn: 12, packageWidthIn: 10, packageHeightIn: 6 },
+} as const;
 
 type SalesTrackerImportItem = {
   title: string;
@@ -151,8 +168,16 @@ function optionalNumber(value: string) {
 function queueStatus(listing: Listing) {
   if (listing.ebayOfferId || listing.pricingStatus === 'eBay Draft Created') return 'eBay Draft Created';
   if (!['Draft', 'Pending'].includes(listing.status)) return listing.status;
-  if (listing.pricingStatus) return listing.pricingStatus;
-  return (listing.currentPrice ?? listing.listedPrice ?? 0) > 0 ? 'Ready for eBay' : 'Ready for Pricing';
+  if ((listing.currentPrice ?? listing.listedPrice ?? 0) <= 0) return 'Ready for Pricing';
+  const imageMode = listing.imageMode || (isNewCondition(listing.condition) ? 'eBay Catalog' : 'Actual Item Photo');
+  const imageReady = imageMode === 'eBay Catalog'
+    ? isNewCondition(listing.condition) && listing.hasCatalogIdentifier
+    : listing.hasActualPhoto;
+  return imageReady ? 'Ready for eBay' : 'Needs Photo';
+}
+
+function isNewCondition(condition?: string) {
+  return ['new', 'brand new', 'sealed'].includes(condition?.trim().toLowerCase() || '');
 }
 
 function ebayResearchQuery(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
@@ -238,6 +263,31 @@ export default function ListingsPanel() {
 
   function patchEditing(patch: Partial<Listing>) {
     setEditing((current) => current ? { ...current, ...patch } : current);
+  }
+
+  function openListingEditor(listing: Listing) {
+    const condition = listing.condition?.trim().toLowerCase() || '';
+    const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) ? 'eBay Catalog' : 'Actual Item Photo');
+    setEditing({ ...listing, imageMode });
+  }
+
+  function selectShippingPreset(value: string) {
+    if (value === 'Custom') {
+      patchEditing({ shippingPreset: value });
+      return;
+    }
+    if (!value) {
+      patchEditing({
+        shippingPreset: undefined,
+        packageType: undefined,
+        packageWeightOz: undefined,
+        packageLengthIn: undefined,
+        packageWidthIn: undefined,
+        packageHeightIn: undefined,
+      });
+      return;
+    }
+    patchEditing({ shippingPreset: value, ...SHIPPING_PRESETS[value as keyof typeof SHIPPING_PRESETS] });
   }
 
   function optionalText(value: string) {
@@ -410,7 +460,7 @@ export default function ListingsPanel() {
         })),
       });
       setPricingRows(null);
-      setEbayNotice(`${result.updated} listing${result.updated === 1 ? '' : 's'} priced and ready for eBay.${validRows.length < pricingRows.length ? ' Unpriced rows remain in the pricing queue.' : ''}`);
+      setEbayNotice(`${result.updated} listing price${result.updated === 1 ? '' : 's'} updated.${validRows.length < pricingRows.length ? ' Unpriced rows remain in Ready for Pricing.' : ''} Items missing required photos remain in Needs Photo.`);
     } catch (error) {
       setEbayError(error instanceof Error ? error.message : 'Could not update queue pricing.');
     } finally {
@@ -424,7 +474,7 @@ export default function ListingsPanel() {
       return;
     }
     if (!selectedReadyForEbay.length) {
-      setEbayError('Selected listings must have an approved price before they can be sent to eBay.');
+      setEbayError('Selected listings need an approved price and an eligible catalog match or actual item photo before they can be sent to eBay.');
       return;
     }
     if (!confirm(`Create or refresh ${selectedReadyForEbay.length} unpublished eBay offer${selectedReadyForEbay.length === 1 ? '' : 's'}? Nothing will be published.`)) return;
@@ -480,6 +530,14 @@ export default function ListingsPanel() {
       buyer: editing.buyer || undefined,
       notes: editing.notes || undefined,
       ebayCategoryId: editing.ebayCategoryId || undefined,
+      fulfillmentPolicyId: editing.fulfillmentPolicyId || undefined,
+      shippingPreset: editing.shippingPreset || undefined,
+      packageType: editing.packageType || undefined,
+      packageWeightOz: editing.packageWeightOz,
+      packageLengthIn: editing.packageLengthIn,
+      packageWidthIn: editing.packageWidthIn,
+      packageHeightIn: editing.packageHeightIn,
+      imageMode: editing.imageMode || undefined,
       priceChangeReason: priceChangeReason || undefined,
     });
     setEditing(null);
@@ -597,7 +655,7 @@ export default function ListingsPanel() {
                   <td>{listing.storageLocation || ''}</td>
                   <td className="rowActions">
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy} aria-label={`Send ${listing.title} to eBay`} title={listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
-                    <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => setEditing(listing)}><Pencil size={15}/></button>
+                    <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
                   </td>
@@ -640,7 +698,22 @@ export default function ListingsPanel() {
             <label className="span2">Listing URL<input type="url" value={editing.listingUrl || ''} onChange={(event) => patchEditing({ listingUrl: event.target.value })}/></label>
             <label>Category<input value={editing.category || ''} onChange={(event) => patchEditing({ category: event.target.value })}/></label>
             <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={(event) => patchEditing({ ebayCategoryId: event.target.value })}/></label>
-            <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value })}/></label>
+            <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) ? editing.imageMode : 'Actual Item Photo' })}/></label>
+            <div className="formSection span2 ebayDeliverySection"><h3><Package size={17}/> Shipping & Photos</h3><div className="sectionGrid">
+              <label>eBay Shipping Policy<select value={editing.fulfillmentPolicyId || ''} onChange={(event) => patchEditing({ fulfillmentPolicyId: event.target.value || undefined })}>
+                <option value="">Use seller default</option>
+                {editing.fulfillmentPolicyId && !ebaySetup?.policies.fulfillment.some((policy) => policy.id === editing.fulfillmentPolicyId) ? <option value={editing.fulfillmentPolicyId}>Saved policy ({editing.fulfillmentPolicyId})</option> : null}
+                {ebaySetup?.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}
+              </select><small>The fulfillment policy controls services, handling time, and buyer shipping charges.</small></label>
+              <label>Package Preset<select value={editing.shippingPreset || 'Custom'} onChange={(event) => selectShippingPreset(event.target.value)}><option value="">No package data</option>{Object.keys(SHIPPING_PRESETS).map((name) => <option key={name}>{name}</option>)}<option>Custom</option></select></label>
+              <label>Package Type<select value={editing.packageType || ''} onChange={(event) => patchEditing({ packageType: event.target.value || undefined, shippingPreset: 'Custom' })}><option value="">Not specified</option><option value="PACKAGE_THICK_ENVELOPE">Thick envelope</option><option value="PARCEL_OR_PADDED_ENVELOPE">Parcel or padded envelope</option><option value="MAILING_BOX">Mailing box</option></select></label>
+              <label>Weight (oz)<input type="number" min="0.1" step="0.1" value={editing.packageWeightOz ?? ''} onChange={(event) => patchEditing({ packageWeightOz: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
+              <label>Length (in)<input type="number" min="0.1" step="0.1" value={editing.packageLengthIn ?? ''} onChange={(event) => patchEditing({ packageLengthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
+              <label>Width (in)<input type="number" min="0.1" step="0.1" value={editing.packageWidthIn ?? ''} onChange={(event) => patchEditing({ packageWidthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
+              <label>Height (in)<input type="number" min="0.1" step="0.1" value={editing.packageHeightIn ?? ''} onChange={(event) => patchEditing({ packageHeightIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
+              <label>eBay Image Source<select value={editing.imageMode || 'Actual Item Photo'} onChange={(event) => patchEditing({ imageMode: event.target.value })}><option>Actual Item Photo</option><option disabled={!isNewCondition(editing.condition)}>eBay Catalog</option></select><small>{isNewCondition(editing.condition) ? 'Catalog matching uses the UPC/EAN/ISBN. Actual photos are also allowed.' : 'Used items require an actual photo; stock images are not allowed by eBay.'}</small></label>
+              <div className={`photoReadiness ${editing.imageMode === 'eBay Catalog' ? editing.hasCatalogIdentifier ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}`}><Camera size={18}/><div><strong>{editing.imageMode === 'eBay Catalog' ? editing.hasCatalogIdentifier ? 'Catalog identifier ready' : 'Barcode required' : editing.hasActualPhoto ? 'Actual photo ready' : 'Actual photo required'}</strong><small>{editing.ebayImageSource ? `Last eBay image: ${editing.ebayImageSource}` : 'Photo selection comes from the linked inventory item.'}</small></div></div>
+            </div></div>
             <div className="formSection span2"><h3>Pricing & Dates</h3><div className="sectionGrid">
               <label>Original Price<input type="number" step="0.01" value={editing.listedPrice ?? ''} onChange={(event) => patchEditing({ listedPrice: optionalNumber(event.target.value) })}/></label>
               <label>Current Price<input type="number" step="0.01" value={editing.currentPrice ?? ''} onChange={(event) => patchEditing({ currentPrice: optionalNumber(event.target.value) })}/></label>

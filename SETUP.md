@@ -107,7 +107,9 @@ For production, set the same variables on the production Convex deployment with 
 3. Select **Connect eBay**, sign in to the seller account, and approve access.
 4. Load setup again, select the inventory location and business policies, enter media category IDs, and save.
 5. Create internal eBay drafts from Inventory or Bulk Intake.
-6. In Listings, select the queue and choose **Update Pricing**. Apply an approved price to each item you want to send.
-7. Choose **Send to eBay Drafts** to create or refresh the selected unpublished offers.
+6. In Listings, edit each draft that needs a different shipping policy or package preset. The fulfillment policy controls the buyer's shipping service and charge; package measurements support calculated or weight-aware shipping.
+7. For new/sealed media, choose **eBay Catalog** and confirm the UPC/EAN/ISBN. For used media, capture or upload an actual item photo on the linked inventory record.
+8. Select the queue and choose **Update Pricing**. Apply an approved price to each item you want to send.
+9. Choose **Send to eBay Drafts** to create or refresh the selected unpublished offers.
 
-FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. It does not call eBay's publish endpoint. Captured data-URL photos are not uploaded to eBay yet; review and add actual item photos before a future publish step.
+FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. Actual used-item photos are uploaded to eBay Picture Services when the draft is sent. Catalog imagery is requested only for new/sealed items. FlipTracker does not call eBay's publish endpoint, so review every offer before publishing in Seller Hub.

@@ -48,10 +48,11 @@ Changing the title, UPC, edition, condition, or completeness marks the item for 
 3. In **eBay Seller Connection**, enter the private seller key and connect the eBay seller account.
 4. Select the seller's inventory location, payment/shipping/return policies, and numeric category defaults, then save.
 5. Select the drafts you want to process, then choose **Update Pricing**. Verify sold comps, enter each approved price, and apply the updates. Blank rows stay in **Ready for Pricing**.
-6. Choose **Send to eBay Drafts**. FlipTracker creates or refreshes unpublished offers for the selected **Ready for eBay** rows and reports individual failures without stopping the rest of the batch.
-7. Review every field and upload actual item photos. Captured FlipTracker photos are not sent to eBay yet.
-8. Finish and publish manually through eBay Seller Hub, then add the live eBay item ID and URL to FlipTracker.
-9. Change the listing status to **Active** and confirm its listed date and current price.
+6. Edit a draft to choose its eBay shipping policy and package preset. The policy controls the service and buyer charge; the package fields carry weight and dimensions.
+7. For new/sealed media, choose **eBay Catalog** and verify the barcode. For used media, add an actual photo to the inventory item; stock photos are not allowed.
+8. Choose **Send to eBay Drafts**. FlipTracker uploads used-item photos to eBay Picture Services, then creates or refreshes unpublished offers for selected **Ready for eBay** rows. Individual failures do not stop the rest of the batch.
+9. Review the offer in Seller Hub, then finish and publish manually. Add the live eBay item ID and URL to FlipTracker.
+10. Change the listing status to **Active** and confirm its listed date and current price.
 
 FlipTracker does not call eBay's publish endpoint. Unpublished offer creation and live publication remain separate actions by design.
 

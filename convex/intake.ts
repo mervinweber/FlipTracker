@@ -85,6 +85,8 @@ export const createScannedItem = mutation({
     const prefix = args.skuPrefix.trim().replace(/[^A-Za-z0-9-]/g, "").slice(0, 18) || "FT";
     const sku = `${prefix}-${String(assetId).slice(-8).toUpperCase()}`;
     if (!args.createDraft) return { assetId, listingId: null, sku, copyNumber: existingCopies.length + 1 };
+    const mediaFormat = (args.mediaFormat || args.type).trim().toLowerCase();
+    const isSingleMediaCase = ["dvd", "blu-ray", "blu ray", "cd"].includes(mediaFormat);
 
     const listingId = await ctx.db.insert("marketplaceListings", {
       assetId,
@@ -96,6 +98,13 @@ export const createScannedItem = mutation({
       category: args.ebayCategory,
       condition: args.ebayCondition,
       itemSpecifics: args.ebayItemSpecifics,
+      imageMode: args.condition.trim().toLowerCase() === "new" || args.completeness.trim().toLowerCase() === "sealed" ? "eBay Catalog" : "Actual Item Photo",
+      shippingPreset: isSingleMediaCase ? "Single Media Mailer" : undefined,
+      packageType: isSingleMediaCase ? "PACKAGE_THICK_ENVELOPE" : undefined,
+      packageWeightOz: isSingleMediaCase ? 8 : undefined,
+      packageLengthIn: isSingleMediaCase ? 10 : undefined,
+      packageWidthIn: isSingleMediaCase ? 7 : undefined,
+      packageHeightIn: isSingleMediaCase ? 1 : undefined,
       listedPrice: args.ebayPrice,
       currentPrice: args.ebayPrice,
       pricingStatus: args.ebayPrice !== undefined ? "Ready for eBay" : "Ready for Pricing",

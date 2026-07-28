@@ -164,7 +164,12 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Preserve eBay offer ID, sync status, timestamp, and errors on the listing
 - [x] Add selectable Ready for Pricing and Ready for eBay queue states
 - [x] Apply approved prices in bulk while preserving listing price history
-- [ ] Upload captured item photos to Convex storage and eBay Media/Picture Services
+- [x] Add per-listing fulfillment-policy selection and reusable media package presets
+- [x] Send package weight/dimensions with the eBay inventory item
+- [x] Use eBay catalog matching only for eligible new/sealed media
+- [x] Upload actual used-item photos to eBay Picture Services
+- [x] Upload captured item photos to eBay Media/Picture Services
+- [ ] Move source photos to Convex storage instead of inline asset data
 - [ ] Add an eBay offer validation/fee preview screen
 - [x] Add bounded bulk offer creation with per-item failure handling
 - [ ] Add a separately confirmed publish action only after auth and photo validation

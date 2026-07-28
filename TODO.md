@@ -40,6 +40,10 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add a selectable Draft/Pending queue with explicit Ready for Pricing and Ready for eBay states
 - [x] Add bulk pricing review with saved suggestions, sold-comps links, manual approval, and price history
 - [x] Add bounded batch creation of unpublished eBay offers with per-item failure handling
+- [x] Add per-listing eBay fulfillment-policy overrides and media package presets
+- [x] Send package weight and dimensions to eBay for calculated or weight-aware shipping
+- [x] Restrict eBay catalog imagery to new/sealed items with a product identifier
+- [x] Require and upload an actual item photo to eBay Picture Services for used items
 
 ## Beta Launch Blockers - Engineering
 
@@ -101,7 +105,8 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Configure eBay Sandbox credentials and complete owner consent
 - [ ] Smoke test one DVD and one book against an eBay Sandbox seller
 - [ ] Configure Production credentials only after Sandbox succeeds
-- [ ] Move captured photos to Convex storage and upload them to eBay
+- [x] Upload captured item photos directly to eBay Picture Services for unpublished offers
+- [ ] Move captured photos from inline data URLs to Convex storage for durable app-side photo management
 - [ ] Add offer validation and listing-fee preview
 - [x] Add bounded bulk upload for selected drafts with retryable per-item failures
 - [ ] Add a separately confirmed publish action after user auth, photo upload, and validation are complete
@@ -277,6 +282,6 @@ These must be completed in code before the beta URL is shared with other users.
 - Listing imports create new records and do not deduplicate
 - The app currently has no authentication or per-user ownership and must not be treated as a public multi-user beta yet
 - eBay seller actions have a temporary private seller-key gate, but this does not replace full user authentication and owner scoping
-- Captured item photos remain data URLs and are not uploaded into eBay unpublished offers yet
+- Captured item photos remain inline data URLs in FlipTracker; used-item photos are uploaded to eBay Picture Services when an unpublished offer is created
 - The production build passes but currently reports a JavaScript bundle-size warning
 - `npm audit --omit=dev` reports one high-severity issue in `xlsx` with no available fix; do not accept untrusted spreadsheet uploads during beta

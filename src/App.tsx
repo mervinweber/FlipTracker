@@ -213,6 +213,21 @@ function listingSpecifics(item: Partial<Asset>) {
   ].filter(Boolean).join('\n');
 }
 
+function listingDeliveryDefaults(item: Partial<Asset>) {
+  const format = `${item.mediaFormat || ''} ${item.type || ''}`.toLowerCase();
+  const isSingleMediaCase = format.includes('dvd') || format.includes('blu') || format.includes('cd');
+  const isNew = ['new', 'brand new', 'sealed'].includes(item.condition?.trim().toLowerCase() || '') || item.completeness?.trim().toLowerCase() === 'sealed';
+  return {
+    imageMode: isNew ? 'eBay Catalog' : 'Actual Item Photo',
+    shippingPreset: isSingleMediaCase ? 'Single Media Mailer' : undefined,
+    packageType: isSingleMediaCase ? 'PACKAGE_THICK_ENVELOPE' : undefined,
+    packageWeightOz: isSingleMediaCase ? 8 : undefined,
+    packageLengthIn: isSingleMediaCase ? 10 : undefined,
+    packageWidthIn: isSingleMediaCase ? 7 : undefined,
+    packageHeightIn: isSingleMediaCase ? 1 : undefined,
+  };
+}
+
 function recalcAsset(item: Partial<Asset>): Partial<Asset> {
   const next = { ...item };
   next.listingRecommendation = recommendationFromAsset(next);
@@ -613,6 +628,7 @@ export default function App() {
       listedPrice: price || undefined,
       currentPrice: price || undefined,
       notes: asset.ebayShipping ? `Shipping plan: ${asset.ebayShipping}` : undefined,
+      ...listingDeliveryDefaults(asset),
     });
     changeView('Listings');
   }
