@@ -70,6 +70,8 @@ Internal eBay draft -> Ready for Pricing -> Pricing approval -> Ready for eBay -
 
 OAuth authorization returns through `convex/http.ts`. Refresh and access tokens are stored only in `ebayConnections`; the browser receives connection status and policy names, never tokens. `ebaySettings` stores the selected marketplace, inventory location, payment/fulfillment/return policies, and per-format category defaults.
 
+Book drafts use ISBN-based eBay catalog matching instead of forwarding third-party metadata image URLs. Inventory item creation removes duplicate UPC/EAN/ISBN aspects and retries eBay error `25001` once with core product fields only, preserving the original detailed error if the reduced request also fails.
+
 Queue pricing is an explicit review action. It writes the approved current/listed price, records price history, and marks the internal draft Ready for eBay; blank rows remain Ready for Pricing. A bounded batch then writes or refreshes each SKU-backed Inventory API item and creates or updates its unpublished offer, continuing past individual failures. The inventory payload includes the selected fulfillment policy and reviewed package measurements. Eligible new/sealed media and books may request an eBay catalog match by GTIN. Used discs and games must provide actual captured photos, which the action uploads to eBay Picture Services and fingerprints for safe retries. The publish endpoint is intentionally absent. The listing stores the returned offer ID, sync status, timestamp, image source, and last error. A temporary `FLIPTRACKER_ADMIN_KEY` gate protects seller actions until full application authentication and owner scoping replace it.
 
 ## Security Boundary

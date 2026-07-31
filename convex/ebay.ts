@@ -310,6 +310,18 @@ function parseItemSpecifics(value?: string) {
   return aspects;
 }
 
+function removeCatalogIdentifiers(aspects: Record<string, string[]>) {
+  const cleaned = { ...aspects };
+  for (const name of Object.keys(cleaned)) {
+    if (["upc", "ean", "isbn"].includes(name.trim().toLowerCase())) delete cleaned[name];
+  }
+  return cleaned;
+}
+
+function isEbayError(error: unknown, errorId: number) {
+  return error instanceof Error && error.message.includes(`eBay ${errorId}`);
+}
+
 function conditionForEbay(condition?: string) {
   const normalized = condition?.trim().toLowerCase() ?? "";
   if (["new", "brand new", "sealed"].includes(normalized)) return "NEW";
@@ -892,9 +904,10 @@ export const createUnpublishedOffer = action({
       if (!settings.returnPolicyId) throw new Error("Choose an eBay return policy in Seller Connection.");
       const sku = (listing.sku || `FT-${asset._id}`).slice(0, 50);
       const categoryId = validatedCategoryId(categoryForAsset(listing, asset, settings));
-      const aspects = parseItemSpecifics(listing.itemSpecifics);
+      const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
+      const aspects = removeCatalogIdentifiers(parseItemSpecifics(listing.itemSpecifics));
       if (asset.mediaFormat) aspects.Format ??= [asset.mediaFormat];
-      if (asset.studio) aspects.Studio ??= [asset.studio];
+      if (asset.studio) aspects[isBook ? "Publisher" : "Studio"] ??= [asset.studio];
       if (asset.releaseYear) aspects["Release Year"] ??= [asset.releaseYear];
       if (asset.rating) aspects.Rating ??= [asset.rating];
 
@@ -904,7 +917,6 @@ export const createUnpublishedOffer = action({
         aspects,
       };
       const barcode = asset.upc || asset.barcode;
-      const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
       if (barcode) {
         const digits = barcode.replace(/\D/g, "");
         if (isBook) product.isbn = [barcode.replace(/[^0-9X]/gi, "").toUpperCase()];
@@ -920,8 +932,7 @@ export const createUnpublishedOffer = action({
       if (imageMode === "eBay Catalog") {
         if (metadataCoverAllowed) {
           imageUrl = asset.coverImageUrl;
-          product.imageUrls = [imageUrl];
-          imageSource = "Metadata stock cover";
+          imageSource = "eBay catalog match by ISBN";
         } else {
           if (ebayCondition !== "NEW") throw new Error("Used discs require an actual item photo. Books with a metadata cover may use that stock image.");
           if (!barcode) throw new Error("A UPC, EAN, or ISBN is required for eBay catalog photo matching.");
@@ -996,7 +1007,24 @@ export const createUnpublishedOffer = action({
           body: JSON.stringify(inventoryItem),
         });
       } catch (error) {
-        throw new Error(`eBay inventory item validation failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+        if (!isEbayError(error, 25001)) {
+          throw new Error(`eBay inventory item validation failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+        }
+
+        // eBay occasionally reports 25001 for optional catalog data without naming the
+        // rejected field. Retry once with the stable core product fields and GTIN only.
+        const minimalProduct = { ...product };
+        delete minimalProduct.aspects;
+        delete minimalProduct.imageUrls;
+        const minimalInventoryItem = { ...inventoryItem, product: minimalProduct };
+        try {
+          await ebayFetch(accessToken, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
+            method: "PUT",
+            body: JSON.stringify(minimalInventoryItem),
+          });
+        } catch (retryError) {
+          throw new Error(`eBay inventory item validation failed after a catalog-safe retry: ${retryError instanceof Error ? retryError.message : "Unknown eBay error."}`);
+        }
       }
 
       const offer: Record<string, unknown> = {
