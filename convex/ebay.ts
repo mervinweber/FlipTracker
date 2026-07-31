@@ -779,6 +779,69 @@ export const createInventoryLocation = action({
   },
 });
 
+export const ensureMediaMailPolicy = action({
+  args: { adminKey: v.string(), buyerShippingCost: v.number() },
+  handler: async (ctx, args): Promise<{ fulfillmentPolicyId: string; created: boolean }> => {
+    requireAdminKey(args.adminKey);
+    if (!Number.isFinite(args.buyerShippingCost) || args.buyerShippingCost < 0) {
+      throw new Error("Media Mail buyer charge must be zero or higher.");
+    }
+    const accessToken = await refreshAccessToken(ctx);
+    const marketplace = "EBAY_US";
+    const policiesBody = await ebayFetch(
+      accessToken,
+      `/sell/account/v1/fulfillment_policy?marketplace_id=${marketplace}`,
+    ) as { fulfillmentPolicies?: Array<{ fulfillmentPolicyId: string; name: string }> };
+    const existing = policiesBody.fulfillmentPolicies?.find((policy) => policy.name === "FlipTracker Media Mail");
+    let fulfillmentPolicyId = existing?.fulfillmentPolicyId;
+    if (!fulfillmentPolicyId) {
+      const created = await ebayFetch(accessToken, "/sell/account/v1/fulfillment_policy", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "FlipTracker Media Mail",
+          description: "USPS Media Mail for eligible books, recorded media, and sound recordings.",
+          marketplaceId: marketplace,
+          categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES" }],
+          handlingTime: { value: 2, unit: "DAY" },
+          shippingOptions: [{
+            optionType: "DOMESTIC",
+            costType: "FLAT_RATE",
+            shippingServices: [{
+              sortOrder: 1,
+              shippingCarrierCode: "USPS",
+              shippingServiceCode: "USPSMedia",
+              shippingCost: { value: args.buyerShippingCost.toFixed(2), currency: "USD" },
+              additionalShippingCost: { value: "1.00", currency: "USD" },
+              freeShipping: args.buyerShippingCost === 0,
+            }],
+          }],
+        }),
+      }) as { fulfillmentPolicyId?: string };
+      fulfillmentPolicyId = created.fulfillmentPolicyId;
+    }
+    if (!fulfillmentPolicyId) throw new Error("eBay did not return the Media Mail policy ID.");
+
+    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+    await ctx.runMutation(internal.ebay.saveSettingsRecord, {
+      singletonKey: singletonKey(),
+      environment: environment(),
+      marketplaceId: settings?.marketplaceId ?? marketplace,
+      currency: settings?.currency ?? "USD",
+      merchantLocationKey: settings?.merchantLocationKey,
+      fulfillmentPolicyId,
+      paymentPolicyId: settings?.paymentPolicyId,
+      returnPolicyId: settings?.returnPolicyId,
+      dvdCategoryId: settings?.dvdCategoryId,
+      blurayCategoryId: settings?.blurayCategoryId,
+      bookCategoryId: settings?.bookCategoryId,
+      cdCategoryId: settings?.cdCategoryId,
+      gameCategoryId: settings?.gameCategoryId,
+      otherCategoryId: settings?.otherCategoryId,
+    });
+    return { fulfillmentPolicyId, created: !existing };
+  },
+});
+
 export const provisionSandboxDefaults = action({
   args: {
     adminKey: v.string(),

@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Trash2, Truck, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -261,6 +261,7 @@ export default function ListingsPanel() {
   const loadEbaySetup = useAction(api.ebay.loadSetup);
   const saveEbaySettings = useAction(api.ebay.saveSettings);
   const createInventoryLocation = useAction(api.ebay.createInventoryLocation);
+  const ensureMediaMailPolicy = useAction(api.ebay.ensureMediaMailPolicy);
   const provisionSandboxDefaults = useAction(api.ebay.provisionSandboxDefaults);
   const lookupActivePricing = useAction(api.ebay.lookupActivePricing);
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
@@ -522,6 +523,29 @@ export default function ListingsPanel() {
       if (setup.warning) setEbayError(setup.warning);
     } catch (error) {
       setEbayError(error instanceof Error ? error.message : 'Could not create the eBay inventory location.');
+    } finally {
+      setEbayBusy(false);
+    }
+  }
+
+  async function createMediaMailPolicy(selectForEditing = false) {
+    if (!adminKey) return;
+    setEbayBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const result = await ensureMediaMailPolicy({
+        adminKey,
+        buyerShippingCost: Number(sandboxSetup.mediaMailCost),
+      });
+      const setup = await loadEbaySetup({ adminKey }) as EbaySetup;
+      applyEbaySetup(setup);
+      if (selectForEditing) {
+        setEditing((current) => current ? { ...current, fulfillmentPolicyId: result.fulfillmentPolicyId } : current);
+      }
+      setEbayNotice(`${result.created ? 'Created' : 'Selected'} FlipTracker Media Mail. ${selectForEditing ? 'Save the listing, then publish again.' : 'It is now the default for eligible media.'}`);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not prepare the Media Mail policy.');
     } finally {
       setEbayBusy(false);
     }
@@ -845,7 +869,8 @@ export default function ListingsPanel() {
             <label>CD Category ID<input inputMode="numeric" value={ebaySettings.cdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, cdCategoryId: event.target.value }))}/></label>
             <label>Game Category ID<input inputMode="numeric" value={ebaySettings.gameCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, gameCategoryId: event.target.value }))}/></label>
             <label>Other Media Category ID<input inputMode="numeric" value={ebaySettings.otherCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, otherCategoryId: event.target.value }))}/></label>
-            <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button><button className="secondary forgetDeviceButton" disabled={ebayBusy} onClick={forgetSellerDevice}><LogOut size={16}/> Forget Device</button></div>
+            <label>Media Mail Buyer Charge<input type="number" min="0" step="0.01" value={sandboxSetup.mediaMailCost} onChange={(event) => setSandboxSetup((current) => ({ ...current, mediaMailCost: event.target.value }))}/></label>
+            <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button className="secondary" disabled={ebayBusy || Number(sandboxSetup.mediaMailCost) < 0} onClick={() => createMediaMailPolicy()}><Truck size={16}/> Create/Select Media Mail</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button><button className="secondary forgetDeviceButton" disabled={ebayBusy} onClick={forgetSellerDevice}><LogOut size={16}/> Forget Device</button></div>
           </div>
         ) : null}
         {ebaySetup?.connected && ebaySetup.environment === 'production' && !ebaySetup.locations.length ? (
@@ -953,6 +978,7 @@ export default function ListingsPanel() {
                 {editing.fulfillmentPolicyId && !ebaySetup?.policies.fulfillment.some((policy) => policy.id === editing.fulfillmentPolicyId) ? <option value={editing.fulfillmentPolicyId}>Saved policy ({editing.fulfillmentPolicyId})</option> : null}
                 {ebaySetup?.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}
               </select><small>The fulfillment policy controls services, handling time, and buyer shipping charges.</small></label>
+              {isBookListing(editing) || /dvd|blu|cd|music/i.test(`${editing.assetType || ''} ${editing.mediaFormat || ''}`) ? <div className="shippingPolicyHelper"><button type="button" className="secondary" disabled={ebayBusy} onClick={() => createMediaMailPolicy(true)}><Truck size={16}/> Use Media Mail</button><small>Creates or selects a USPS Media Mail policy. Save this listing afterward. Video games are not Media Mail eligible.</small></div> : null}
               <label>Package Preset<select value={editing.shippingPreset || 'Custom'} onChange={(event) => selectShippingPreset(event.target.value)}><option value="">No package data</option>{Object.keys(SHIPPING_PRESETS).map((name) => <option key={name}>{name}</option>)}<option>Custom</option></select></label>
               <label>Package Type<select value={editing.packageType || ''} onChange={(event) => patchEditing({ packageType: event.target.value || undefined, shippingPreset: 'Custom' })}><option value="">Not specified</option><option value="PACKAGE_THICK_ENVELOPE">Thick envelope</option><option value="PARCEL_OR_PADDED_ENVELOPE">Parcel or padded envelope</option><option value="MAILING_BOX">Mailing box</option></select></label>
               <label>Weight (oz)<input type="number" min="0.1" step="0.1" value={editing.packageWeightOz ?? ''} onChange={(event) => patchEditing({ packageWeightOz: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>

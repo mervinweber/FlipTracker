@@ -126,4 +126,6 @@ For production, set the same variables on the production Convex deployment with 
 
 Legacy records without package measurements receive a submission default of 16 oz for a book, 8 oz for a DVD/Blu-ray/game, or 6 oz for a CD. These defaults satisfy eBay shipping validation but should be replaced with the packed item's measured weight whenever shipping charges depend on weight.
 
+Do not use eBay Standard Envelope for books, DVDs, Blu-rays, or CDs; it is limited to eligible thin items weighing no more than 3 oz. Use **Create/Select Media Mail** in Seller Connection, or **Use Media Mail** while editing an eligible listing. Save the listing before publishing. Video games are not USPS Media Mail eligible and need a separate Ground Advantage or other parcel policy.
+
 FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. Actual used-item photos are uploaded to eBay Picture Services when the offer is staged. Books can request an eBay catalog match by ISBN; other used media requires an actual photo. Publishing is always a separate, confirmation-protected action.
