@@ -106,14 +106,15 @@ For production, set the same variables on the production Convex deployment with 
 1. Connect or reconnect the Sandbox seller after deploying this version. The consent must include inventory and account-policy access.
 2. In **Listings > Seller Connection**, use **Create Sandbox Defaults** to create an enabled inventory location plus payment, Media Mail fulfillment, and 30-day return policies. Enter the Sandbox seller's postal code first.
 3. If eBay reports that the Sandbox seller is not eligible for Business Policies, enable Business Policies for that test seller in eBay Sandbox and retry. Production seller policies should be reviewed and created in the seller account rather than generated automatically.
-4. Note the numeric eBay category IDs used for DVDs, Blu-rays, books, CDs, games, and other media. Category IDs can change, so FlipTracker stores these as seller settings instead of hard-coding them.
+4. In Production, create and review the three business policies in eBay. If the connected account has no Inventory API location, FlipTracker displays **Create Inventory Location**. Enter the seller's postal code, country, a stable key, and a recognizable name; this creates an enabled warehouse without changing any policies.
+5. Note the numeric eBay category IDs used for DVDs, Blu-rays, books, CDs, games, and other media. Category IDs can change, so FlipTracker stores these as seller settings instead of hard-coding them.
 
 ### 4. Connect and create a draft
 
 1. Open **Listings** in FlipTracker.
 2. Enter the private Seller Access Key and select **Load Setup**.
 3. Select **Connect eBay**, sign in to the seller account, and approve access.
-4. Load setup again, select the inventory location and business policies, enter media category IDs, and save.
+4. Load setup again. Create an inventory location if none exists, select the location and business policies, enter media category IDs, and save.
 5. Scan a single item and leave **Add to eBay draft queue** selected, or use Bulk Intake to create internal eBay drafts for a stack.
 6. In Listings, edit each draft that needs a different shipping policy or package preset. The fulfillment policy controls the buyer's shipping service and charge; package measurements support calculated or weight-aware shipping.
 7. For new/sealed media, choose **eBay Catalog** and confirm the UPC/EAN/ISBN. Books with a metadata cover can use that stock cover during the beta. Used DVDs, Blu-rays, CDs, and games still require an actual item photo before eBay draft creation.

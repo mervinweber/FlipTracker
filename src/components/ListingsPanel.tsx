@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, Package, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, MapPin, Package, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -252,6 +252,7 @@ export default function ListingsPanel() {
   const beginEbayOauth = useAction(api.ebay.beginOauth);
   const loadEbaySetup = useAction(api.ebay.loadSetup);
   const saveEbaySettings = useAction(api.ebay.saveSettings);
+  const createInventoryLocation = useAction(api.ebay.createInventoryLocation);
   const provisionSandboxDefaults = useAction(api.ebay.provisionSandboxDefaults);
   const lookupActivePricing = useAction(api.ebay.lookupActivePricing);
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
@@ -446,9 +447,47 @@ export default function ListingsPanel() {
     }
   }
 
+  async function createEbayInventoryLocation() {
+    if (!adminKey) return;
+    setEbayBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const selectedPolicies = {
+        fulfillmentPolicyId: ebaySettings.fulfillmentPolicyId,
+        paymentPolicyId: ebaySettings.paymentPolicyId,
+        returnPolicyId: ebaySettings.returnPolicyId,
+      };
+      const result = await createInventoryLocation({
+        adminKey,
+        postalCode: sandboxSetup.postalCode,
+        country: sandboxSetup.country,
+        locationKey: sandboxSetup.locationKey,
+        locationName: sandboxSetup.locationName,
+      });
+      const setup = await loadEbaySetup({ adminKey }) as EbaySetup;
+      applyEbaySetup(setup);
+      setEbaySettings((current) => ({
+        ...current,
+        ...selectedPolicies,
+        merchantLocationKey: result.locationKey,
+      }));
+      setEbayNotice(`${result.created ? 'Created' : 'Selected'} eBay inventory location ${result.locationKey}. Save Draft Defaults to finish setup.`);
+      if (setup.warning) setEbayError(setup.warning);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not create the eBay inventory location.');
+    } finally {
+      setEbayBusy(false);
+    }
+  }
+
   async function sendToEbay(listing: Listing) {
     if (!adminKey) {
       setEbayError('Unlock eBay seller tools first.');
+      return;
+    }
+    if (!sellerDefaultsReady) {
+      setEbayError('Choose and save an inventory location, shipping policy, payment policy, and return policy before creating eBay drafts.');
       return;
     }
     setOfferBusy(listing._id);
@@ -583,6 +622,10 @@ export default function ListingsPanel() {
     }
     if (!selectedReadyForEbay.length) {
       setEbayError('Selected listings need an approved price and an eligible catalog match or actual item photo before they can be sent to eBay.');
+      return;
+    }
+    if (!sellerDefaultsReady) {
+      setEbayError('Choose and save an inventory location, shipping policy, payment policy, and return policy before creating eBay drafts.');
       return;
     }
     if (!confirm(`Create or refresh ${selectedReadyForEbay.length} unpublished eBay offer${selectedReadyForEbay.length === 1 ? '' : 's'}? Nothing will be published.`)) return;
@@ -736,9 +779,22 @@ export default function ListingsPanel() {
             <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button></div>
           </div>
         ) : null}
+        {ebaySetup?.connected && ebaySetup.environment === 'production' && !ebaySetup.locations.length ? (
+          <div className="sandboxSetupPanel">
+            <div><h3>Create Inventory Location</h3><p>Add the warehouse location eBay requires for Inventory API drafts. This does not change your business policies.</p></div>
+            <div className="sandboxSetupGrid inventoryLocationSetupGrid">
+              <label>Seller Postal Code<input value={sandboxSetup.postalCode} onChange={(event) => setSandboxSetup((current) => ({ ...current, postalCode: event.target.value }))} placeholder="29401"/></label>
+              <label>Country<input maxLength={2} value={sandboxSetup.country} onChange={(event) => setSandboxSetup((current) => ({ ...current, country: event.target.value.toUpperCase() }))}/></label>
+              <label>Location Key<input value={sandboxSetup.locationKey} onChange={(event) => setSandboxSetup((current) => ({ ...current, locationKey: event.target.value }))}/></label>
+              <label>Location Name<input value={sandboxSetup.locationName} onChange={(event) => setSandboxSetup((current) => ({ ...current, locationName: event.target.value }))}/></label>
+              <button disabled={ebayBusy || !sandboxSetup.postalCode.trim()} onClick={createEbayInventoryLocation}><MapPin size={16}/> {ebayBusy ? 'Creating...' : 'Create Location'}</button>
+            </div>
+          </div>
+        ) : null}
         {ebaySetup?.connected && ebaySetup.environment === 'sandbox' && !sellerDefaultsReady ? (
           <div className="sandboxSetupPanel">
             <div><h3>Prepare Sandbox Seller</h3><p>Create the warehouse location and basic Media Mail, payment, and return policies needed by eBay drafts.</p></div>
+            <p className="ebaySafetyNote">If eBay returns a system error, <a href="https://developer.ebay.com/support/api-status" target="_blank" rel="noreferrer">check eBay Sandbox API status</a>. Seller policies cannot be prepared while its Account API is unavailable.</p>
             <div className="sandboxSetupGrid">
               <label>Seller Postal Code<input value={sandboxSetup.postalCode} onChange={(event) => setSandboxSetup((current) => ({ ...current, postalCode: event.target.value }))} placeholder="29401"/></label>
               <label>Country<input maxLength={2} value={sandboxSetup.country} onChange={(event) => setSandboxSetup((current) => ({ ...current, country: event.target.value.toUpperCase() }))}/></label>
@@ -776,7 +832,7 @@ export default function ListingsPanel() {
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions">
-                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy} aria-label={`Send ${listing.title} to eBay`} title={listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
+                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Send ${listing.title} to eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>

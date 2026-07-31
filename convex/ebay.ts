@@ -663,6 +663,62 @@ export const lookupActivePricing = action({
   },
 });
 
+export const createInventoryLocation = action({
+  args: {
+    adminKey: v.string(),
+    postalCode: v.string(),
+    country: v.string(),
+    locationKey: v.string(),
+    locationName: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ locationKey: string; created: boolean }> => {
+    requireAdminKey(args.adminKey);
+    const postalCode = args.postalCode.trim();
+    const country = args.country.trim().toUpperCase();
+    const locationKey = args.locationKey.trim().replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 50);
+    const locationName = args.locationName.trim().slice(0, 64);
+    if (!postalCode) throw new Error("Enter the seller postal code.");
+    if (!/^[A-Z]{2}$/.test(country)) throw new Error("Country must be a two-letter code such as US.");
+    if (!locationKey || !locationName) throw new Error("Enter an inventory location key and name.");
+
+    const accessToken = await refreshAccessToken(ctx);
+    const locationsBody = await ebayFetch(accessToken, "/sell/inventory/v1/location?limit=100") as {
+      locations?: Array<{ merchantLocationKey: string }>;
+    };
+    const exists = locationsBody.locations?.some((location) => location.merchantLocationKey === locationKey) ?? false;
+    if (!exists) {
+      await ebayFetch(accessToken, `/sell/inventory/v1/location/${encodeURIComponent(locationKey)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          location: { address: { postalCode, country } },
+          locationTypes: ["WAREHOUSE"],
+          name: locationName,
+          merchantLocationStatus: "ENABLED",
+        }),
+      });
+    }
+
+    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+    await ctx.runMutation(internal.ebay.saveSettingsRecord, {
+      singletonKey: singletonKey(),
+      environment: environment(),
+      marketplaceId: settings?.marketplaceId ?? "EBAY_US",
+      currency: settings?.currency ?? "USD",
+      merchantLocationKey: locationKey,
+      fulfillmentPolicyId: settings?.fulfillmentPolicyId,
+      paymentPolicyId: settings?.paymentPolicyId,
+      returnPolicyId: settings?.returnPolicyId,
+      dvdCategoryId: settings?.dvdCategoryId,
+      blurayCategoryId: settings?.blurayCategoryId,
+      bookCategoryId: settings?.bookCategoryId,
+      cdCategoryId: settings?.cdCategoryId,
+      gameCategoryId: settings?.gameCategoryId,
+      otherCategoryId: settings?.otherCategoryId,
+    });
+    return { locationKey, created: !exists };
+  },
+});
+
 export const provisionSandboxDefaults = action({
   args: {
     adminKey: v.string(),
@@ -688,10 +744,15 @@ export const provisionSandboxDefaults = action({
     const programsBody = await ebayFetch(accessToken, "/sell/account/v1/program/get_opted_in_programs") as { programs?: Array<{ programType?: string }> };
     const optedIn = programsBody.programs?.some((program) => program.programType === "SELLING_POLICY_MANAGEMENT");
     if (!optedIn) {
-      await ebayFetch(accessToken, "/sell/account/v1/program/opt_in", {
-        method: "POST",
-        body: JSON.stringify({ programType: "SELLING_POLICY_MANAGEMENT" }),
-      });
+      try {
+        await ebayFetch(accessToken, "/sell/account/v1/program/opt_in", {
+          method: "POST",
+          body: JSON.stringify({ programType: "SELLING_POLICY_MANAGEMENT" }),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "eBay could not enable Business Policies.";
+        throw new Error(`eBay Sandbox Account API could not enable Business Policies (${message}). Check https://developer.ebay.com/support/api-status for the unresolved Sandbox Account API incident, then retry Create Sandbox Defaults after eBay resolves it.`);
+      }
     }
 
     const locationsBody = await ebayFetch(accessToken, "/sell/inventory/v1/location?limit=100") as { locations?: Array<{ merchantLocationKey: string }> };

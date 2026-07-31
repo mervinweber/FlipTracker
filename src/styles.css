@@ -148,6 +148,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .sandboxSetupPanel h3 { font-size:16px; }
 .sandboxSetupPanel p { color:var(--muted); font-size:13px; line-height:1.45; }
 .sandboxSetupGrid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)) auto; gap:12px; align-items:end; }
+.inventoryLocationSetupGrid { grid-template-columns:repeat(4, minmax(0, 1fr)) auto; }
 .sandboxSetupGrid button { min-height:40px; white-space:nowrap; }
 .ebayDeliverySection h3 { display:flex; align-items:center; gap:7px; }
 .ebayDeliverySection label small { display:block; margin-top:5px; }
