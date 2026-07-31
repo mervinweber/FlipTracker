@@ -164,9 +164,16 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .photoReadiness.missing { border-color:rgba(245,158,11,.6); color:#fde68a; }
 .photoReadiness strong, .photoReadiness small { display:block; }
 .photoReadiness small { margin-top:3px; color:var(--muted); line-height:1.35; }
+.listingPhotoManager { grid-column:1 / -1; display:grid; gap:12px; padding-top:12px; border-top:1px solid var(--border); }
+.listingPhotoHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.listingPhotoHeader strong, .listingPhotoHeader small { display:block; }
+.listingPhotoHeader small { margin-top:4px; color:var(--muted); line-height:1.35; }
+.listingPhotoEmpty { min-height:110px; display:grid; place-items:center; align-content:center; gap:7px; border:1px dashed var(--border-strong); border-radius:8px; color:var(--muted); }
+.listingPhotoGrid { grid-template-columns:repeat(4, minmax(0, 1fr)); }
 @media (max-width:1050px) { .sandboxSetupGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards, .collectionGrid { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
 @media (max-width:700px) { .sandboxSetupGrid { grid-template-columns:1fr; } }
+@media (max-width:700px) { .listingPhotoGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 
 .rowActions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .rowActions button { padding:7px 9px; }

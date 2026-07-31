@@ -130,4 +130,6 @@ Do not use eBay Standard Envelope for books, DVDs, Blu-rays, or CDs; it is limit
 
 Each eBay synchronization sends quantity `1` as both total ship-to-home availability and availability at the selected inventory location. This preserves stock availability when eBay's replace-inventory endpoint refreshes an existing staged offer.
 
+Listing photos can be managed from either **Photo Queue** or **Listings → Edit → Shipping & Photos**. Both views attach photos to the same inventory copy, preserve primary-first order, and enforce eBay's 12-photo maximum. Stage the offer again after changing photos so eBay receives the updated set.
+
 FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. Actual used-item photos are uploaded to eBay Picture Services when the offer is staged. Books can request an eBay catalog match by ISBN; other used media requires an actual photo. Publishing is always a separate, confirmation-protected action.
