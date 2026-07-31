@@ -113,6 +113,7 @@ For production, set the same variables on the production Convex deployment with 
 
 1. Open **Listings** in FlipTracker.
 2. Enter the private Seller Access Key and select **Load Setup**.
+   On a private computer or phone, select **Remember on this device** before loading. FlipTracker will then restore Seller Connection automatically after refresh. The key is stored only in that browser and must be entered once on each device.
 3. Select **Connect eBay**, sign in to the seller account, and approve access.
 4. Load setup again. Create an inventory location if none exists, select the location and business policies, enter media category IDs, and save.
 5. Scan a single item and leave **Add to eBay draft queue** selected, or use Bulk Intake to create internal eBay drafts for a stack.

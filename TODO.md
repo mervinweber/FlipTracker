@@ -104,6 +104,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [x] Add eBay authorization-code OAuth through a Convex HTTP callback
 - [x] Refresh expired access tokens from the server-only refresh token
 - [x] Protect seller actions with a private beta seller key until user auth exists
+- [x] Optionally remember the beta seller key per device and restore Seller Connection after refresh
 - [x] Select and save eBay inventory location and payment/fulfillment/return policies
 - [x] Create an enabled Production inventory location from Seller Connection without modifying business policies
 - [x] Save default numeric category IDs for DVDs, Blu-rays, books, CDs, games, and other media

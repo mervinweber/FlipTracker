@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, MapPin, Package, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
@@ -261,7 +261,10 @@ export default function ListingsPanel() {
   const [status, setStatus] = useState('All');
   const [platform, setPlatform] = useState('All');
   const [priceChangeReason, setPriceChangeReason] = useState('');
-  const [adminKey, setAdminKey] = useState(() => sessionStorage.getItem('fliptrackerSellerKey') || '');
+  const [adminKey, setAdminKey] = useState(() => localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey') || '');
+  const [rememberSellerKey, setRememberSellerKey] = useState(() => Boolean(localStorage.getItem('fliptrackerRememberedSellerKey')));
+  const autoLoadSellerSetup = useRef(Boolean(localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey')));
+  const autoLoadAttempted = useRef(false);
   const [ebaySetup, setEbaySetup] = useState<EbaySetup | null>(null);
   const [ebaySettings, setEbaySettings] = useState<EbaySettings>(EMPTY_EBAY_SETTINGS);
   const [ebayBusy, setEbayBusy] = useState(false);
@@ -290,6 +293,12 @@ export default function ListingsPanel() {
     const nextQuery = params.toString();
     window.history.replaceState({}, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`);
   }, []);
+
+  useEffect(() => {
+    if (!autoLoadSellerSetup.current || autoLoadAttempted.current || !adminKey) return;
+    autoLoadAttempted.current = true;
+    void unlockEbaySetup();
+  }, [adminKey]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -343,6 +352,18 @@ export default function ListingsPanel() {
     return value.trim() || undefined;
   }
 
+  function rememberSellerAccessKey() {
+    sessionStorage.setItem('fliptrackerSellerKey', adminKey);
+    if (rememberSellerKey) localStorage.setItem('fliptrackerRememberedSellerKey', adminKey);
+    else localStorage.removeItem('fliptrackerRememberedSellerKey');
+  }
+
+  function changeRememberSellerKey(remember: boolean) {
+    setRememberSellerKey(remember);
+    if (remember && adminKey) localStorage.setItem('fliptrackerRememberedSellerKey', adminKey);
+    else localStorage.removeItem('fliptrackerRememberedSellerKey');
+  }
+
   function applyEbaySetup(setup: EbaySetup) {
     setEbaySetup(setup);
     setEbaySettings({
@@ -368,7 +389,7 @@ export default function ListingsPanel() {
     setEbayNotice('');
     try {
       const setup = await loadEbaySetup({ adminKey }) as EbaySetup;
-      sessionStorage.setItem('fliptrackerSellerKey', adminKey);
+      rememberSellerAccessKey();
       applyEbaySetup(setup);
       if (setup.warning) setEbayError(setup.warning);
     } catch (error) {
@@ -384,7 +405,7 @@ export default function ListingsPanel() {
     setEbayBusy(true);
     setEbayError('');
     try {
-      sessionStorage.setItem('fliptrackerSellerKey', adminKey);
+      rememberSellerAccessKey();
       const result = await beginEbayOauth({ adminKey, returnUrl: `${window.location.origin}${window.location.pathname}${window.location.search}#listings` });
       window.location.assign(result.authorizationUrl);
     } catch (error) {
@@ -760,7 +781,10 @@ export default function ListingsPanel() {
           {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Connected · {ebaySetup.environment}</span> : <span className="statusPill"><KeyRound size={14}/> Seller only</span>}
         </div>
         <div className="ebayUnlockRow">
-          <label>Seller Access Key<input type="password" autoComplete="off" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} placeholder="Enter the private beta seller key"/></label>
+          <div className="sellerKeyField">
+            <label>Seller Access Key<input type="password" autoComplete="off" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} placeholder="Enter the private beta seller key"/></label>
+            <label className="rememberSellerKey" title="Stores the beta seller key in this browser only"><input type="checkbox" checked={rememberSellerKey} onChange={(event) => changeRememberSellerKey(event.target.checked)}/> Remember on this device</label>
+          </div>
           <button className="secondary" disabled={!adminKey || ebayBusy} onClick={unlockEbaySetup}><Settings size={16}/> {ebayBusy ? 'Loading...' : 'Load Setup'}</button>
           <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> {ebaySetup?.connected ? 'Reconnect eBay' : 'Connect eBay'}</button>
         </div>
