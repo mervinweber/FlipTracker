@@ -109,6 +109,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [x] Create an enabled Production inventory location from Seller Connection without modifying business policies
 - [x] Save default numeric category IDs for DVDs, Blu-rays, books, CDs, games, and other media
 - [x] Create or update the SKU-backed eBay inventory item
+- [x] Map resale conditions to current Inventory API enums and retain detailed eBay validation errors
 - [x] Create or update an unpublished eBay offer and save its offer ID/status/error
 - [x] Keep eBay publishing absent so a scan cannot accidentally create a live listing
 - [x] Configure eBay Sandbox credentials and complete initial owner consent

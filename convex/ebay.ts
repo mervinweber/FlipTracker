@@ -100,8 +100,25 @@ async function responseBody(response: Response) {
 
 function ebayError(body: unknown, status: number) {
   if (body && typeof body === "object") {
-    const record = body as { errors?: Array<{ message?: string; longMessage?: string }>; error_description?: string };
-    const detail = record.errors?.map((error) => error.longMessage || error.message).filter(Boolean).join(" ");
+    const record = body as {
+      errors?: Array<{
+        errorId?: number;
+        message?: string;
+        longMessage?: string;
+        parameters?: Array<{ name?: string; value?: string }>;
+      }>;
+      error_description?: string;
+    };
+    const detail = record.errors?.map((error) => {
+      const message = error.longMessage || error.message;
+      const parameters = error.parameters
+        ?.map((parameter) => [parameter.name, parameter.value].filter(Boolean).join("="))
+        .filter(Boolean)
+        .join(", ");
+      return [message, error.errorId ? `(eBay ${error.errorId})` : undefined, parameters ? `[${parameters}]` : undefined]
+        .filter(Boolean)
+        .join(" ");
+    }).filter(Boolean).join(" ");
     if (detail) return detail;
     if (record.error_description) return record.error_description;
   }
@@ -297,10 +314,10 @@ function conditionForEbay(condition?: string) {
   const normalized = condition?.trim().toLowerCase() ?? "";
   if (["new", "brand new", "sealed"].includes(normalized)) return "NEW";
   if (normalized.includes("like new")) return "LIKE_NEW";
-  if (normalized.includes("very good")) return "VERY_GOOD";
-  if (normalized.includes("acceptable")) return "ACCEPTABLE";
+  if (normalized.includes("very good")) return "USED_VERY_GOOD";
+  if (normalized.includes("acceptable")) return "USED_ACCEPTABLE";
   if (normalized.includes("parts")) return "FOR_PARTS_OR_NOT_WORKING";
-  return "GOOD";
+  return "USED_GOOD";
 }
 
 function categoryForAsset(
@@ -949,6 +966,9 @@ export const createUnpublishedOffer = action({
         condition: ebayCondition,
         product,
       };
+      if (!["NEW", "LIKE_NEW"].includes(ebayCondition)) {
+        inventoryItem.conditionDescription = `${listing.condition || asset.condition || "Used"} pre-owned condition. See the listing description for item details.`.slice(0, 1000);
+      }
       if (listing.packageWeightOz !== undefined) {
         if (!Number.isFinite(listing.packageWeightOz) || listing.packageWeightOz <= 0) throw new Error("Package weight must be above zero.");
         const packageWeightAndSize: Record<string, unknown> = {
@@ -970,10 +990,14 @@ export const createUnpublishedOffer = action({
         inventoryItem.packageWeightAndSize = packageWeightAndSize;
       }
 
-      await ebayFetch(accessToken, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
-        method: "PUT",
-        body: JSON.stringify(inventoryItem),
-      });
+      try {
+        await ebayFetch(accessToken, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
+          method: "PUT",
+          body: JSON.stringify(inventoryItem),
+        });
+      } catch (error) {
+        throw new Error(`eBay inventory item validation failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+      }
 
       const offer: Record<string, unknown> = {
         sku,
@@ -994,15 +1018,24 @@ export const createUnpublishedOffer = action({
       const updated = Boolean(offerId);
       if (offerId) {
         const { sku: _sku, marketplaceId: _marketplaceId, format: _format, ...offerPatch } = offer;
-        await ebayFetch(accessToken, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, {
-          method: "PUT",
-          body: JSON.stringify(offerPatch),
-        });
+        try {
+          await ebayFetch(accessToken, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, {
+            method: "PUT",
+            body: JSON.stringify(offerPatch),
+          });
+        } catch (error) {
+          throw new Error(`eBay offer validation failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+        }
       } else {
-        const result = await ebayFetch(accessToken, "/sell/inventory/v1/offer", {
-          method: "POST",
-          body: JSON.stringify(offer),
-        }) as { offerId?: string };
+        let result: { offerId?: string };
+        try {
+          result = await ebayFetch(accessToken, "/sell/inventory/v1/offer", {
+            method: "POST",
+            body: JSON.stringify(offer),
+          }) as { offerId?: string };
+        } catch (error) {
+          throw new Error(`eBay offer validation failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+        }
         offerId = result?.offerId;
       }
       if (!offerId) throw new Error("eBay did not return an offer ID.");
