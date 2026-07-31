@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, MapPin, Package, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -362,6 +362,17 @@ export default function ListingsPanel() {
     setRememberSellerKey(remember);
     if (remember && adminKey) localStorage.setItem('fliptrackerRememberedSellerKey', adminKey);
     else localStorage.removeItem('fliptrackerRememberedSellerKey');
+  }
+
+  function forgetSellerDevice() {
+    sessionStorage.removeItem('fliptrackerSellerKey');
+    localStorage.removeItem('fliptrackerRememberedSellerKey');
+    setAdminKey('');
+    setRememberSellerKey(false);
+    setEbaySetup(null);
+    setEbaySettings(EMPTY_EBAY_SETTINGS);
+    setEbayError('');
+    setEbayNotice('Seller access was removed from this device. The eBay authorization stored in Convex was not revoked.');
   }
 
   function applyEbaySetup(setup: EbaySetup) {
@@ -780,14 +791,16 @@ export default function ListingsPanel() {
           <div><h2>eBay Seller Connection</h2><p>Authorize one seller account, choose its policies, then create unpublished offers from FlipTracker drafts.</p></div>
           {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Connected · {ebaySetup.environment}</span> : <span className="statusPill"><KeyRound size={14}/> Seller only</span>}
         </div>
-        <div className="ebayUnlockRow">
-          <div className="sellerKeyField">
-            <label>Seller Access Key<input type="password" autoComplete="off" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} placeholder="Enter the private beta seller key"/></label>
-            <label className="rememberSellerKey" title="Stores the beta seller key in this browser only"><input type="checkbox" checked={rememberSellerKey} onChange={(event) => changeRememberSellerKey(event.target.checked)}/> Remember on this device</label>
+        {!ebaySetup?.connected ? (
+          <div className="ebayUnlockRow">
+            <div className="sellerKeyField">
+              <label>Seller Access Key<input type="password" autoComplete="off" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} placeholder="Enter the private beta seller key"/></label>
+              <label className="rememberSellerKey" title="Stores the beta seller key in this browser only"><input type="checkbox" checked={rememberSellerKey} onChange={(event) => changeRememberSellerKey(event.target.checked)}/> Remember on this device</label>
+            </div>
+            <button className="secondary" disabled={!adminKey || ebayBusy} onClick={unlockEbaySetup}><Settings size={16}/> {ebayBusy ? 'Loading...' : 'Load Setup'}</button>
+            <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> Connect eBay</button>
           </div>
-          <button className="secondary" disabled={!adminKey || ebayBusy} onClick={unlockEbaySetup}><Settings size={16}/> {ebayBusy ? 'Loading...' : 'Load Setup'}</button>
-          <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> {ebaySetup?.connected ? 'Reconnect eBay' : 'Connect eBay'}</button>
-        </div>
+        ) : null}
         {ebaySetup?.connected ? (
           <div className="ebaySettingsGrid">
             <label>Inventory Location<select value={ebaySettings.merchantLocationKey} onChange={(event) => setEbaySettings((current) => ({ ...current, merchantLocationKey: event.target.value }))}><option value="">Choose location</option>{ebaySetup.locations.map((location) => <option key={location.key} value={location.key}>{location.name}</option>)}</select></label>
@@ -800,7 +813,7 @@ export default function ListingsPanel() {
             <label>CD Category ID<input inputMode="numeric" value={ebaySettings.cdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, cdCategoryId: event.target.value }))}/></label>
             <label>Game Category ID<input inputMode="numeric" value={ebaySettings.gameCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, gameCategoryId: event.target.value }))}/></label>
             <label>Other Media Category ID<input inputMode="numeric" value={ebaySettings.otherCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, otherCategoryId: event.target.value }))}/></label>
-            <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button></div>
+            <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button><button className="secondary forgetDeviceButton" disabled={ebayBusy} onClick={forgetSellerDevice}><LogOut size={16}/> Forget Device</button></div>
           </div>
         ) : null}
         {ebaySetup?.connected && ebaySetup.environment === 'production' && !ebaySetup.locations.length ? (
