@@ -36,7 +36,11 @@ The older boolean `complete` and `manual` fields remain for existing game rows. 
 Assets can store first-pass eBay listing preparation fields: `listingRecommendation`, `ebayTitle`, `ebayDescription`, `ebayCategory`, `ebayCondition`, `ebayItemSpecifics`, `ebayPrice`, and `ebayShipping`. These are generated locally from the review form and recalculated when title, UPC/barcode, edition, condition, completeness, or price inputs change. Actual eBay draft creation is intentionally deferred.
 
 ### Photos
-The first barcode workflow stores a compressed `photoDataUrl` directly on the asset for fast PWA iteration. This should move to Convex file storage before heavy photo usage or production multi-user release.
+New photo captures are stored in Convex file storage and represented by ordered `assetPhotos` records. The first position is the primary image. Legacy assets can still contain a compressed `photoDataUrl`; that compatibility field remains until existing images are migrated.
+
+## assetPhotos
+
+One actual-item photo attached to an asset. It stores the Convex storage identifier, original filename/content type, display order, and optional cached eBay Picture Services URL/upload timestamp. Each asset can hold up to 12 stored photos.
 
 ## marketplaceListings
 

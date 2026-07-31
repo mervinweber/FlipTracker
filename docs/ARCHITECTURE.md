@@ -52,6 +52,16 @@ USB scanner -> focused keyboard input -> serial metadata queue -> atomic Convex 
 
 Each scan creates one physical `assets` record. Duplicate UPCs are allowed and receive separate copy numbers and SKUs. The asset and optional `marketplaceListings` draft are written in one mutation so partial intake records are not left behind.
 
+## Cross-Device Photo Workflow
+
+```text
+Desktop USB intake -> internal eBay draft -> phone Photos queue -> SKU/UPC match -> Convex storage -> eBay Picture Services
+```
+
+`assetPhotos` stores ordered references to Convex file storage, keeping each physical copy's photos separate even when several assets share a UPC. The mobile queue finds Draft/Pending eBay listings that require actual photos. SKU is the preferred identifier; UPC lookup can return multiple copies and requires the user to choose by SKU and bin.
+
+The browser resizes new captures before requesting a Convex upload URL. Users can capture or select up to 12 photos, choose the primary image, delete mistakes, and move directly to the next queued item. During eBay draft creation, stored images are uploaded in order and the resulting eBay URLs are cached for safe retries. Legacy inline `photoDataUrl` records remain readable until a separate migration removes them.
+
 ## eBay Seller Workflow
 
 ```text
@@ -60,7 +70,7 @@ Internal eBay draft -> Ready for Pricing -> Pricing approval -> Ready for eBay -
 
 OAuth authorization returns through `convex/http.ts`. Refresh and access tokens are stored only in `ebayConnections`; the browser receives connection status and policy names, never tokens. `ebaySettings` stores the selected marketplace, inventory location, payment/fulfillment/return policies, and per-format category defaults.
 
-Queue pricing is an explicit review action. It writes the approved current/listed price, records price history, and marks the internal draft Ready for eBay; blank rows remain Ready for Pricing. A bounded batch then writes or refreshes each SKU-backed Inventory API item and creates or updates its unpublished offer, continuing past individual failures. The inventory payload includes the selected fulfillment policy and reviewed package measurements. New/sealed items may request an eBay catalog match by GTIN. Used items must provide an actual captured photo, which the action uploads to eBay Picture Services and fingerprints for safe retries. Metadata cover art is never submitted as a used-item listing photo. The publish endpoint is intentionally absent. The listing stores the returned offer ID, sync status, timestamp, image source, and last error. A temporary `FLIPTRACKER_ADMIN_KEY` gate protects seller actions until full application authentication and owner scoping replace it.
+Queue pricing is an explicit review action. It writes the approved current/listed price, records price history, and marks the internal draft Ready for eBay; blank rows remain Ready for Pricing. A bounded batch then writes or refreshes each SKU-backed Inventory API item and creates or updates its unpublished offer, continuing past individual failures. The inventory payload includes the selected fulfillment policy and reviewed package measurements. Eligible new/sealed media and books may request an eBay catalog match by GTIN. Used discs and games must provide actual captured photos, which the action uploads to eBay Picture Services and fingerprints for safe retries. The publish endpoint is intentionally absent. The listing stores the returned offer ID, sync status, timestamp, image source, and last error. A temporary `FLIPTRACKER_ADMIN_KEY` gate protects seller actions until full application authentication and owner scoping replace it.
 
 ## Security Boundary
 

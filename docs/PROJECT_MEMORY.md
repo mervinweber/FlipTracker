@@ -23,6 +23,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 - eBay drafts support per-listing fulfillment policies plus single-media, small-stack, media-box, and custom package measurements. New/sealed media can request an eBay catalog image through UPC/EAN/ISBN matching. Used items require an actual captured photo, uploaded to eBay Picture Services; metadata cover art is not submitted for used listings.
 - Because full FlipTracker user authentication is still open, sensitive eBay actions are temporarily gated by a private `FLIPTRACKER_ADMIN_KEY`. This is a single-seller beta measure, not a multi-user authorization model.
 - USB scanner Bulk Intake added: serial barcode queue, reusable stack defaults, duplicate-copy tracking, unique SKU generation, low-confidence review rows, and optional automatic internal eBay drafts.
+- Cross-device photo workflow added: scan inventory at the computer, open Photos on a phone, identify the physical copy by SKU or UPC/bin, capture up to 12 ordered photos in Convex storage, choose a primary image, and advance through drafts needing photos.
+- eBay draft creation uploads the complete stored photo set in order and caches eBay Picture Services URLs for retries. Legacy inline photos remain compatible pending migration.
 
 - Dedicated Sourcing view added with manual sold observations, active/sold counts, shipping-inclusive median and average, sell-through proxy, estimated days to sell, rarity, liquidity, expected profit, ROI, confidence, and Buy / Maybe / Pass.
 - Six illustrative sourcing records cover common liquid, common low-margin, uncommon liquid, niche low-supply, and rare low-confidence decisions. They are demo data, not live eBay market results.
@@ -109,7 +111,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Production deployment and auth strategy are still open.
 - Current Convex functions are not authenticated or owner-scoped. Do not share a public beta until this is fixed.
 - eBay seller writes are protected by a temporary seller key, but the rest of the app remains unscoped. Replace this gate with real authenticated ownership before adding beta users.
-- Captured photos are still stored inline on the asset rather than in Convex file storage. They are uploaded to eBay Picture Services when a used-item offer is created.
+- New captures use Convex file storage and ordered `assetPhotos` records. Existing legacy inline photos still need migration.
 - The production build passes with a bundle-size warning; scanner and listing code should be split before broader release.
 - `xlsx` currently has a high-severity npm advisory with no available upstream fix. Excel remains required, so beta imports should be trusted-only while a replacement or isolation strategy is evaluated.
 
@@ -122,5 +124,5 @@ Convex is the current application backend. Excel import/export remains a portabi
 5. Add saved eBay research/value history display and richer comp fields.
 6. Configure and smoke test the eBay Sandbox seller connection with one DVD and one book.
 7. Pick and implement auth.
-8. Move source photos to Convex storage and add multi-photo review before enabling publish.
+8. Migrate legacy inline photos, then add final photo validation before enabling publish.
 9. Add richer game metadata: completeness, region, platform variants.

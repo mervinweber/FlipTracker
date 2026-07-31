@@ -10,12 +10,14 @@ import ListingsPanel from './components/ListingsPanel';
 import QuickGuide from './components/QuickGuide';
 import BulkIntakePanel from './components/BulkIntakePanel';
 import SourcingPanel from './components/SourcingPanel';
+import PhotoQueuePanel from './components/PhotoQueuePanel';
 
-type AppView = 'Inventory' | 'Listings' | 'Bulk' | 'Sourcing' | 'Guide';
+type AppView = 'Inventory' | 'Listings' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
 
 function viewFromHash(): AppView {
   if (window.location.hash.toLowerCase() === '#guide') return 'Guide';
   if (window.location.hash.toLowerCase() === '#sourcing') return 'Sourcing';
+  if (window.location.hash.toLowerCase() === '#photos') return 'Photos';
   if (window.location.hash.toLowerCase() === '#bulk') return 'Bulk';
   if (window.location.hash.toLowerCase() === '#listings') return 'Listings';
   return 'Inventory';
@@ -755,6 +757,7 @@ export default function App() {
         <div className="actions">
           <button onClick={() => { setCreateDraftAfterSave(false); setScannerOpen(true); }}><Barcode size={16}/> Scan Media</button>
           <button onClick={() => changeView('Bulk')}><Keyboard size={16}/> Scan Stack</button>
+          <button onClick={() => changeView('Photos')}><Camera size={16}/> Add Photos</button>
           <button onClick={() => { setCreateDraftAfterSave(false); setEditing(blankAsset()); }}><Plus size={16}/> Add Item</button>
           <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Collection</button>
           <label className="button"><Upload size={16}/> Import Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => onImport(e.target.files?.[0])}/></label>
@@ -766,6 +769,7 @@ export default function App() {
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
         <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
+        <button className={activeView === 'Photos' ? 'active' : 'secondary'} onClick={() => changeView('Photos')}><Camera size={17}/> Photos</button>
         <button className={activeView === 'Sourcing' ? 'active' : 'secondary'} onClick={() => changeView('Sourcing')}><Gauge size={17}/> Sourcing</button>
         <button className={activeView === 'Guide' ? 'active' : 'secondary'} onClick={() => changeView('Guide')}><BookOpen size={17}/> Quick Guide</button>
       </nav>
@@ -827,7 +831,7 @@ export default function App() {
             </table>
           </div>
         )}
-      </section></> : activeView === 'Listings' ? <ListingsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
+      </section></> : activeView === 'Listings' ? <ListingsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
 
       {scannerOpen ? (
         <div className="modalBackdrop">

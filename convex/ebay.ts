@@ -226,8 +226,7 @@ function dataUrlFile(dataUrl: string) {
   return { blob: new Blob([bytes], { type: match[1] }), filename: `fliptracker-item.${extension}` };
 }
 
-async function uploadActualPhoto(accessToken: string, dataUrl: string) {
-  const { blob, filename } = dataUrlFile(dataUrl);
+async function uploadPhotoBlob(accessToken: string, blob: Blob, filename: string) {
   const form = new FormData();
   form.append("image", blob, filename);
   const response = await fetch(`${endpoints().media}/commerce/media/v1_beta/image/create_image_from_file`, {
@@ -245,6 +244,11 @@ async function uploadActualPhoto(accessToken: string, dataUrl: string) {
   const imageUrl = (body as { imageUrl?: string } | undefined)?.imageUrl;
   if (!imageUrl) throw new Error("eBay accepted the photo but did not return its Picture Services URL.");
   return imageUrl;
+}
+
+async function uploadActualPhoto(accessToken: string, dataUrl: string) {
+  const { blob, filename } = dataUrlFile(dataUrl);
+  return await uploadPhotoBlob(accessToken, blob, filename);
 }
 
 async function refreshAccessToken(ctx: ActionCtx) {
@@ -357,7 +361,8 @@ export const getDraftBundle = internalQuery({
     const listing = await ctx.db.get(args.listingId);
     if (!listing) return null;
     const asset = await ctx.db.get(listing.assetId);
-    return asset ? { listing, asset } : null;
+    const photos = asset ? await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", asset._id)).collect() : [];
+    return asset ? { listing, asset, photos: photos.sort((a, b) => a.position - b.position) } : null;
   },
 });
 
@@ -844,19 +849,38 @@ export const createUnpublishedOffer = action({
           if (!barcode) throw new Error("A UPC, EAN, or ISBN is required for eBay catalog photo matching.");
         }
       } else {
-        if (!asset.photoDataUrl) throw new Error("Used items require an actual item photo before they can be sent to eBay.");
-        imageFingerprint = await sha256(asset.photoDataUrl);
-        imageUrl = listing.ebayImageFingerprint === imageFingerprint ? listing.ebayImageUrl : undefined;
-        if (!imageUrl) {
-          imageUrl = await uploadActualPhoto(accessToken, asset.photoDataUrl);
-          await ctx.runMutation(internal.ebay.saveUploadedImage, {
-            listingId: listing._id,
-            imageUrl,
-            imageFingerprint,
-          });
+        if (bundle.photos.length) {
+          const imageUrls: string[] = [];
+          for (const [index, photo] of bundle.photos.slice(0, 12).entries()) {
+            let uploadedUrl = photo.ebayImageUrl;
+            if (!uploadedUrl) {
+              const blob = await ctx.storage.get(photo.storageId);
+              if (!blob) throw new Error(`Photo ${index + 1} is missing from storage. Remove it and capture it again.`);
+              uploadedUrl = await uploadPhotoBlob(accessToken, blob, photo.filename || `fliptracker-${index + 1}.jpg`);
+              await ctx.runMutation(internal.photos.markEbayUploaded, { photoId: photo._id, ebayImageUrl: uploadedUrl });
+            }
+            imageUrls.push(uploadedUrl);
+          }
+          if (!imageUrls.length) throw new Error("Add at least one actual item photo before sending this draft.");
+          product.imageUrls = imageUrls;
+          imageUrl = imageUrls[0];
+          imageFingerprint = await sha256(bundle.photos.map((photo) => `${photo._id}:${photo.storageId}`).join("|"));
+          imageSource = `Actual item photos (${imageUrls.length})`;
+        } else {
+          if (!asset.photoDataUrl) throw new Error("Used items require an actual item photo before they can be sent to eBay.");
+          imageFingerprint = await sha256(asset.photoDataUrl);
+          imageUrl = listing.ebayImageFingerprint === imageFingerprint ? listing.ebayImageUrl : undefined;
+          if (!imageUrl) {
+            imageUrl = await uploadActualPhoto(accessToken, asset.photoDataUrl);
+            await ctx.runMutation(internal.ebay.saveUploadedImage, {
+              listingId: listing._id,
+              imageUrl,
+              imageFingerprint,
+            });
+          }
+          product.imageUrls = [imageUrl];
+          imageSource = "Actual item photo (legacy)";
         }
-        product.imageUrls = [imageUrl];
-        imageSource = "Actual item photo";
       }
 
       const inventoryItem: Record<string, unknown> = {

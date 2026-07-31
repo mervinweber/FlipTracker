@@ -81,14 +81,18 @@ export const list = query({
     return await Promise.all(
       listings.map(async (listing) => {
         const asset = await ctx.db.get(listing.assetId);
+        const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", listing.assetId)).collect();
+        const primaryPhoto = photos.sort((a, b) => a.position - b.position)[0];
+        const primaryPhotoUrl = primaryPhoto ? await ctx.storage.getUrl(primaryPhoto.storageId) : undefined;
         return {
           ...listing,
           assetTitle: asset?.title ?? "Missing inventory item",
           assetType: asset?.type,
           purchasePrice: asset?.purchasePrice,
           storageLocation: asset?.storageLocation,
-          photoUrl: asset?.photoDataUrl || asset?.coverImageUrl,
-          hasActualPhoto: Boolean(asset?.photoDataUrl),
+          photoUrl: primaryPhotoUrl || asset?.photoDataUrl || asset?.coverImageUrl,
+          hasActualPhoto: Boolean(primaryPhoto || asset?.photoDataUrl),
+          actualPhotoCount: photos.length + (asset?.photoDataUrl ? 1 : 0),
           hasCatalogIdentifier: Boolean(asset?.upc || asset?.barcode),
           assetBarcode: asset?.upc || asset?.barcode,
           mediaFormat: asset?.mediaFormat,

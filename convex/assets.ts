@@ -180,7 +180,14 @@ export const update = mutation({
 
 export const remove = mutation({
   args: { id: v.id("assets") },
-  handler: async (ctx, args) => { await ctx.db.delete(args.id); },
+  handler: async (ctx, args) => {
+    const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", args.id)).collect();
+    for (const photo of photos) {
+      await ctx.storage.delete(photo.storageId);
+      await ctx.db.delete(photo._id);
+    }
+    await ctx.db.delete(args.id);
+  },
 });
 
 export const importMany = mutation({

@@ -74,6 +74,17 @@ export default defineSchema({
     .index("by_collection", ["collectionId"])
     .searchIndex("search_title", { searchField: "title", filterFields: ["type", "console", "status"] }),
 
+  assetPhotos: defineTable({
+    assetId: v.id("assets"),
+    storageId: v.id("_storage"),
+    filename: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+    position: v.number(),
+    ebayImageUrl: v.optional(v.string()),
+    ebayUploadedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_assetId", ["assetId"]),
+
   sales: defineTable({
     assetId: v.id("assets"),
     platform: v.optional(v.string()),
@@ -132,6 +143,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_assetId", ["assetId"])
+    .index("by_sku", ["sku"])
     .index("by_status", ["status"])
     .index("by_platform", ["platform"])
     .index("by_platform_and_status", ["platform", "status"])

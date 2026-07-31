@@ -47,6 +47,10 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Allow metadata stock covers for books while retaining actual-photo requirements for used discs and games
 - [x] Queue a reviewed single barcode scan directly as an internal eBay draft
 - [x] Add guided Sandbox inventory-location and business-policy provisioning
+- [x] Add a mobile photo queue that finds existing physical copies by SKU or UPC
+- [x] Store up to 12 ordered item photos per asset in Convex file storage
+- [x] Select a primary photo, remove mistakes, and advance to the next queued draft
+- [x] Upload the stored photo set to eBay Picture Services and reuse cached eBay URLs
 
 ## Beta Launch Blockers - Engineering
 
@@ -62,7 +66,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Reject unauthenticated reads and writes server-side
 - [ ] Add a sign-in, sign-out, loading, and access-denied UI
 - [ ] Test two accounts and confirm neither can access the other's records
-- [ ] Move captured photos from inline data URLs to Convex file storage
+- [ ] Migrate legacy inline captured photos to Convex file storage
 - [ ] Add friendly UI error handling for failed mutations/imports
 - [ ] Add duplicate protection for repeated inventory/listing imports
 - [ ] Add automated tests for listing price history and sold transitions
@@ -111,7 +115,8 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Smoke test one DVD and one book against an eBay Sandbox seller
 - [ ] Configure Production credentials only after Sandbox succeeds
 - [x] Upload captured item photos directly to eBay Picture Services for unpublished offers
-- [ ] Move captured photos from inline data URLs to Convex storage for durable app-side photo management
+- [x] Store new multi-photo captures in Convex storage for durable app-side photo management
+- [ ] Migrate existing inline photos to Convex storage
 - [ ] Add offer validation and listing-fee preview
 - [x] Add bounded bulk upload for selected drafts with retryable per-item failures
 - [ ] Add a separately confirmed publish action after user auth, photo upload, and validation are complete

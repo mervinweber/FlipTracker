@@ -15,6 +15,7 @@ import type * as http from "../http.js";
 import type * as intake from "../intake.js";
 import type * as listings from "../listings.js";
 import type * as mediaLookup from "../mediaLookup.js";
+import type * as photos from "../photos.js";
 import type * as reports from "../reports.js";
 import type * as research from "../research.js";
 import type * as sourcing from "../sourcing.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   intake: typeof intake;
   listings: typeof listings;
   mediaLookup: typeof mediaLookup;
+  photos: typeof photos;
   reports: typeof reports;
   research: typeof research;
   sourcing: typeof sourcing;

@@ -146,7 +146,9 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 
 - [ ] Add authentication and user-owned data
 - [ ] Backfill existing records to the first owner
-- [ ] Move photos to Convex file storage
+- [x] Store new multi-photo captures in Convex file storage
+- [x] Add a mobile SKU/UPC photo queue for desktop-scanned inventory
+- [ ] Migrate legacy inline asset photos to Convex file storage
 - [ ] Add mutation/import error states and duplicate protection
 - [ ] Add listing lifecycle tests
 - [ ] Code-split the scanner and listing editor
@@ -173,7 +175,9 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Add guided Sandbox location and business-policy setup
 - [x] Queue a reviewed single barcode scan directly as an internal eBay draft
 - [x] Add bounded active-listing fair-value lookup with explicit approval
-- [ ] Move source photos to Convex storage instead of inline asset data
+- [x] Store new source photos in Convex storage with ordering and a primary image
+- [x] Upload the complete stored photo set to eBay and cache uploaded URLs
+- [ ] Migrate legacy inline source photos to Convex storage
 - [ ] Add an eBay offer validation/fee preview screen
 - [x] Add bounded bulk offer creation with per-item failure handling
 - [ ] Add a separately confirmed publish action only after auth and photo validation

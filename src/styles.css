@@ -277,3 +277,50 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 @media (max-width:620px) { .guideHeader { flex-direction:column; } .guideContent > section { grid-template-columns:1fr; } }
 @media (max-width:800px) { .analysisSummary, .detailColumns, .compGrid { grid-template-columns:1fr 1fr; } }
 @media (max-width:560px) { .analysisSummary, .detailColumns, .compGrid { grid-template-columns:1fr; } }
+
+.photoQueuePage { display:grid; gap:18px; }
+.photoQueueHeader { align-items:center; }
+.photoQueueCount { display:grid; grid-template-columns:auto auto; gap:0 8px; align-items:center; min-width:140px; padding:12px 14px; border-left:3px solid var(--warning); background:var(--surface); }
+.photoQueueCount svg { grid-row:1 / 3; color:#fbbf24; }
+.photoQueueCount strong { font-size:24px; line-height:1; }
+.photoQueueCount span { color:var(--muted); font-size:12px; font-weight:800; }
+.photoLookupBand { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px; align-items:center; padding:14px; border:1px solid var(--border); border-radius:var(--radius-panel); background:var(--surface); }
+.photoLookupForm { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:9px; border:1px solid var(--border-strong); border-radius:var(--radius); padding-left:12px; background:#020617; }
+.photoLookupForm svg { color:#cbd5e1; }
+.photoLookupForm input { min-width:0; border:0; border-radius:0; outline:0; }
+.photoLookupForm button { border-radius:0 var(--radius) var(--radius) 0; }
+.photoQueueLayout { display:grid; grid-template-columns:minmax(260px, 330px) minmax(0, 1fr); gap:18px; align-items:start; }
+.photoQueueList { display:grid; gap:8px; max-height:72vh; overflow:auto; padding:14px; }
+.photoQueueList .panelHeader { margin-bottom:4px; }
+.photoQueueItem, .photoMatchRow { width:100%; justify-content:space-between; text-align:left; border:1px solid var(--border); background:var(--surface-3); }
+.photoQueueItem { display:grid; gap:8px; padding:12px; }
+.photoQueueItem.active { border-color:#60a5fa; background:rgba(47,111,237,.16); }
+.photoQueueItem strong, .photoQueueItem small, .photoMatchRow strong, .photoMatchRow small { display:block; }
+.photoQueueItem small, .photoMatchRow small { margin-top:4px; color:var(--muted); line-height:1.35; }
+.photoQueueItem > span { display:flex; align-items:center; gap:4px; color:#93c5fd; font-size:11px; }
+.photoMatches { display:grid; gap:8px; }
+.photoMatchRow > div { min-width:0; }
+.photoWorkspace { min-height:480px; }
+.photoEmpty { min-height:420px; display:grid; place-items:center; align-content:center; text-align:center; }
+.photoEmpty svg { color:#64748b; }
+.photoEmpty h2 { margin-top:12px; }
+.photoEmpty p { max-width:460px; }
+.photoTargetHeader { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; padding-bottom:16px; border-bottom:1px solid var(--border); }
+.photoTargetHeader h2 { font-size:24px; }
+.photoTargetHeader p { margin:6px 0; }
+.photoTargetMeta { display:flex; flex-wrap:wrap; gap:6px; }
+.photoTargetMeta span { display:inline-flex; align-items:center; gap:4px; padding:4px 7px; border:1px solid var(--border); border-radius:5px; color:#cbd5e1; font-size:11px; font-weight:800; }
+.photoCaptureActions { display:flex; gap:10px; margin:16px 0; }
+.photoCaptureButton { flex:1 1 180px; min-height:50px; justify-content:center; }
+.photoGrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
+.photoTile { min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
+.photoTile.primary { border-color:#fbbf24; }
+.photoTile img, .photoTile .previewPlaceholder { width:100%; aspect-ratio:4 / 3; object-fit:cover; border:0; border-radius:0; }
+.photoTileBar { min-height:42px; display:flex; justify-content:space-between; gap:6px; align-items:center; padding:6px 8px; }
+.photoTileBar > span { display:flex; align-items:center; gap:4px; color:#fde68a; font-size:11px; font-weight:900; }
+.photoTileBar > div { display:flex; gap:5px; }
+.photoTileBar .iconButton { width:30px; height:30px; }
+.photoWorkflowFooter { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-top:18px; padding-top:14px; border-top:1px solid var(--border); }
+.photoWorkflowFooter p { margin:0; font-size:12px; }
+@media (max-width:850px) { .photoQueueLayout { grid-template-columns:1fr; } .photoQueueList { max-height:280px; } .photoGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media (max-width:560px) { .photoLookupBand { grid-template-columns:1fr; } .photoLookupBand > button { justify-content:center; } .photoQueueHeader { align-items:stretch; } .photoQueueCount { width:100%; box-sizing:border-box; } .photoCaptureActions, .photoWorkflowFooter { flex-direction:column; align-items:stretch; } .photoGrid { grid-template-columns:1fr 1fr; } .photoTargetHeader { flex-direction:column; } }
