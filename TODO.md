@@ -117,6 +117,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Smoke test one DVD and one book against an eBay Sandbox seller
 - [ ] Configure Production credentials only after Sandbox succeeds
 - [x] Upload captured item photos directly to eBay Picture Services for unpublished offers
+- [x] Default scanned books with metadata covers to the stock-cover workflow even when their format is paperback or hardcover
 - [x] Store new multi-photo captures in Convex storage for durable app-side photo management
 - [ ] Migrate existing inline photos to Convex storage
 - [ ] Add offer validation and listing-fee preview

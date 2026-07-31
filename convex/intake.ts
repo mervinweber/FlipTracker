@@ -85,8 +85,9 @@ export const createScannedItem = mutation({
     const prefix = args.skuPrefix.trim().replace(/[^A-Za-z0-9-]/g, "").slice(0, 18) || "FT";
     const sku = `${prefix}-${String(assetId).slice(-8).toUpperCase()}`;
     if (!args.createDraft) return { assetId, listingId: null, sku, copyNumber: existingCopies.length + 1 };
-    const mediaFormat = (args.mediaFormat || args.type).trim().toLowerCase();
-    const isSingleMediaCase = ["dvd", "blu-ray", "blu ray", "cd"].includes(mediaFormat);
+    const mediaIdentity = `${args.type} ${args.mediaFormat ?? ""}`.trim().toLowerCase();
+    const isSingleMediaCase = ["dvd", "blu-ray", "blu ray", "cd"].some((format) => mediaIdentity.includes(format));
+    const isBookWithCover = mediaIdentity.includes("book") && Boolean(args.coverImageUrl);
 
     const listingId = await ctx.db.insert("marketplaceListings", {
       assetId,
@@ -100,7 +101,7 @@ export const createScannedItem = mutation({
       itemSpecifics: args.ebayItemSpecifics,
       imageMode: args.condition.trim().toLowerCase() === "new"
         || args.completeness.trim().toLowerCase() === "sealed"
-        || (mediaFormat.includes("book") && Boolean(args.coverImageUrl))
+        || isBookWithCover
         ? "eBay Catalog"
         : "Actual Item Photo",
       shippingPreset: isSingleMediaCase ? "Single Media Mailer" : undefined,
