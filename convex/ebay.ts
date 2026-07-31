@@ -504,10 +504,30 @@ export const markDraftCreated = internalMutation({
       ebayImageUrl: args.imageUrl,
       ebayImageFingerprint: args.imageFingerprint,
       ebayImageSource: args.imageSource,
-      ebayDraftStatus: "Unpublished offer",
+      ebayDraftStatus: "Staged with eBay",
       ebayDraftCreatedAt: Date.now(),
       ebayLastError: undefined,
-      pricingStatus: "eBay Draft Created",
+      pricingStatus: "eBay Offer Staged",
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const markOfferPublished = internalMutation({
+  args: {
+    listingId: v.id("marketplaceListings"),
+    ebayListingId: v.string(),
+    listingUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.listingId, {
+      externalListingId: args.ebayListingId,
+      listingUrl: args.listingUrl,
+      status: "Active",
+      listedDate: new Date().toISOString().slice(0, 10),
+      ebayDraftStatus: "Published",
+      ebayLastError: undefined,
+      pricingStatus: "Published",
       updatedAt: Date.now(),
     });
   },
@@ -1031,6 +1051,7 @@ export const createUnpublishedOffer = action({
         sku,
         marketplaceId: settings?.marketplaceId ?? "EBAY_US",
         format: "FIXED_PRICE",
+        listingDuration: "GTC",
         availableQuantity: 1,
         pricingSummary: { price: { value: price.toFixed(2), currency: settings?.currency ?? "USD" } },
       };
@@ -1079,6 +1100,42 @@ export const createUnpublishedOffer = action({
       return { offerId, sku, updated };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not create the eBay draft.";
+      await ctx.runMutation(internal.ebay.markDraftError, { listingId: args.listingId, message });
+      throw new Error(message);
+    }
+  },
+});
+
+export const publishOffer = action({
+  args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
+  handler: async (ctx, args): Promise<{ listingId: string; listingUrl: string }> => {
+    requireAdminKey(args.adminKey);
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    if (!bundle) throw new Error("Listing or inventory item not found.");
+    if (!bundle.listing.ebayOfferId) throw new Error("Stage this item with eBay before publishing it.");
+    if (bundle.listing.externalListingId && bundle.listing.listingUrl) {
+      return { listingId: bundle.listing.externalListingId, listingUrl: bundle.listing.listingUrl };
+    }
+
+    try {
+      const accessToken = await refreshAccessToken(ctx);
+      const result = await ebayFetch(
+        accessToken,
+        `/sell/inventory/v1/offer/${encodeURIComponent(bundle.listing.ebayOfferId)}/publish`,
+        { method: "POST" },
+      ) as { listingId?: string };
+      if (!result.listingId) throw new Error("eBay published the offer but did not return a listing ID.");
+      const listingUrl = environment() === "production"
+        ? `https://www.ebay.com/itm/${result.listingId}`
+        : `https://www.sandbox.ebay.com/itm/${result.listingId}`;
+      await ctx.runMutation(internal.ebay.markOfferPublished, {
+        listingId: args.listingId,
+        ebayListingId: result.listingId,
+        listingUrl,
+      });
+      return { listingId: result.listingId, listingUrl };
+    } catch (error) {
+      const message = `eBay publish failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`;
       await ctx.runMutation(internal.ebay.markDraftError, { listingId: args.listingId, message });
       throw new Error(message);
     }

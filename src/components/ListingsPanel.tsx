@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, RefreshCw, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -194,7 +194,8 @@ function optionalNumber(value: string) {
 }
 
 function queueStatus(listing: Listing) {
-  if (listing.ebayOfferId || listing.pricingStatus === 'eBay Draft Created') return 'eBay Draft Created';
+  if (listing.externalListingId || listing.status === 'Active') return 'Published';
+  if (listing.ebayOfferId || ['eBay Draft Created', 'eBay Offer Staged'].includes(listing.pricingStatus || '')) return 'Staged for eBay';
   if (!['Draft', 'Pending'].includes(listing.status)) return listing.status;
   if ((listing.currentPrice ?? listing.listedPrice ?? 0) <= 0) return 'Ready for Pricing';
   const imageMode = listing.imageMode || (isNewCondition(listing.condition) ? 'eBay Catalog' : 'Actual Item Photo');
@@ -256,6 +257,7 @@ export default function ListingsPanel() {
   const provisionSandboxDefaults = useAction(api.ebay.provisionSandboxDefaults);
   const lookupActivePricing = useAction(api.ebay.lookupActivePricing);
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
+  const publishEbayOffer = useAction(api.ebay.publishOffer);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
@@ -519,7 +521,7 @@ export default function ListingsPanel() {
       return;
     }
     if (!sellerDefaultsReady) {
-      setEbayError('Choose and save an inventory location, shipping policy, payment policy, and return policy before creating eBay drafts.');
+      setEbayError('Choose and save an inventory location, shipping policy, payment policy, and return policy before staging eBay offers.');
       return;
     }
     setOfferBusy(listing._id);
@@ -527,9 +529,27 @@ export default function ListingsPanel() {
     setEbayNotice('');
     try {
       const result = await createEbayOffer({ adminKey, listingId: listing._id });
-      setEbayNotice(`${result.updated ? 'Updated' : 'Created'} eBay unpublished offer ${result.offerId} for SKU ${result.sku}.`);
+      setEbayNotice(`${result.updated ? 'Updated' : 'Created'} staged eBay offer ${result.offerId} for SKU ${result.sku}. It is not live or visible in Seller Hub Drafts.`);
     } catch (error) {
-      setEbayError(error instanceof Error ? error.message : 'Could not create the eBay draft.');
+      setEbayError(error instanceof Error ? error.message : 'Could not stage the eBay offer.');
+    } finally {
+      setOfferBusy(null);
+    }
+  }
+
+  async function publishToEbay(listing: Listing) {
+    if (!adminKey || !sellerDefaultsReady || !listing.ebayOfferId) return;
+    const price = money(listing.currentPrice ?? listing.listedPrice);
+    if (!confirm(`Publish "${listing.title}" live on eBay for ${price}? Buyers will be able to see and purchase this listing.`)) return;
+    setOfferBusy(listing._id);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      await createEbayOffer({ adminKey, listingId: listing._id });
+      const result = await publishEbayOffer({ adminKey, listingId: listing._id });
+      setEbayNotice(`Published eBay listing ${result.listingId}. Use the listing link in the row to open it.`);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not publish the eBay listing.');
     } finally {
       setOfferBusy(null);
     }
@@ -774,13 +794,13 @@ export default function ListingsPanel() {
 
       <section className="panel listingQueueBar">
         <div className="queueSummary">
-          <div><p className="eyebrow">Listing queue</p><h2>Select, price, then create eBay drafts</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} selected and ready</p></div>
-          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Select</span><span>2. Find Fair Value</span><span>3. Create eBay Drafts</span></div>
+          <div><p className="eyebrow">Listing queue</p><h2>Select, price, stage, then publish</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} selected and ready</p></div>
+          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Select</span><span>2. Find Fair Value</span><span>3. Stage with eBay</span><span>4. Publish</span></div>
         </div>
         <div className="actions queueActions">
           <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear View' : 'Select Queue'}</button>
           <button disabled={!selectedIds.size || queueBusy} onClick={openPricingReview}><DollarSign size={16}/> {queueBusy ? 'Checking eBay...' : 'Find Fair Value'}</button>
-          <button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Create eBay Drafts${selectedReadyForEbay.length ? ` (${selectedReadyForEbay.length})` : ''}`}</button>
+          <button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage with eBay${selectedReadyForEbay.length ? ` (${selectedReadyForEbay.length})` : ''}`}</button>
         </div>
         {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
@@ -788,7 +808,7 @@ export default function ListingsPanel() {
 
       <section className="panel ebaySetupPanel">
         <div className="panelHeader">
-          <div><h2>eBay Seller Connection</h2><p>Authorize one seller account, choose its policies, then create unpublished offers from FlipTracker drafts.</p></div>
+          <div><h2>eBay Seller Connection</h2><p>Authorize one seller account, choose its policies, then stage and publish offers from FlipTracker.</p></div>
           {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Connected · {ebaySetup.environment}</span> : <span className="statusPill"><KeyRound size={14}/> Seller only</span>}
         </div>
         {!ebaySetup?.connected ? (
@@ -843,7 +863,7 @@ export default function ListingsPanel() {
             <p className="ebaySafetyNote">Reconnect eBay once after this update so the account connection includes policy-management permission.</p>
           </div>
         ) : null}
-        <p className="ebaySafetyNote">FlipTracker creates an unpublished eBay offer only. Review photos, category, specifics, shipping, and price in eBay before publishing.</p>
+        <p className="ebaySafetyNote">Staged Inventory API offers do not appear in Seller Hub Drafts. Review every field in FlipTracker, then use Publish to eBay to create the live listing.</p>
       </section>
 
       <section className="panel listingControls">
@@ -869,7 +889,8 @@ export default function ListingsPanel() {
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions">
-                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Send ${listing.title} to eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : listing.ebayOfferId ? 'Refresh unpublished eBay offer' : 'Create unpublished eBay offer'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
+                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Stage ${listing.title} with eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : 'Stage offer with eBay'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
+                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="iconButton ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Publish ${listing.title} on eBay`} title="Review and publish live on eBay" onClick={() => publishToEbay(listing)}><Rocket size={16}/></button> : null}
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
