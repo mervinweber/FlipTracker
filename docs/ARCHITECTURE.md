@@ -76,6 +76,8 @@ Queue pricing is an explicit review action. It writes the approved current/liste
 
 Older listings without package data receive conservative media defaults during eBay synchronization: 16 oz for books, 8 oz for DVDs/Blu-rays/games, and 6 oz for CDs. Explicit listing-level package measurements override these defaults.
 
+Inventory synchronization repeats total ship-to-home quantity and a quantity distribution for the selected `merchantLocationKey` on every replace request. Offer refresh retries error `25604` once after a short delay to account for Inventory Service propagation without creating another offer.
+
 ## Security Boundary
 
 Authentication and owner-scoped data are not implemented yet. Current inventory/listing functions are public application APIs without per-user authorization. Sensitive eBay actions require the private seller access key, use replay-resistant OAuth state, and keep tokens server-side, but this is only a single-seller private-beta boundary. A shared beta still requires an auth provider, `ConvexProviderWithAuth`, `convex/auth.config.ts`, owner fields/indexes, and server-side ownership checks on every user-data function.

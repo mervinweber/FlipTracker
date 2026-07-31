@@ -88,6 +88,10 @@ function randomState() {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function delay(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 async function responseBody(response: Response) {
   const text = await response.text();
   if (!text) return undefined;
@@ -1067,7 +1071,15 @@ export const createUnpublishedOffer = action({
       }
 
       const inventoryItem: Record<string, unknown> = {
-        availability: { shipToLocationAvailability: { quantity: 1 } },
+        availability: {
+          shipToLocationAvailability: {
+            quantity: 1,
+            availabilityDistributions: [{
+              merchantLocationKey: settings.merchantLocationKey,
+              quantity: 1,
+            }],
+          },
+        },
         condition: ebayCondition,
         product,
       };
@@ -1149,7 +1161,18 @@ export const createUnpublishedOffer = action({
             body: JSON.stringify(offerPatch),
           });
         } catch (error) {
-          throw new Error(`eBay offer validation failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+          if (!isEbayError(error, 25604)) {
+            throw new Error(`eBay offer validation failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+          }
+          await delay(1_000);
+          try {
+            await ebayFetch(accessToken, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, {
+              method: "PUT",
+              body: JSON.stringify(offerPatch),
+            });
+          } catch (retryError) {
+            throw new Error(`eBay offer validation failed after refreshing inventory availability: ${retryError instanceof Error ? retryError.message : "Unknown eBay error."}`);
+          }
         }
       } else {
         let result: { offerId?: string };

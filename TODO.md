@@ -30,6 +30,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Distinguish API-staged offers from Seller Hub drafts and require confirmation before publishing live
 - [x] Supply media-specific package-weight defaults for legacy listings while retaining manual overrides
 - [x] Create/select a USPS Media Mail policy for eligible listings and document that games require parcel shipping
+- [x] Preserve total and location-level eBay availability when refreshing staged offers
 - [x] Track platform, listing ID, URL, SKU, status, dates, prices, shipping, fees, and buyer
 - [x] Add listing filters and active/sold dashboard metrics
 - [x] Calculate sold net profit from sale, shipping income, item cost, fees, and shipping cost
