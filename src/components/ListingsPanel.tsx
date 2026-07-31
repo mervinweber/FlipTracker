@@ -219,6 +219,13 @@ function canUseCatalogImage(listing: Pick<Listing, 'assetType' | 'mediaFormat' |
     || (isBookListing(listing) && Boolean(listing.photoUrl));
 }
 
+function defaultPackageWeightOz(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
+  const format = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase();
+  if (format.includes('cd') || format.includes('music')) return 6;
+  if (format.includes('dvd') || format.includes('blu') || format.includes('game')) return 8;
+  return 16;
+}
+
 function ebayResearchQuery(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
   return listing.assetBarcode || `${listing.title} ${listing.mediaFormat || ''}`.trim();
 }
@@ -328,7 +335,12 @@ export default function ListingsPanel() {
     const condition = listing.condition?.trim().toLowerCase() || '';
     const isBookWithCover = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book') && Boolean(listing.photoUrl);
     const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
-    setEditing({ ...listing, imageMode });
+    setEditing({
+      ...listing,
+      imageMode,
+      packageType: listing.packageType || 'PACKAGE_THICK_ENVELOPE',
+      packageWeightOz: listing.packageWeightOz ?? defaultPackageWeightOz(listing),
+    });
   }
 
   function selectShippingPreset(value: string) {

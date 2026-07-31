@@ -124,4 +124,6 @@ For production, set the same variables on the production Convex deployment with 
 9. Apply the approved prices and choose **Stage with eBay** to create or refresh selected unpublished Inventory API offers. These API offers do not appear in Seller Hub Drafts.
 10. Review the staged item in FlipTracker, then use its **Publish to eBay** action. Confirming this action creates the live, buyer-visible eBay listing.
 
+Legacy records without package measurements receive a submission default of 16 oz for a book, 8 oz for a DVD/Blu-ray/game, or 6 oz for a CD. These defaults satisfy eBay shipping validation but should be replaced with the packed item's measured weight whenever shipping charges depend on weight.
+
 FlipTracker continues through individual batch failures and leaves failed rows available for correction and retry. Actual used-item photos are uploaded to eBay Picture Services when the offer is staged. Books can request an eBay catalog match by ISBN; other used media requires an actual photo. Publishing is always a separate, confirmation-protected action.

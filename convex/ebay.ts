@@ -332,6 +332,17 @@ function conditionForEbay(condition?: string) {
   return "USED_GOOD";
 }
 
+function defaultPackageForAsset(asset: { type?: string; mediaFormat?: string }) {
+  const format = `${asset.type ?? ""} ${asset.mediaFormat ?? ""}`.toLowerCase();
+  if (format.includes("cd") || format.includes("music")) {
+    return { packageType: "PACKAGE_THICK_ENVELOPE", weightOz: 6 };
+  }
+  if (format.includes("dvd") || format.includes("blu") || format.includes("game")) {
+    return { packageType: "PACKAGE_THICK_ENVELOPE", weightOz: 8 };
+  }
+  return { packageType: "PACKAGE_THICK_ENVELOPE", weightOz: 16 };
+}
+
 function categoryForAsset(
   listing: { ebayCategoryId?: string },
   asset: { type?: string; mediaFormat?: string },
@@ -1000,12 +1011,14 @@ export const createUnpublishedOffer = action({
       if (!["NEW", "LIKE_NEW"].includes(ebayCondition)) {
         inventoryItem.conditionDescription = `${listing.condition || asset.condition || "Used"} pre-owned condition. See the listing description for item details.`.slice(0, 1000);
       }
-      if (listing.packageWeightOz !== undefined) {
-        if (!Number.isFinite(listing.packageWeightOz) || listing.packageWeightOz <= 0) throw new Error("Package weight must be above zero.");
+      const defaultPackage = defaultPackageForAsset(asset);
+      const packageWeightOz = listing.packageWeightOz ?? defaultPackage.weightOz;
+      if (!Number.isFinite(packageWeightOz) || packageWeightOz <= 0) throw new Error("Package weight must be above zero.");
+      {
         const packageWeightAndSize: Record<string, unknown> = {
-          weight: { value: listing.packageWeightOz, unit: "OUNCE" },
+          weight: { value: packageWeightOz, unit: "OUNCE" },
         };
-        if (listing.packageType) packageWeightAndSize.packageType = listing.packageType;
+        packageWeightAndSize.packageType = listing.packageType || defaultPackage.packageType;
         const dimensions = [listing.packageLengthIn, listing.packageWidthIn, listing.packageHeightIn];
         if (dimensions.some((value) => value !== undefined)) {
           if (dimensions.some((value) => value === undefined || !Number.isFinite(value) || value <= 0)) {
