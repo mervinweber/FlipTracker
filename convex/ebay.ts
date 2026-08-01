@@ -1030,6 +1030,10 @@ export const createUnpublishedOffer = action({
       const aspects = removeCatalogIdentifiers(parseItemSpecifics(listing.itemSpecifics));
       if (listing.language) setAspect(aspects, "Language", listing.language);
       else setAspectDefault(aspects, "Language", defaultLanguageForAsset(asset));
+      if (isBook) {
+        if (listing.bookTitle) setAspect(aspects, "Book Title", listing.bookTitle);
+        else setAspectDefault(aspects, "Book Title", asset.title);
+      }
       setAspectDefault(aspects, "Format", asset.mediaFormat);
       setAspectDefault(aspects, isBook ? "Publisher" : "Studio", asset.studio);
       setAspectDefault(aspects, "Release Year", asset.releaseYear);
@@ -1148,8 +1152,12 @@ export const createUnpublishedOffer = action({
         // eBay occasionally reports 25001 for optional catalog data without naming the
         // rejected field. Retry once with the stable core product fields and GTIN only.
         const minimalProduct = { ...product };
+        const requiredAspects: Record<string, string[]> = {};
         const languageKey = aspectKey(aspects, "Language");
-        if (languageKey) minimalProduct.aspects = { Language: aspects[languageKey] };
+        const bookTitleKey = aspectKey(aspects, "Book Title");
+        if (languageKey) requiredAspects.Language = aspects[languageKey];
+        if (bookTitleKey) requiredAspects["Book Title"] = aspects[bookTitleKey];
+        if (Object.keys(requiredAspects).length) minimalProduct.aspects = requiredAspects;
         else delete minimalProduct.aspects;
         delete minimalProduct.imageUrls;
         const minimalInventoryItem = { ...inventoryItem, product: minimalProduct };

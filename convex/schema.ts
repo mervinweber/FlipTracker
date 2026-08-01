@@ -109,6 +109,7 @@ export default defineSchema({
     category: v.optional(v.string()),
     condition: v.optional(v.string()),
     language: v.optional(v.string()),
+    bookTitle: v.optional(v.string()),
     itemSpecifics: v.optional(v.string()),
     listedPrice: v.optional(v.number()),
     currentPrice: v.optional(v.number()),

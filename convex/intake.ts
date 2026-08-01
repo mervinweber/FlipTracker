@@ -99,6 +99,7 @@ export const createScannedItem = mutation({
       category: args.ebayCategory,
       condition: args.ebayCondition,
       language: "English",
+      bookTitle: mediaIdentity.includes("book") ? title : undefined,
       itemSpecifics: args.ebayItemSpecifics,
       imageMode: args.condition.trim().toLowerCase() === "new"
         || args.completeness.trim().toLowerCase() === "sealed"

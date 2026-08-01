@@ -634,6 +634,7 @@ export default function App() {
       category: asset.ebayCategory || ebayCategoryFor(asset),
       condition: asset.ebayCondition || ebayConditionFor(asset),
       language: 'English',
+      bookTitle: `${asset.type || ''} ${asset.mediaFormat || ''}`.toLowerCase().includes('book') ? asset.title : undefined,
       itemSpecifics: asset.ebayItemSpecifics || listingSpecifics(asset),
       listedPrice: price || undefined,
       currentPrice: price || undefined,

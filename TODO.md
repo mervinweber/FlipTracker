@@ -33,6 +33,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Preserve total and location-level eBay availability when refreshing staged offers
 - [x] Capture, upload, select primary, and remove multiple photos inside the listing editor
 - [x] Add a structured eBay Language selector and preserve it during inventory validation retries
+- [x] Add eBay's required Book Title aspect with automatic inventory-title fallback
 - [x] Track platform, listing ID, URL, SKU, status, dates, prices, shipping, fees, and buyer
 - [x] Add listing filters and active/sold dashboard metrics
 - [x] Calculate sold net profit from sale, shipping income, item cost, fees, and shipping cost
