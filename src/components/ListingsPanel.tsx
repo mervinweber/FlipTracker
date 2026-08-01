@@ -123,6 +123,17 @@ const LANGUAGE_OPTIONS = [
   'Multiple Languages',
 ];
 
+function itemSpecificValue(itemSpecifics: string | undefined, name: string) {
+  const normalized = name.toLowerCase();
+  for (const line of itemSpecifics?.split('\n') || []) {
+    const separator = line.indexOf(':');
+    if (separator < 1 || line.slice(0, separator).trim().toLowerCase() !== normalized) continue;
+    const value = line.slice(separator + 1).trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
 type EbaySettings = {
   marketplaceId: string;
   currency: string;
@@ -358,7 +369,7 @@ export default function ListingsPanel() {
     const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
     setEditing({
       ...listing,
-      language: listing.language || 'English',
+      language: listing.language || itemSpecificValue(listing.itemSpecifics, 'Language') || 'English',
       imageMode,
       packageType: listing.packageType || 'PACKAGE_THICK_ENVELOPE',
       packageWeightOz: listing.packageWeightOz ?? defaultPackageWeightOz(listing),

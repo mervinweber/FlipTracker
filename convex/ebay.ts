@@ -333,6 +333,14 @@ function setAspectDefault(aspects: Record<string, string[]>, name: string, value
   aspects[name] = [trimmed];
 }
 
+function setAspect(aspects: Record<string, string[]>, name: string, value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return;
+  const existingKey = aspectKey(aspects, name);
+  if (existingKey && existingKey !== name) delete aspects[existingKey];
+  aspects[name] = [trimmed];
+}
+
 function defaultLanguageForAsset(asset: { type: string; mediaFormat?: string }) {
   const identity = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase();
   return /book|dvd|blu|cd|music|game/.test(identity) ? "English" : undefined;
@@ -1020,7 +1028,8 @@ export const createUnpublishedOffer = action({
       const categoryId = validatedCategoryId(categoryForAsset(listing, asset, settings));
       const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
       const aspects = removeCatalogIdentifiers(parseItemSpecifics(listing.itemSpecifics));
-      setAspectDefault(aspects, "Language", listing.language || defaultLanguageForAsset(asset));
+      if (listing.language) setAspect(aspects, "Language", listing.language);
+      else setAspectDefault(aspects, "Language", defaultLanguageForAsset(asset));
       setAspectDefault(aspects, "Format", asset.mediaFormat);
       setAspectDefault(aspects, isBook ? "Publisher" : "Studio", asset.studio);
       setAspectDefault(aspects, "Release Year", asset.releaseYear);
