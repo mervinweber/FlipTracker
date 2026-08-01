@@ -633,6 +633,7 @@ export default function App() {
       description: asset.ebayDescription || generateDescription(asset),
       category: asset.ebayCategory || ebayCategoryFor(asset),
       condition: asset.ebayCondition || ebayConditionFor(asset),
+      language: 'English',
       itemSpecifics: asset.ebayItemSpecifics || listingSpecifics(asset),
       listedPrice: price || undefined,
       currentPrice: price || undefined,

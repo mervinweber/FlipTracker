@@ -17,6 +17,7 @@ type Listing = {
   description?: string;
   category?: string;
   condition?: string;
+  language?: string;
   itemSpecifics?: string;
   listedPrice?: number;
   currentPrice?: number;
@@ -106,6 +107,21 @@ type EbaySetup = {
   locations: { key: string; name: string }[];
   warning?: string;
 };
+
+const LANGUAGE_OPTIONS = [
+  'English',
+  'Spanish',
+  'French',
+  'German',
+  'Italian',
+  'Japanese',
+  'Chinese',
+  'Korean',
+  'Portuguese',
+  'Russian',
+  'Arabic',
+  'Multiple Languages',
+];
 
 type EbaySettings = {
   marketplaceId: string;
@@ -342,6 +358,7 @@ export default function ListingsPanel() {
     const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
     setEditing({
       ...listing,
+      language: listing.language || 'English',
       imageMode,
       packageType: listing.packageType || 'PACKAGE_THICK_ENVELOPE',
       packageWeightOz: listing.packageWeightOz ?? defaultPackageWeightOz(listing),
@@ -761,6 +778,7 @@ export default function ListingsPanel() {
       description: editing.description || undefined,
       category: editing.category || undefined,
       condition: editing.condition || undefined,
+      language: editing.language || undefined,
       itemSpecifics: editing.itemSpecifics || undefined,
       listedPrice: editing.listedPrice,
       currentPrice: editing.currentPrice,
@@ -976,6 +994,7 @@ export default function ListingsPanel() {
             <label>Category<input value={editing.category || ''} onChange={(event) => patchEditing({ category: event.target.value })}/></label>
             <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={(event) => patchEditing({ ebayCategoryId: event.target.value })}/></label>
             <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
+            <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
             <div className="formSection span2 ebayDeliverySection"><h3><Package size={17}/> Shipping & Photos</h3><div className="sectionGrid">
               <label>eBay Shipping Policy<select value={editing.fulfillmentPolicyId || ''} onChange={(event) => patchEditing({ fulfillmentPolicyId: event.target.value || undefined })}>
                 <option value="">Use seller default</option>

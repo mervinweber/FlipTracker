@@ -44,11 +44,11 @@ One actual-item photo attached to an asset. It stores the Convex storage identif
 
 ## marketplaceListings
 
-One marketplace listing attempt connected to an asset. It stores platform, lifecycle status, marketplace identifiers, listing content, original/current/sold prices, shipping and fee amounts, listed/sold dates, buyer, and notes.
+One marketplace listing attempt connected to an asset. It stores platform, lifecycle status, marketplace identifiers, listing content, language, original/current/sold prices, shipping and fee amounts, listed/sold dates, buyer, and notes.
 
 An asset may have multiple marketplace listing records over time or across platforms. Listing status is deliberately separate from the asset's physical inventory status.
 
-For eBay, `pricingStatus`, `pricingSource`, and `pricingUpdatedAt` preserve the reviewed queue state. `fulfillmentPolicyId` can override the seller default for one listing. `shippingPreset`, `packageType`, `packageWeightOz`, and the package dimension fields preserve reviewed shipment data sent with the eBay inventory item. `imageMode` chooses an actual item photo or an eligible eBay catalog match; `ebayImageUrl`, `ebayImageFingerprint`, and `ebayImageSource` preserve the Picture Services result and avoid duplicate uploads. `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve staged-offer sync state. After confirmed publication, `externalListingId` and `listingUrl` identify the live listing and status becomes `Active`.
+For eBay, `language` is a structured item specific and defaults new media drafts to English. `pricingStatus`, `pricingSource`, and `pricingUpdatedAt` preserve the reviewed queue state. `fulfillmentPolicyId` can override the seller default for one listing. `shippingPreset`, `packageType`, `packageWeightOz`, and the package dimension fields preserve reviewed shipment data sent with the eBay inventory item. `imageMode` chooses an actual item photo or an eligible eBay catalog match; `ebayImageUrl`, `ebayImageFingerprint`, and `ebayImageSource` preserve the Picture Services result and avoid duplicate uploads. `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve staged-offer sync state. After confirmed publication, `externalListingId` and `listingUrl` identify the live listing and status becomes `Active`.
 
 ## ebayConnections
 

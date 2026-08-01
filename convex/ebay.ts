@@ -322,6 +322,22 @@ function removeCatalogIdentifiers(aspects: Record<string, string[]>) {
   return cleaned;
 }
 
+function aspectKey(aspects: Record<string, string[]>, name: string) {
+  const normalized = name.trim().toLowerCase();
+  return Object.keys(aspects).find((key) => key.trim().toLowerCase() === normalized);
+}
+
+function setAspectDefault(aspects: Record<string, string[]>, name: string, value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed || aspectKey(aspects, name)) return;
+  aspects[name] = [trimmed];
+}
+
+function defaultLanguageForAsset(asset: { type: string; mediaFormat?: string }) {
+  const identity = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase();
+  return /book|dvd|blu|cd|music|game/.test(identity) ? "English" : undefined;
+}
+
 function isEbayError(error: unknown, errorId: number) {
   return error instanceof Error && error.message.includes(`eBay ${errorId}`);
 }
@@ -1004,10 +1020,11 @@ export const createUnpublishedOffer = action({
       const categoryId = validatedCategoryId(categoryForAsset(listing, asset, settings));
       const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
       const aspects = removeCatalogIdentifiers(parseItemSpecifics(listing.itemSpecifics));
-      if (asset.mediaFormat) aspects.Format ??= [asset.mediaFormat];
-      if (asset.studio) aspects[isBook ? "Publisher" : "Studio"] ??= [asset.studio];
-      if (asset.releaseYear) aspects["Release Year"] ??= [asset.releaseYear];
-      if (asset.rating) aspects.Rating ??= [asset.rating];
+      setAspectDefault(aspects, "Language", listing.language || defaultLanguageForAsset(asset));
+      setAspectDefault(aspects, "Format", asset.mediaFormat);
+      setAspectDefault(aspects, isBook ? "Publisher" : "Studio", asset.studio);
+      setAspectDefault(aspects, "Release Year", asset.releaseYear);
+      setAspectDefault(aspects, "Rating", asset.rating);
 
       const product: Record<string, unknown> = {
         title: listing.title.trim().slice(0, 80),
@@ -1122,7 +1139,9 @@ export const createUnpublishedOffer = action({
         // eBay occasionally reports 25001 for optional catalog data without naming the
         // rejected field. Retry once with the stable core product fields and GTIN only.
         const minimalProduct = { ...product };
-        delete minimalProduct.aspects;
+        const languageKey = aspectKey(aspects, "Language");
+        if (languageKey) minimalProduct.aspects = { Language: aspects[languageKey] };
+        else delete minimalProduct.aspects;
         delete minimalProduct.imageUrls;
         const minimalInventoryItem = { ...inventoryItem, product: minimalProduct };
         try {
