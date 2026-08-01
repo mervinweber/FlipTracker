@@ -1033,6 +1033,9 @@ export const createUnpublishedOffer = action({
       if (isBook) {
         if (listing.bookTitle) setAspect(aspects, "Book Title", listing.bookTitle);
         else setAspectDefault(aspects, "Book Title", asset.title);
+        if (listing.author) setAspect(aspects, "Author", listing.author);
+        else setAspectDefault(aspects, "Author", asset.author);
+        if (!aspectKey(aspects, "Author")) throw new Error("Add an Author to this book listing before staging it with eBay.");
       }
       setAspectDefault(aspects, "Format", asset.mediaFormat);
       setAspectDefault(aspects, isBook ? "Publisher" : "Studio", asset.studio);
@@ -1155,8 +1158,10 @@ export const createUnpublishedOffer = action({
         const requiredAspects: Record<string, string[]> = {};
         const languageKey = aspectKey(aspects, "Language");
         const bookTitleKey = aspectKey(aspects, "Book Title");
+        const authorKey = aspectKey(aspects, "Author");
         if (languageKey) requiredAspects.Language = aspects[languageKey];
         if (bookTitleKey) requiredAspects["Book Title"] = aspects[bookTitleKey];
+        if (authorKey) requiredAspects.Author = aspects[authorKey];
         if (Object.keys(requiredAspects).length) minimalProduct.aspects = requiredAspects;
         else delete minimalProduct.aspects;
         delete minimalProduct.imageUrls;

@@ -15,6 +15,7 @@ export type InventoryItem = {
   releaseYear?: string;
   releaseDate?: string;
   studio?: string;
+  author?: string;
   rating?: string;
   coverImageUrl?: string;
   photoDataUrl?: string;

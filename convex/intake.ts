@@ -14,6 +14,7 @@ export const createScannedItem = mutation({
     releaseYear: optionalText,
     releaseDate: optionalText,
     studio: optionalText,
+    author: optionalText,
     rating: optionalText,
     coverImageUrl: optionalText,
     metadataSource: optionalText,
@@ -54,6 +55,7 @@ export const createScannedItem = mutation({
       releaseYear: args.releaseYear,
       releaseDate: args.releaseDate,
       studio: args.studio,
+      author: args.author,
       rating: args.rating,
       coverImageUrl: args.coverImageUrl,
       metadataSource: args.metadataSource,
@@ -100,6 +102,7 @@ export const createScannedItem = mutation({
       condition: args.ebayCondition,
       language: "English",
       bookTitle: mediaIdentity.includes("book") ? title : undefined,
+      author: mediaIdentity.includes("book") ? args.author : undefined,
       itemSpecifics: args.ebayItemSpecifics,
       imageMode: args.condition.trim().toLowerCase() === "new"
         || args.completeness.trim().toLowerCase() === "sealed"

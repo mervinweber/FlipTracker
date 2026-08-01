@@ -18,6 +18,7 @@ const listingFields = {
   condition: v.optional(v.string()),
   language: v.optional(v.string()),
   bookTitle: v.optional(v.string()),
+  author: v.optional(v.string()),
   itemSpecifics: v.optional(v.string()),
   listedPrice: v.optional(v.number()),
   currentPrice: v.optional(v.number()),
@@ -54,6 +55,7 @@ const listingPatch = {
   condition: v.optional(v.string()),
   language: v.optional(v.string()),
   bookTitle: v.optional(v.string()),
+  author: v.optional(v.string()),
   itemSpecifics: v.optional(v.string()),
   listedPrice: v.optional(v.number()),
   currentPrice: v.optional(v.number()),
@@ -100,6 +102,7 @@ export const list = query({
           hasCatalogIdentifier: Boolean(asset?.upc || asset?.barcode),
           assetBarcode: asset?.upc || asset?.barcode,
           mediaFormat: asset?.mediaFormat,
+          assetAuthor: asset?.author,
           needsValueCheck: asset?.needsValueCheck,
           listingRecommendation: asset?.listingRecommendation,
           suggestedPrice: asset?.ebayPrice

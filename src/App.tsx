@@ -36,6 +36,7 @@ type Asset = {
   releaseYear?: string;
   releaseDate?: string;
   studio?: string;
+  author?: string;
   rating?: string;
   coverImageUrl?: string;
   photoDataUrl?: string;
@@ -106,6 +107,7 @@ type LookupResult = {
   releaseYear?: string;
   releaseDate?: string;
   studio?: string;
+  author?: string;
   rating?: string;
   coverImageUrl?: string;
   source: string;
@@ -196,6 +198,7 @@ function generateDescription(item: Partial<Asset>) {
   const lines = [
     `${item.title || 'Media item'}${item.edition ? ` - ${item.edition}` : ''}`,
     item.mediaFormat || item.type ? `Format: ${item.mediaFormat || item.type}` : '',
+    item.author ? `Author: ${item.author}` : '',
     item.condition ? `Condition: ${item.condition}` : '',
     item.completeness ? `Completeness: ${item.completeness}` : '',
     item.upc || item.barcode ? `UPC/Barcode: ${item.upc || item.barcode}` : '',
@@ -209,6 +212,7 @@ function listingSpecifics(item: Partial<Asset>) {
   return [
     item.mediaFormat ? `Format: ${item.mediaFormat}` : '',
     item.studio ? `Studio/Publisher: ${item.studio}` : '',
+    item.author ? `Author: ${item.author}` : '',
     item.rating ? `Rating: ${item.rating}` : '',
     item.releaseYear ? `Release Year: ${item.releaseYear}` : '',
     item.upc || item.barcode ? `UPC: ${item.upc || item.barcode}` : '',
@@ -290,6 +294,7 @@ function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem 
     releaseYear: asset.releaseYear,
     releaseDate: asset.releaseDate,
     studio: asset.studio,
+    author: asset.author,
     rating: asset.rating,
     coverImageUrl: asset.coverImageUrl,
     photoDataUrl: asset.photoDataUrl,
@@ -516,6 +521,7 @@ export default function App() {
         releaseYear: result.releaseYear,
         releaseDate: result.releaseDate,
         studio: result.studio,
+        author: result.author,
         rating: result.rating,
         coverImageUrl: result.coverImageUrl,
         metadataSource: result.source,
@@ -552,6 +558,7 @@ export default function App() {
       releaseYear: prepared.releaseYear || undefined,
       releaseDate: prepared.releaseDate || undefined,
       studio: prepared.studio || undefined,
+      author: prepared.author || undefined,
       rating: prepared.rating || undefined,
       coverImageUrl: prepared.coverImageUrl || undefined,
       photoDataUrl: prepared.photoDataUrl || undefined,
@@ -635,6 +642,7 @@ export default function App() {
       condition: asset.ebayCondition || ebayConditionFor(asset),
       language: 'English',
       bookTitle: `${asset.type || ''} ${asset.mediaFormat || ''}`.toLowerCase().includes('book') ? asset.title : undefined,
+      author: `${asset.type || ''} ${asset.mediaFormat || ''}`.toLowerCase().includes('book') ? asset.author : undefined,
       itemSpecifics: asset.ebayItemSpecifics || listingSpecifics(asset),
       listedPrice: price || undefined,
       currentPrice: price || undefined,
@@ -666,6 +674,7 @@ export default function App() {
           releaseYear: item.releaseYear || undefined,
           releaseDate: item.releaseDate || undefined,
           studio: item.studio || undefined,
+          author: item.author || undefined,
           rating: item.rating || undefined,
           coverImageUrl: item.coverImageUrl || undefined,
           metadataSource: item.metadataSource || undefined,
@@ -878,6 +887,7 @@ export default function App() {
                 <label>Release Year<input value={editing.releaseYear || ''} onChange={e => updateEditing({ releaseYear:e.target.value })}/></label>
                 <label>Release Date<input value={editing.releaseDate || ''} onChange={e => updateEditing({ releaseDate:e.target.value })}/></label>
                 <label>Studio / Publisher<input value={editing.studio || ''} onChange={e => updateEditing({ studio:e.target.value })}/></label>
+                <label>Author / Creator<input value={editing.author || ''} onChange={e => updateEditing({ author:e.target.value })}/></label>
                 <label>Rating<input value={editing.rating || ''} onChange={e => updateEditing({ rating:e.target.value })}/></label>
                 <label>Status<select value={editing.status || 'Inventory'} onChange={e => updateEditing({ status:e.target.value }, false)}>{['Inventory','Listed','Sold','Hold','Bundle'].map(s => <option key={s}>{s}</option>)}</select></label>
                 <label>Collection<select value={editing.collectionId || ''} onChange={e => updateEditing({ collectionId:e.target.value ? e.target.value as Id<'collections'> : undefined }, false)}><option value="">Unassigned</option>{collectionRows.map(collection => <option key={collection._id} value={collection._id}>{collection.name}</option>)}</select></label>

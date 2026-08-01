@@ -11,6 +11,7 @@ type LookupResult = {
   releaseYear?: string;
   releaseDate?: string;
   studio?: string;
+  author?: string;
   rating?: string;
   coverImageUrl?: string;
   source: string;
@@ -49,11 +50,53 @@ function yearFromDate(value?: string) {
 }
 
 async function lookupOpenLibrary(barcode: string): Promise<LookupResult | null> {
+  let bookData: any = null;
+  try {
+    const dataResponse = await fetch(
+      `https://openlibrary.org/api/books?bibkeys=ISBN:${barcode}&format=json&jscmd=data`,
+    );
+    if (dataResponse.ok) bookData = (await dataResponse.json())[`ISBN:${barcode}`] || null;
+  } catch {
+    // Fall through to the edition endpoint below.
+  }
+
   const response = await fetch(`https://openlibrary.org/isbn/${barcode}.json`);
-  if (!response.ok) return null;
-  const data = await response.json();
-  const title = String(data.title || "").trim();
+  const data = response.ok ? await response.json() : {};
+  const title = String(data.title || bookData?.title || "").trim();
   if (!title) return null;
+  const authorNames = Array.isArray(bookData?.authors)
+    ? bookData.authors.map((author: { name?: string }) => String(author.name || "").trim())
+    : [];
+  if (!authorNames.some(Boolean)) {
+    authorNames.push(
+      ...(await Promise.all(
+        (Array.isArray(data.authors) ? data.authors : []).slice(0, 5).map(async (author: { key?: string }) => {
+          if (!author?.key) return "";
+          try {
+            const authorResponse = await fetch(`https://openlibrary.org${author.key}.json`);
+            if (!authorResponse.ok) return "";
+            const authorData = await authorResponse.json();
+            return String(authorData.name || "").trim();
+          } catch {
+            return "";
+          }
+        }),
+      )),
+    );
+  }
+  if (!authorNames.some(Boolean) && data.by_statement) {
+    const creditedAuthor = String(data.by_statement)
+      .replace(/^by\s+/i, "")
+      .replace(/[.;,\s]+$/, "")
+      .trim();
+    if (creditedAuthor) authorNames.push(creditedAuthor);
+  }
+  const publishDate = data.publish_date || bookData?.publish_date;
+  const publisher = Array.isArray(data.publishers)
+    ? data.publishers[0]
+    : Array.isArray(bookData?.publishers)
+      ? bookData.publishers[0]?.name
+      : undefined;
   return {
     barcode,
     barcodeType: barcodeType(barcode),
@@ -61,9 +104,10 @@ async function lookupOpenLibrary(barcode: string): Promise<LookupResult | null> 
     type: "Book",
     mediaFormat: data.physical_format ? String(data.physical_format) : "Book",
     edition: data.edition_name ? String(data.edition_name) : undefined,
-    releaseDate: data.publish_date ? String(data.publish_date) : undefined,
-    releaseYear: yearFromDate(data.publish_date ? String(data.publish_date) : undefined),
-    studio: Array.isArray(data.publishers) ? String(data.publishers[0] || "") : undefined,
+    releaseDate: publishDate ? String(publishDate) : undefined,
+    releaseYear: yearFromDate(publishDate ? String(publishDate) : undefined),
+    studio: publisher ? String(publisher) : undefined,
+    author: authorNames.filter(Boolean).join(", ") || undefined,
     coverImageUrl: `https://covers.openlibrary.org/b/isbn/${barcode}-L.jpg`,
     source: "Open Library",
     confidence: "High",

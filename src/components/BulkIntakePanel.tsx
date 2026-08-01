@@ -15,6 +15,7 @@ type LookupResult = {
   releaseYear?: string;
   releaseDate?: string;
   studio?: string;
+  author?: string;
   rating?: string;
   coverImageUrl?: string;
   source: string;
@@ -54,8 +55,8 @@ function listingFields(result: LookupResult, condition: string, completeness: st
   const format = result.mediaFormat === 'Unknown' ? result.type : result.mediaFormat;
   return {
     title: [result.title, result.edition, format, result.releaseYear].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 80),
-    description: [result.title, result.edition ? `Edition: ${result.edition}` : '', format ? `Format: ${format}` : '', `Condition: ${condition}`, `Completeness: ${completeness}`, `UPC: ${result.barcode}`].filter(Boolean).join('\n'),
-    specifics: [format ? `Format: ${format}` : '', result.studio ? `Studio/Publisher: ${result.studio}` : '', result.rating ? `Rating: ${result.rating}` : '', result.releaseYear ? `Release Year: ${result.releaseYear}` : '', `UPC: ${result.barcode}`].filter(Boolean).join('\n'),
+    description: [result.title, result.edition ? `Edition: ${result.edition}` : '', format ? `Format: ${format}` : '', result.author ? `Author: ${result.author}` : '', `Condition: ${condition}`, `Completeness: ${completeness}`, `UPC: ${result.barcode}`].filter(Boolean).join('\n'),
+    specifics: [format ? `Format: ${format}` : '', result.studio ? `Studio/Publisher: ${result.studio}` : '', result.author ? `Author: ${result.author}` : '', result.rating ? `Rating: ${result.rating}` : '', result.releaseYear ? `Release Year: ${result.releaseYear}` : '', `UPC: ${result.barcode}`].filter(Boolean).join('\n'),
   };
 }
 
@@ -98,7 +99,7 @@ export default function BulkIntakePanel() {
       const saved = await createScannedItem({
         type: result.type || 'Other Media', title: result.title, mediaFormat: result.mediaFormat || result.type,
         edition: result.edition, upc: result.barcode, barcodeType: result.barcodeType, releaseYear: result.releaseYear,
-        releaseDate: result.releaseDate, studio: result.studio, rating: result.rating, coverImageUrl: result.coverImageUrl,
+        releaseDate: result.releaseDate, studio: result.studio, author: result.author, rating: result.rating, coverImageUrl: result.coverImageUrl,
         metadataSource: result.source, metadataConfidence: result.confidence,
         collectionId: collectionId ? collectionId as Id<'collections'> : undefined,
         storageLocation: storageLocation.trim() || undefined, purchasePrice: optionalNumber(purchasePrice), condition, completeness,
