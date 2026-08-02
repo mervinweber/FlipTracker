@@ -33,6 +33,7 @@ The product should feel like a serious tool for making buying, listing, and coll
 - Six illustrative sourcing records cover common liquid, common low-margin, uncommon liquid, niche low-supply, and rare low-confidence decisions. They are demo data, not live eBay market results.
 - Hosted Quick Guide added at `/#guide`, with a plain `/README.md` reference covering scan, research, internal draft, manual eBay publishing, sale tracking, and backups.
 - Sales Tracker's useful workflow is now merged into FlipTracker: marketplace listings, lifecycle statuses, listing prices/dates/platforms, price history, listing metrics, sold-profit tracking, CSV export, and old Sales Tracker JSON import.
+- Listings include a dedicated Record Sale closeout for eBay and non-eBay channels. It captures sale price/date, acquisition cost, shipping income/cost, fees, buyer, order reference, custom channel details, and notes; shows net profit before saving; and keeps the linked sale record synchronized when corrected.
 - FlipTracker is the only product base. The separate Sales Tracker repo is now a migration/reference source and can be archived after its data is exported.
 - Universal media barcode workflow started: camera UPC/EAN/ISBN scanning, manual barcode fallback, metadata lookup action, review form, condition/completeness, photo capture, heuristic listing recommendation, and eBay-ready draft fields saved on assets.
 - Mobile camera scanning treats ordinary decode misses as an active scanning state; warnings are reserved for actual camera startup or permission failures.

@@ -8,6 +8,7 @@ function midpoint(low?: number, high?: number) {
 
 const listingFields = {
   platform: v.string(),
+  saleChannelDetail: v.optional(v.string()),
   status: v.string(),
   sku: v.optional(v.string()),
   externalListingId: v.optional(v.string()),
@@ -45,6 +46,7 @@ const listingFields = {
 
 const listingPatch = {
   platform: v.optional(v.string()),
+  saleChannelDetail: v.optional(v.string()),
   status: v.optional(v.string()),
   sku: v.optional(v.string()),
   externalListingId: v.optional(v.string()),
@@ -144,12 +146,23 @@ export const stats = query({
       return sum + Math.max(0, Math.round((soldAt - listedAt) / 86_400_000));
     }, 0);
 
+    const soldWithAssets = await Promise.all(sold.map(async (listing) => ({
+      listing,
+      asset: await ctx.db.get(listing.assetId),
+    })));
+
     return {
       draftCount: listings.filter((listing) => listing.status === "Draft").length,
       activeCount: active.length,
       activeValue: active.reduce((sum, listing) => sum + (listing.currentPrice ?? listing.listedPrice ?? 0), 0),
       soldCount: sold.length,
       soldRevenue: sold.reduce((sum, listing) => sum + (listing.soldPrice ?? 0), 0),
+      soldNetProfit: soldWithAssets.reduce((sum, { listing, asset }) => sum
+        + (listing.soldPrice ?? 0)
+        + (listing.shippingCharged ?? 0)
+        - (asset?.purchasePrice ?? 0)
+        - (listing.fees ?? 0)
+        - (listing.shippingCost ?? 0), 0),
       averageDaysToSell: soldWithDates.length ? totalDays / soldWithDates.length : 0,
     };
   },
@@ -192,13 +205,18 @@ export const update = mutation({
   args: {
     id: v.id("marketplaceListings"),
     priceChangeReason: v.optional(v.string()),
+    purchasePrice: v.optional(v.number()),
     ...listingPatch,
   },
-  handler: async (ctx, { id, priceChangeReason, ...patch }) => {
+  handler: async (ctx, { id, priceChangeReason, purchasePrice, ...patch }) => {
     const existing = await ctx.db.get(id);
     if (!existing) throw new Error("Listing not found");
 
     const now = Date.now();
+    const monetaryValues = [purchasePrice, patch.soldPrice, patch.shippingCharged, patch.shippingCost, patch.fees];
+    if (monetaryValues.some((value) => value !== undefined && (!Number.isFinite(value) || value < 0))) {
+      throw new Error("Sale amounts must be zero or higher.");
+    }
     if (patch.currentPrice !== undefined && patch.currentPrice !== existing.currentPrice) {
       await ctx.db.insert("listingPriceHistory", {
         listingId: id,
@@ -214,27 +232,54 @@ export const update = mutation({
       ? { pricingStatus: "Ready for eBay", pricingSource: patch.pricingSource ?? "Manual listing edit", pricingUpdatedAt: now }
       : {};
     await ctx.db.patch(id, { ...patch, ...pricingPatch, updatedAt: now });
+    if (purchasePrice !== undefined) {
+      await ctx.db.patch(existing.assetId, { purchasePrice, updatedAt: now });
+    }
     const nextStatus = patch.status ?? existing.status;
     if (nextStatus === "Active") {
       await ctx.db.patch(existing.assetId, { status: "Listed", updatedAt: now });
     }
-    if (nextStatus === "Sold" && existing.status !== "Sold") {
+    if (nextStatus === "Sold") {
       const soldPrice = patch.soldPrice ?? patch.currentPrice ?? existing.currentPrice ?? existing.listedPrice ?? 0;
       const soldDate = patch.soldDate ?? new Date(now).toISOString().slice(0, 10);
       const fees = patch.fees ?? existing.fees;
       const shipping = patch.shippingCost ?? existing.shippingCost;
-      await ctx.db.patch(existing.assetId, { status: "Sold", soldPrice, fees, shipping, updatedAt: now });
-      await ctx.db.insert("sales", {
+      const saleRecord = {
         assetId: existing.assetId,
+        listingId: id,
         platform: patch.platform ?? existing.platform,
+        saleChannelDetail: patch.saleChannelDetail ?? existing.saleChannelDetail,
         soldDate,
         soldPrice,
+        purchasePrice,
+        shippingCharged: patch.shippingCharged ?? existing.shippingCharged,
         fees,
         shipping,
+        buyer: patch.buyer ?? existing.buyer,
         notes: patch.notes ?? existing.notes,
-        createdAt: now,
         updatedAt: now,
-      });
+      };
+      await ctx.db.patch(existing.assetId, { status: "Sold", soldPrice, fees, shipping, ...(purchasePrice !== undefined ? { purchasePrice } : {}), updatedAt: now });
+      const linkedSale = await ctx.db
+        .query("sales")
+        .withIndex("by_listingId", (q) => q.eq("listingId", id))
+        .unique();
+      if (linkedSale) {
+        await ctx.db.patch(linkedSale._id, saleRecord);
+      } else {
+        const legacySales = await ctx.db
+          .query("sales")
+          .withIndex("by_asset", (q) => q.eq("assetId", existing.assetId))
+          .collect();
+        const legacyMatch = legacySales.find((sale) => !sale.listingId
+          && sale.soldDate === soldDate
+          && (sale.platform ?? existing.platform) === (patch.platform ?? existing.platform));
+        if (legacyMatch) {
+          await ctx.db.patch(legacyMatch._id, saleRecord);
+        } else {
+          await ctx.db.insert("sales", { ...saleRecord, createdAt: now });
+        }
+      }
     }
     return id;
   },

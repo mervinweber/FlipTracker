@@ -9,6 +9,7 @@ type Listing = {
   _id: Id<'marketplaceListings'>;
   assetId: Id<'assets'>;
   platform: string;
+  saleChannelDetail?: string;
   status: string;
   sku?: string;
   externalListingId?: string;
@@ -298,6 +299,7 @@ export default function ListingsPanel() {
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
   const publishEbayOffer = useAction(api.ebay.publishOffer);
   const [editing, setEditing] = useState<Listing | null>(null);
+  const [saleEditing, setSaleEditing] = useState<Listing | null>(null);
   const markEditingPhotoReady = useCallback(() => {
     setEditing((current) => current && !current.hasActualPhoto ? { ...current, hasActualPhoto: true } : current);
   }, []);
@@ -321,10 +323,10 @@ export default function ListingsPanel() {
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !pricingRows) return;
+    if (!editing && !saleEditing && !pricingRows) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [editing, pricingRows]);
+  }, [editing, pricingRows, saleEditing]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -370,6 +372,7 @@ export default function ListingsPanel() {
     const condition = listing.condition?.trim().toLowerCase() || '';
     const isBookWithCover = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book') && Boolean(listing.photoUrl);
     const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
+    setSaleEditing(null);
     setEditing({
       ...listing,
       language: listing.language || itemSpecificValue(listing.itemSpecifics, 'Language') || 'English',
@@ -379,6 +382,43 @@ export default function ListingsPanel() {
       packageType: listing.packageType || 'PACKAGE_THICK_ENVELOPE',
       packageWeightOz: listing.packageWeightOz ?? defaultPackageWeightOz(listing),
     });
+  }
+
+  function openSaleEditor(listing: Listing) {
+    setEditing(null);
+    setSaleEditing({
+      ...listing,
+      status: 'Sold',
+      soldDate: listing.soldDate || dateToday(),
+      soldPrice: listing.soldPrice ?? listing.currentPrice ?? listing.listedPrice,
+      shippingCharged: listing.shippingCharged ?? 0,
+      shippingCost: listing.shippingCost ?? 0,
+      fees: listing.fees ?? 0,
+    });
+  }
+
+  function patchSale(patch: Partial<Listing>) {
+    setSaleEditing((current) => current ? { ...current, ...patch } : current);
+  }
+
+  async function saveSale() {
+    if (!saleEditing || saleEditing.soldPrice === undefined || saleEditing.soldPrice < 0) return;
+    await updateListing({
+      id: saleEditing._id,
+      platform: saleEditing.platform,
+      saleChannelDetail: saleEditing.platform === 'Other' ? saleEditing.saleChannelDetail?.trim() || undefined : undefined,
+      status: 'Sold',
+      soldPrice: saleEditing.soldPrice,
+      soldDate: saleEditing.soldDate || dateToday(),
+      purchasePrice: saleEditing.purchasePrice,
+      shippingCharged: saleEditing.shippingCharged,
+      shippingCost: saleEditing.shippingCost,
+      fees: saleEditing.fees,
+      buyer: saleEditing.buyer?.trim() || undefined,
+      externalListingId: saleEditing.externalListingId?.trim() || undefined,
+      notes: saleEditing.notes?.trim() || undefined,
+    });
+    setSaleEditing(null);
   }
 
   function selectShippingPreset(value: string) {
@@ -786,6 +826,7 @@ export default function ListingsPanel() {
     await updateListing({
       id: editing._id,
       platform: editing.platform,
+      saleChannelDetail: editing.platform === 'Other' ? editing.saleChannelDetail || undefined : undefined,
       status: editing.status,
       sku: editing.sku || undefined,
       externalListingId: editing.externalListingId || undefined,
@@ -801,6 +842,7 @@ export default function ListingsPanel() {
       listedPrice: editing.listedPrice,
       currentPrice: editing.currentPrice,
       soldPrice,
+      purchasePrice: editing.purchasePrice,
       shippingCharged: editing.shippingCharged,
       shippingCost: editing.shippingCost,
       fees: editing.fees,
@@ -829,10 +871,10 @@ export default function ListingsPanel() {
   }
 
   function exportCsv() {
-    const headers = ['Platform', 'Title', 'SKU', 'Status', 'Listed Price', 'Current Price', 'Sold Price', 'Listed Date', 'Sold Date', 'Shipping Charged', 'Shipping Cost', 'Fees', 'Net Profit', 'URL'];
+    const headers = ['Platform', 'Sale Channel Detail', 'Title', 'SKU', 'Status', 'Listed Price', 'Current Price', 'Sold Price', 'Purchase Cost', 'Listed Date', 'Sold Date', 'Shipping Charged', 'Shipping Cost', 'Fees', 'Buyer', 'Net Profit', 'URL'];
     const rows = filtered.map((listing) => [
-      listing.platform, listing.title, listing.sku || '', listing.status, listing.listedPrice || '', listing.currentPrice || '', listing.soldPrice || '',
-      listing.listedDate || '', listing.soldDate || '', listing.shippingCharged || '', listing.shippingCost || '', listing.fees || '',
+      listing.platform, listing.saleChannelDetail || '', listing.title, listing.sku || '', listing.status, listing.listedPrice || '', listing.currentPrice || '', listing.soldPrice || '', listing.purchasePrice || '',
+      listing.listedDate || '', listing.soldDate || '', listing.shippingCharged || '', listing.shippingCost || '', listing.fees || '', listing.buyer || '',
       listing.status === 'Sold' ? netProfit(listing).toFixed(2) : '', listing.listingUrl || '',
     ]);
     const csv = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -865,6 +907,7 @@ export default function ListingsPanel() {
         <div className="metric"><span>Active Listings</span><strong>{stats?.activeCount ?? '-'}</strong></div>
         <div className="metric"><span>Active Value</span><strong>{stats ? money(stats.activeValue) : '-'}</strong></div>
         <div className="metric"><span>Sold Revenue</span><strong>{stats ? money(stats.soldRevenue) : '-'}</strong></div>
+        <div className="metric"><span>Net Profit</span><strong className={stats && stats.soldNetProfit < 0 ? 'lossValue' : 'profitValue'}>{stats ? money(stats.soldNetProfit) : '-'}</strong></div>
         <div className="metric"><span>Avg. Days To Sell</span><strong>{stats ? stats.averageDaysToSell.toFixed(1) : '-'}</strong></div>
       </section>
 
@@ -968,6 +1011,7 @@ export default function ListingsPanel() {
                   <td className="tableActionsCell"><div className="rowActions">
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Stage ${listing.title} with eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : 'Stage offer with eBay'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="iconButton ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Publish ${listing.title} on eBay`} title="Review and publish live on eBay" onClick={() => publishToEbay(listing)}><Rocket size={16}/></button> : null}
+                    <button className="iconButton saleCloseButton" aria-label={`${listing.status === 'Sold' ? 'Edit sale for' : 'Record sale for'} ${listing.title}`} title={listing.status === 'Sold' ? 'Edit sale details' : 'Record sale'} onClick={() => openSaleEditor(listing)}><DollarSign size={15}/></button>
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
@@ -999,12 +1043,34 @@ export default function ListingsPanel() {
         </section></div>
       ) : null}
 
+      {saleEditing ? (
+        <div className="modalBackdrop"><section className="modal saleCloseoutModal">
+          <header className="modalHeader"><div><h2>Record Sale</h2><span className="statusPill">{saleEditing.assetTitle}</span></div><button className="iconButton secondary" aria-label="Close sale details" onClick={() => setSaleEditing(null)}><X size={18}/></button></header>
+          <div className="saleCloseoutGrid">
+            <label>Sold On<select value={saleEditing.platform} onChange={(event) => patchSale({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label>Order / Reference<input value={saleEditing.externalListingId || ''} onChange={(event) => patchSale({ externalListingId: event.target.value })} placeholder="Optional order or listing ID"/></label>
+            {saleEditing.platform === 'Other' ? <label className="span2">Sale Channel<input value={saleEditing.saleChannelDetail || ''} onChange={(event) => patchSale({ saleChannelDetail: event.target.value })} placeholder="Local shop, yard sale, convention..."/></label> : null}
+            <label>Sold Date<input type="date" value={saleEditing.soldDate || ''} onChange={(event) => patchSale({ soldDate: event.target.value })}/></label>
+            <label>Sale Price<input required type="number" min="0" step="0.01" value={saleEditing.soldPrice ?? ''} onChange={(event) => patchSale({ soldPrice: optionalNumber(event.target.value) })}/></label>
+            <label>What You Paid<input type="number" min="0" step="0.01" value={saleEditing.purchasePrice ?? ''} onChange={(event) => patchSale({ purchasePrice: optionalNumber(event.target.value) })}/></label>
+            <label>Shipping Charged<input type="number" min="0" step="0.01" value={saleEditing.shippingCharged ?? ''} onChange={(event) => patchSale({ shippingCharged: optionalNumber(event.target.value) })}/></label>
+            <label>Actual Shipping Cost<input type="number" min="0" step="0.01" value={saleEditing.shippingCost ?? ''} onChange={(event) => patchSale({ shippingCost: optionalNumber(event.target.value) })}/></label>
+            <label>Marketplace Fees<input type="number" min="0" step="0.01" value={saleEditing.fees ?? ''} onChange={(event) => patchSale({ fees: optionalNumber(event.target.value) })}/></label>
+            <label className="span2">Buyer / Customer<input value={saleEditing.buyer || ''} onChange={(event) => patchSale({ buyer: event.target.value })} placeholder="Optional name or username"/></label>
+            <label className="span2">Sale Notes<textarea value={saleEditing.notes || ''} onChange={(event) => patchSale({ notes: event.target.value })} placeholder="Pickup details, payment method, bundle notes, returns, or anything useful later."/></label>
+          </div>
+          <div className="saleProfitSummary"><span>Net Profit</span><strong className={netProfit(saleEditing) < 0 ? 'lossValue' : 'profitValue'}>{money(netProfit(saleEditing))}</strong><small>Sale + shipping charged − item cost − fees − shipping cost</small></div>
+          <div className="actions right"><button className="secondary" onClick={() => setSaleEditing(null)}>Cancel</button><button disabled={saleEditing.soldPrice === undefined || saleEditing.soldPrice < 0} onClick={saveSale}><Save size={16}/> Save Sale</button></div>
+        </section></div>
+      ) : null}
+
       {editing ? (
         <div className="modalBackdrop"><section className="modal wideModal">
           <header className="modalHeader"><div><h2>Edit Marketplace Listing</h2><span className="statusPill">{editing.assetTitle}</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setEditing(null)}><X size={18}/></button></header>
           <div className="formGrid">
             <label>Platform<select value={editing.platform} onChange={(event) => patchEditing({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
             <label>Status<select value={editing.status} onChange={(event) => patchEditing({ status: event.target.value })}>{STATUSES.map((value) => <option key={value}>{value}</option>)}</select></label>
+            {editing.platform === 'Other' ? <label className="span2">Sale Channel<input value={editing.saleChannelDetail || ''} onChange={(event) => patchEditing({ saleChannelDetail: event.target.value })} placeholder="Local shop, yard sale, convention..."/></label> : null}
             <label className="span2">Listing Title<input value={editing.title} onChange={(event) => patchEditing({ title: event.target.value })}/></label>
             <label>SKU<input value={editing.sku || ''} onChange={(event) => patchEditing({ sku: event.target.value })}/></label>
             <label>Marketplace Item ID<input value={editing.externalListingId || ''} onChange={(event) => patchEditing({ externalListingId: event.target.value })}/></label>
@@ -1038,6 +1104,7 @@ export default function ListingsPanel() {
               <label>Price Change Reason<input value={priceChangeReason} onChange={(event) => setPriceChangeReason(event.target.value)} placeholder="Sale, markdown, relist..."/></label>
               <label>Listed Date<input type="date" value={editing.listedDate || ''} onChange={(event) => patchEditing({ listedDate: event.target.value })}/></label>
               <label>Sold Price<input type="number" step="0.01" value={editing.soldPrice ?? ''} onChange={(event) => patchEditing({ soldPrice: optionalNumber(event.target.value) })}/></label>
+              <label>What You Paid<input type="number" min="0" step="0.01" value={editing.purchasePrice ?? ''} onChange={(event) => patchEditing({ purchasePrice: optionalNumber(event.target.value) })}/></label>
               <label>Sold Date<input type="date" value={editing.soldDate || ''} onChange={(event) => patchEditing({ soldDate: event.target.value })}/></label>
               <label>Shipping Charged<input type="number" step="0.01" value={editing.shippingCharged ?? ''} onChange={(event) => patchEditing({ shippingCharged: optionalNumber(event.target.value) })}/></label>
               <label>Actual Shipping Cost<input type="number" step="0.01" value={editing.shippingCost ?? ''} onChange={(event) => patchEditing({ shippingCost: optionalNumber(event.target.value) })}/></label>

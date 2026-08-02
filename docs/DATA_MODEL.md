@@ -13,7 +13,7 @@ Value fields include estimated ranges, local ranges, user override ranges, `valu
 Assets include `storageLocation` for item-level bin/shelf/location tracking.
 
 ## sales
-Sale events and fee/shipping details.
+Sale events connected to an inventory item and, when available, its marketplace listing. They preserve the marketplace or custom sale channel, sold date and price, item cost, shipping income/cost, fees, buyer, and notes. A linked sale is updated when its listing closeout is corrected so profit reporting does not drift.
 
 ## valueHistory
 Value snapshots over time.
@@ -44,7 +44,7 @@ One actual-item photo attached to an asset. It stores the Convex storage identif
 
 ## marketplaceListings
 
-One marketplace listing attempt connected to an asset. It stores platform, lifecycle status, marketplace identifiers, listing content, language, original/current/sold prices, shipping and fee amounts, listed/sold dates, buyer, and notes.
+One marketplace listing attempt connected to an asset. It stores platform, optional custom sale-channel detail, lifecycle status, marketplace identifiers, listing content, language, original/current/sold prices, shipping and fee amounts, listed/sold dates, buyer, and notes. The linked asset supplies the acquisition cost used for net-profit reporting.
 
 An asset may have multiple marketplace listing records over time or across platforms. Listing status is deliberately separate from the asset's physical inventory status.
 

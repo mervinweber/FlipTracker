@@ -68,9 +68,10 @@ FlipTracker does not call eBay's publish endpoint. Unpublished offer creation an
 
 ## Record a sale
 
-1. Change the listing status to **Sold**.
-2. Enter sold price, shipping charged, actual shipping cost, marketplace fees, buyer, and sold date.
-3. Save. FlipTracker records the sale and calculates net profit.
+1. Open **Listings** and select the dollar button on the item that sold.
+2. Choose eBay or the marketplace where it sold. Choose **Other** to name a local shop, yard sale, convention, or another channel.
+3. Enter sold price/date, what you paid, shipping charged, actual shipping cost, marketplace fees, buyer, order reference, and any useful notes.
+4. Review the calculated net profit and save the sale. You can reopen the same closeout later to correct the amounts without creating a duplicate linked sale.
 
 ## Backups
 

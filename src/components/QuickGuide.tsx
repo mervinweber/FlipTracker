@@ -87,7 +87,7 @@ export default function QuickGuide() {
         <section><div className="guideNumber">8</div><div><h3>Track price changes and the sale</h3><ol>
           <li>Edit Current Price whenever a listing is reduced and enter a reason. FlipTracker preserves the price history.</li>
           <li>When sold, change the listing status to <strong>Sold</strong>.</li>
-          <li>Enter sold price, shipping charged, actual shipping cost, marketplace fees, buyer, and sold date.</li>
+          <li>Use the dollar button on a listing to record where it sold, sale price/date, what you paid, shipping income/cost, fees, buyer, order reference, and notes.</li>
           <li>Save the listing. FlipTracker updates inventory status, sales history, revenue, and net profit.</li>
         </ol></div></section>
 

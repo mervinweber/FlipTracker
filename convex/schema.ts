@@ -88,19 +88,27 @@ export default defineSchema({
 
   sales: defineTable({
     assetId: v.id("assets"),
+    listingId: v.optional(v.id("marketplaceListings")),
     platform: v.optional(v.string()),
+    saleChannelDetail: v.optional(v.string()),
     soldDate: v.optional(v.string()),
     soldPrice: v.number(),
+    purchasePrice: v.optional(v.number()),
+    shippingCharged: v.optional(v.number()),
     fees: v.optional(v.number()),
     shipping: v.optional(v.number()),
+    buyer: v.optional(v.string()),
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_asset", ["assetId"]),
+  })
+    .index("by_asset", ["assetId"])
+    .index("by_listingId", ["listingId"]),
 
   marketplaceListings: defineTable({
     assetId: v.id("assets"),
     platform: v.string(),
+    saleChannelDetail: v.optional(v.string()),
     status: v.string(),
     sku: v.optional(v.string()),
     externalListingId: v.optional(v.string()),
