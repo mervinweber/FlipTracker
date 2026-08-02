@@ -1,4 +1,4 @@
-export type ItemType = 'Video Game' | 'DVD' | 'Blu-ray' | 'CD' | 'Book' | 'Pokemon Card' | 'Sports Card' | 'Toy' | 'Other Media' | 'Misc';
+export type ItemType = 'Video Game' | 'DVD' | 'Blu-ray' | 'CD' | 'Book' | 'Pokemon Card' | 'Sports Card' | 'Yu-Gi-Oh! Card' | 'Toy' | 'Other Media' | 'Misc';
 
 export type ListingRecommendation = 'Sell Individually' | 'Bundle' | 'Skip' | 'Review';
 

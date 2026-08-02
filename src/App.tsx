@@ -115,7 +115,8 @@ type LookupResult = {
   notes?: string;
 };
 
-const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Other Media', 'Pokemon Card', 'Sports Card', 'Toy', 'Misc'];
+const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Other Media', 'Toy', 'Misc'];
+const TYPE_FILTERS = ['All', 'Cards', ...MEDIA_TYPES];
 const CONDITIONS = ['New', 'Like New', 'Very Good', 'Good', 'Acceptable', 'For Parts'];
 const COMPLETENESS = ['Complete', 'Disc Only', 'Case Only', 'Case + Disc', 'No Manual', 'Sealed', 'Loose', 'Incomplete'];
 const TERAPEAK_VALUE_THRESHOLD = 50;
@@ -173,6 +174,9 @@ function ebayCategoryFor(item: Partial<Asset>) {
   if (item.type === 'CD') return 'Music > CDs';
   if (item.type === 'Book') return 'Books & Magazines > Books';
   if (item.type === 'Video Game') return 'Video Games & Consoles > Video Games';
+  if (item.type === 'Sports Card') return 'Sports Mem, Cards & Fan Shop > Sports Trading Cards';
+  if (item.type === 'Pokemon Card') return 'Collectible Card Games > Pokemon Trading Card Game';
+  if (item.type === 'Yu-Gi-Oh! Card') return 'Collectible Card Games > Yu-Gi-Oh! Trading Card Game';
   return 'Everything Else > Other';
 }
 
@@ -365,6 +369,7 @@ async function compressImage(file: File): Promise<string> {
 export default function App() {
   const [activeView, setActiveView] = useState<AppView>(viewFromHash);
   const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('All');
   const [consoleFilter, setConsoleFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [collectionFilter, setCollectionFilter] = useState('All');
@@ -385,6 +390,7 @@ export default function App() {
   const collections = useQuery(api.collections.list);
   const assets = useQuery(api.assets.list, {
     search: query || undefined,
+    mediaType: typeFilter === 'All' ? undefined : typeFilter,
     console: consoleFilter === 'All' ? undefined : consoleFilter,
     status: statusFilter === 'All' ? undefined : statusFilter,
     collectionId: collectionFilter !== 'All' && collectionFilter !== 'Unassigned' ? collectionFilter as Id<'collections'> : undefined,
@@ -794,6 +800,7 @@ export default function App() {
 
       <section className="panel controls">
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search inventory..." value={query} onChange={e => setQuery(e.target.value)} /></div>
+        <select aria-label="Filter by category" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>{TYPE_FILTERS.map(type => <option key={type}>{type}</option>)}</select>
         <select value={consoleFilter} onChange={e => setConsoleFilter(e.target.value)}>{consoles.map(c => <option key={c}>{c}</option>)}</select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>{['All','Inventory','Listed','Sold','Hold','Bundle'].map(s => <option key={s}>{s}</option>)}</select>
         <select value={collectionFilter} onChange={e => setCollectionFilter(e.target.value)}>{collectionOptions.map(c => <option key={c} value={c}>{c === 'All' || c === 'Unassigned' ? c : collectionName(c as Id<'collections'>)}</option>)}</select>

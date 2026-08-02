@@ -60,7 +60,7 @@ Short-lived, single-use hashes for eBay OAuth CSRF protection. The callback cons
 
 ## ebaySettings
 
-Seller defaults for marketplace/currency, inventory location, business policies, and numeric category IDs by media format. These defaults prepare offers consistently but do not publish them.
+Seller defaults for marketplace/currency, inventory location, business policies, and numeric category IDs by media format. Pokemon, sports, and Yu-Gi-Oh! cards have separate defaults because eBay categorizes those markets differently. These defaults prepare offers consistently but do not publish them.
 
 ## listingPriceHistory
 

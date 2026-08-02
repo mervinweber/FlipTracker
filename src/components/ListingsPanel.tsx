@@ -150,6 +150,9 @@ type EbaySettings = {
   bookCategoryId: string;
   cdCategoryId: string;
   gameCategoryId: string;
+  pokemonCardCategoryId: string;
+  sportsCardCategoryId: string;
+  yugiohCardCategoryId: string;
   otherCategoryId: string;
 };
 
@@ -165,6 +168,9 @@ const EMPTY_EBAY_SETTINGS: EbaySettings = {
   bookCategoryId: '',
   cdCategoryId: '',
   gameCategoryId: '',
+  pokemonCardCategoryId: '',
+  sportsCardCategoryId: '',
+  yugiohCardCategoryId: '',
   otherCategoryId: '',
 };
 
@@ -478,6 +484,9 @@ export default function ListingsPanel() {
       bookCategoryId: setup.settings.bookCategoryId || '',
       cdCategoryId: setup.settings.cdCategoryId || '',
       gameCategoryId: setup.settings.gameCategoryId || '',
+      pokemonCardCategoryId: setup.settings.pokemonCardCategoryId || '',
+      sportsCardCategoryId: setup.settings.sportsCardCategoryId || '',
+      yugiohCardCategoryId: setup.settings.yugiohCardCategoryId || '',
       otherCategoryId: setup.settings.otherCategoryId || '',
     });
   }
@@ -532,6 +541,9 @@ export default function ListingsPanel() {
         bookCategoryId: optionalText(ebaySettings.bookCategoryId),
         cdCategoryId: optionalText(ebaySettings.cdCategoryId),
         gameCategoryId: optionalText(ebaySettings.gameCategoryId),
+        pokemonCardCategoryId: optionalText(ebaySettings.pokemonCardCategoryId),
+        sportsCardCategoryId: optionalText(ebaySettings.sportsCardCategoryId),
+        yugiohCardCategoryId: optionalText(ebaySettings.yugiohCardCategoryId),
         otherCategoryId: optionalText(ebaySettings.otherCategoryId),
       });
       await unlockEbaySetup();
@@ -948,6 +960,9 @@ export default function ListingsPanel() {
             <label>Book Category ID<input inputMode="numeric" value={ebaySettings.bookCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, bookCategoryId: event.target.value }))}/></label>
             <label>CD Category ID<input inputMode="numeric" value={ebaySettings.cdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, cdCategoryId: event.target.value }))}/></label>
             <label>Game Category ID<input inputMode="numeric" value={ebaySettings.gameCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, gameCategoryId: event.target.value }))}/></label>
+            <label>Pokemon Card Category ID<input inputMode="numeric" value={ebaySettings.pokemonCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, pokemonCardCategoryId: event.target.value }))}/></label>
+            <label>Sports Card Category ID<input inputMode="numeric" value={ebaySettings.sportsCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, sportsCardCategoryId: event.target.value }))}/></label>
+            <label>Yu-Gi-Oh! Card Category ID<input inputMode="numeric" value={ebaySettings.yugiohCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, yugiohCardCategoryId: event.target.value }))}/></label>
             <label>Other Media Category ID<input inputMode="numeric" value={ebaySettings.otherCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, otherCategoryId: event.target.value }))}/></label>
             <label>Media Mail Buyer Charge<input type="number" min="0" step="0.01" value={sandboxSetup.mediaMailCost} onChange={(event) => setSandboxSetup((current) => ({ ...current, mediaMailCost: event.target.value }))}/></label>
             <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button className="secondary" disabled={ebayBusy || Number(sandboxSetup.mediaMailCost) < 0} onClick={() => createMediaMailPolicy()}><Truck size={16}/> Create/Select Media Mail</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button><button className="secondary forgetDeviceButton" disabled={ebayBusy} onClick={forgetSellerDevice}><LogOut size={16}/> Forget Device</button></div>

@@ -380,6 +380,9 @@ function categoryForAsset(
     bookCategoryId?: string;
     cdCategoryId?: string;
     gameCategoryId?: string;
+    pokemonCardCategoryId?: string;
+    sportsCardCategoryId?: string;
+    yugiohCardCategoryId?: string;
     otherCategoryId?: string;
   } | null,
 ) {
@@ -389,6 +392,9 @@ function categoryForAsset(
   if (format.includes("dvd")) return settings?.dvdCategoryId;
   if (format.includes("book")) return settings?.bookCategoryId;
   if (format.includes("cd") || format.includes("music")) return settings?.cdCategoryId;
+  if (format.includes("pokemon") || format.includes("pokémon")) return settings?.pokemonCardCategoryId;
+  if (format.includes("sports card")) return settings?.sportsCardCategoryId;
+  if (format.includes("yu-gi-oh") || format.includes("yugioh")) return settings?.yugiohCardCategoryId;
   if (format.includes("game")) return settings?.gameCategoryId;
   return settings?.otherCategoryId;
 }
@@ -512,6 +518,9 @@ export const saveSettingsRecord = internalMutation({
     bookCategoryId: v.optional(v.string()),
     cdCategoryId: v.optional(v.string()),
     gameCategoryId: v.optional(v.string()),
+    pokemonCardCategoryId: v.optional(v.string()),
+    sportsCardCategoryId: v.optional(v.string()),
+    yugiohCardCategoryId: v.optional(v.string()),
     otherCategoryId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -649,6 +658,9 @@ export const loadSetup = action({
         bookCategoryId: settings?.bookCategoryId,
         cdCategoryId: settings?.cdCategoryId,
         gameCategoryId: settings?.gameCategoryId,
+        pokemonCardCategoryId: settings?.pokemonCardCategoryId,
+        sportsCardCategoryId: settings?.sportsCardCategoryId,
+        yugiohCardCategoryId: settings?.yugiohCardCategoryId,
         otherCategoryId: settings?.otherCategoryId,
       },
       policies: { fulfillment: [] as Policy[], payment: [] as Policy[], returns: [] as Policy[] },
@@ -703,6 +715,9 @@ export const saveSettings = action({
     bookCategoryId: v.optional(v.string()),
     cdCategoryId: v.optional(v.string()),
     gameCategoryId: v.optional(v.string()),
+    pokemonCardCategoryId: v.optional(v.string()),
+    sportsCardCategoryId: v.optional(v.string()),
+    yugiohCardCategoryId: v.optional(v.string()),
     otherCategoryId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ ok: true }> => {
@@ -801,6 +816,9 @@ export const createInventoryLocation = action({
       bookCategoryId: settings?.bookCategoryId,
       cdCategoryId: settings?.cdCategoryId,
       gameCategoryId: settings?.gameCategoryId,
+      pokemonCardCategoryId: settings?.pokemonCardCategoryId,
+      sportsCardCategoryId: settings?.sportsCardCategoryId,
+      yugiohCardCategoryId: settings?.yugiohCardCategoryId,
       otherCategoryId: settings?.otherCategoryId,
     });
     return { locationKey, created: !exists };
@@ -864,6 +882,9 @@ export const ensureMediaMailPolicy = action({
       bookCategoryId: settings?.bookCategoryId,
       cdCategoryId: settings?.cdCategoryId,
       gameCategoryId: settings?.gameCategoryId,
+      pokemonCardCategoryId: settings?.pokemonCardCategoryId,
+      sportsCardCategoryId: settings?.sportsCardCategoryId,
+      yugiohCardCategoryId: settings?.yugiohCardCategoryId,
       otherCategoryId: settings?.otherCategoryId,
     });
     return { fulfillmentPolicyId, created: !existing };
@@ -998,6 +1019,9 @@ export const provisionSandboxDefaults = action({
       bookCategoryId: settings?.bookCategoryId,
       cdCategoryId: settings?.cdCategoryId,
       gameCategoryId: settings?.gameCategoryId,
+      pokemonCardCategoryId: settings?.pokemonCardCategoryId,
+      sportsCardCategoryId: settings?.sportsCardCategoryId,
+      yugiohCardCategoryId: settings?.yugiohCardCategoryId,
       otherCategoryId: settings?.otherCategoryId,
     });
     return { locationKey, fulfillmentPolicyId, paymentPolicyId, returnPolicyId };

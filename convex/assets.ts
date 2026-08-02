@@ -105,9 +105,16 @@ const assetPatch = {
   confidence: v.optional(v.string()),
 };
 
+function matchesMediaType(type: string, filter?: string) {
+  if (!filter || filter === "All") return true;
+  if (filter === "Cards") return type.toLowerCase().includes("card");
+  return type === filter;
+}
+
 export const list = query({
   args: {
     console: v.optional(v.string()),
+    mediaType: v.optional(v.string()),
     status: v.optional(v.string()),
     search: v.optional(v.string()),
     collectionId: v.optional(v.id("collections")),
@@ -125,6 +132,7 @@ export const list = query({
         })
         .take(250);
       return searched
+        .filter((r) => matchesMediaType(r.type, args.mediaType))
         .filter((r) => !args.collectionId || r.collectionId === args.collectionId)
         .filter((r) => !args.unassignedOnly || !r.collectionId);
     }
@@ -132,6 +140,7 @@ export const list = query({
     if (args.collectionId) {
       const rows = await ctx.db.query("assets").withIndex("by_collection", (q) => q.eq("collectionId", args.collectionId)).take(250);
       return rows
+        .filter((r) => matchesMediaType(r.type, args.mediaType))
         .filter((r) => !args.console || args.console === "All" || r.console === args.console)
         .filter((r) => !args.status || args.status === "All" || r.status === args.status)
         .sort((a, b) => (a.console || "").localeCompare(b.console || "") || (b.estimatedHigh || 0) - (a.estimatedHigh || 0));
@@ -139,6 +148,7 @@ export const list = query({
 
     const rows = await ctx.db.query("assets").take(250);
     return rows
+      .filter((r) => matchesMediaType(r.type, args.mediaType))
       .filter((r) => !args.console || args.console === "All" || r.console === args.console)
       .filter((r) => !args.status || args.status === "All" || r.status === args.status)
       .filter((r) => !args.unassignedOnly || !r.collectionId)

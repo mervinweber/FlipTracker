@@ -18,6 +18,7 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- Inventory supports an aggregate Cards filter while preserving Pokemon Card, Sports Card, and Yu-Gi-Oh! Card as distinct item types. Seller Connection stores separate eBay category defaults for those three card markets.
 - eBay seller connection added: authorization-code OAuth through Convex HTTP, server-only refresh/access token storage, automatic token refresh, seller business-policy/location setup, category defaults, and creation/update of unpublished Inventory API offers. Publishing is intentionally not implemented.
 - Listings now has a selectable eBay queue: Ready for Pricing drafts go through sold-comp/manual price review, approved updates preserve price history, and Ready for eBay rows can be sent as a bounded batch of unpublished offers with per-item failure handling.
 - eBay drafts support per-listing fulfillment policies plus single-media, small-stack, media-box, and custom package measurements. New/sealed media can request an eBay catalog image through UPC/EAN/ISBN matching. Used items require an actual captured photo, uploaded to eBay Picture Services; metadata cover art is not submitted for used listings.

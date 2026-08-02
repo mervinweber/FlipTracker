@@ -48,6 +48,9 @@ function categoryFor(type: string) {
   if (type === 'CD') return 'Music > CDs';
   if (type === 'Book') return 'Books & Magazines > Books';
   if (type === 'Video Game') return 'Video Games & Consoles > Video Games';
+  if (type === 'Sports Card') return 'Sports Mem, Cards & Fan Shop > Sports Trading Cards';
+  if (type === 'Pokemon Card') return 'Collectible Card Games > Pokemon Trading Card Game';
+  if (type === 'Yu-Gi-Oh! Card') return 'Collectible Card Games > Yu-Gi-Oh! Trading Card Game';
   return 'Everything Else > Other';
 }
 

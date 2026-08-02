@@ -10,6 +10,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Excel inventory import and export
 - [x] User price overrides and `needsValueCheck` behavior
 - [x] Universal media model for games, DVDs, Blu-rays, CDs, books, and other media
+- [x] Add an aggregate Cards inventory filter plus Pokemon, sports, and Yu-Gi-Oh! card types and eBay category defaults
 - [x] Mobile UPC/EAN/ISBN camera scanning with manual fallback
 - [x] Ignore normal camera decode misses instead of displaying a scanner error
 - [x] USB scanner bulk intake with serial lookup queue, duplicate-copy support, unique SKUs, and automatic internal eBay drafts

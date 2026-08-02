@@ -39,7 +39,7 @@ button.danger { background:var(--danger); }
 .metric.attention::before { background:var(--warning); }
 .metric span { display:block; color:var(--muted); font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
 .metric strong { font-size:30px; }
-.controls { display:grid; grid-template-columns: 1fr 170px 150px 190px auto; gap:12px; margin-bottom:18px; }
+.controls { display:grid; grid-template-columns: minmax(220px, 1fr) 160px 150px 140px 180px auto; gap:12px; margin-bottom:18px; }
 .search, select { box-sizing:border-box; padding:12px; border-radius:var(--radius); border:1px solid var(--border-strong); background:#020617; color:white; }
 .panelHeader { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:14px; }
 .panelHeader p { margin:6px 0 0; font-size:13px; }
