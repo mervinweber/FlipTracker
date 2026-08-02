@@ -40,6 +40,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Calculate sold net profit from sale, shipping income, item cost, fees, and shipping cost
 - [x] Add a dedicated Record Sale closeout for eBay, other marketplaces, and local sales
 - [x] Synchronize corrected listing closeouts with linked sale records
+- [x] Default unsaved custom listing packages to 32 oz
 - [x] Update inventory status and add a sale record when a listing becomes Sold
 - [x] Import Sales Tracker JSON into inventory, marketplace listings, and price history
 - [x] Export the filtered Listings view to CSV

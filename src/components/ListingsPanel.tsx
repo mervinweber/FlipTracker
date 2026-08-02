@@ -178,6 +178,7 @@ const EMPTY_SANDBOX_SETUP = {
 
 const PLATFORMS = ['eBay', 'Mercari', 'Facebook Marketplace', 'Vinted', 'OfferUp', 'Craigslist', 'Poshmark', 'Depop', 'Etsy', 'Amazon', 'Other'];
 const STATUSES = ['Draft', 'Active', 'Pending', 'Sold', 'Expired', 'Relisted', 'Cancelled'];
+const CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ = 32;
 const SHIPPING_PRESETS = {
   'Single Media Mailer': { packageType: 'PACKAGE_THICK_ENVELOPE', packageWeightOz: 8, packageLengthIn: 10, packageWidthIn: 7, packageHeightIn: 1 },
   '2-4 Media Mailer': { packageType: 'PARCEL_OR_PADDED_ENVELOPE', packageWeightOz: 32, packageLengthIn: 10, packageWidthIn: 8, packageHeightIn: 3 },
@@ -249,13 +250,6 @@ function isBookListing(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
 function canUseCatalogImage(listing: Pick<Listing, 'assetType' | 'mediaFormat' | 'photoUrl' | 'condition' | 'hasCatalogIdentifier'>) {
   return (isNewCondition(listing.condition) && Boolean(listing.hasCatalogIdentifier))
     || (isBookListing(listing) && Boolean(listing.photoUrl));
-}
-
-function defaultPackageWeightOz(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
-  const format = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase();
-  if (format.includes('cd') || format.includes('music')) return 6;
-  if (format.includes('dvd') || format.includes('blu') || format.includes('game')) return 8;
-  return 16;
 }
 
 function ebayResearchQuery(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
@@ -380,7 +374,7 @@ export default function ListingsPanel() {
       author: listing.author || itemSpecificValue(listing.itemSpecifics, 'Author') || listing.assetAuthor,
       imageMode,
       packageType: listing.packageType || 'PACKAGE_THICK_ENVELOPE',
-      packageWeightOz: listing.packageWeightOz ?? defaultPackageWeightOz(listing),
+      packageWeightOz: listing.packageWeightOz ?? CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ,
     });
   }
 
@@ -423,7 +417,10 @@ export default function ListingsPanel() {
 
   function selectShippingPreset(value: string) {
     if (value === 'Custom') {
-      patchEditing({ shippingPreset: value });
+      patchEditing({
+        shippingPreset: value,
+        packageWeightOz: editing?.packageWeightOz ?? CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ,
+      });
       return;
     }
     if (!value) {
