@@ -33,7 +33,7 @@ Assets now support media-oriented fields in addition to existing game fields: `m
 The older boolean `complete` and `manual` fields remain for existing game rows. New media intake uses a broader `completeness` field such as Complete, Disc Only, Case Only, Case + Disc, No Manual, Sealed, Loose, or Incomplete.
 
 ### Listing fields
-Assets can store media metadata including author/creator, release details, studio/publisher, rating, and cover image. First-pass eBay listing preparation fields include `listingRecommendation`, `ebayTitle`, `ebayDescription`, `ebayCategory`, `ebayCondition`, `ebayItemSpecifics`, `ebayPrice`, and `ebayShipping`. These are generated locally from the review form and recalculated when title, UPC/barcode, edition, condition, completeness, or price inputs change.
+Assets can store media metadata including author/creator, release details, studio/publisher, rating, and cover image. `aiDescription` stores pasted AI-generated listing copy, `itemDisclosures` stores buyer-facing condition facts, and `notes` remains private workflow context. First-pass eBay listing preparation fields include `listingRecommendation`, `ebayTitle`, `ebayDescription`, `ebayCategory`, `ebayCondition`, `ebayItemSpecifics`, `ebayPrice`, and `ebayShipping`. These are generated locally from the review form and recalculated when title, UPC/barcode, edition, condition, completeness, disclosures, AI copy, or price inputs change.
 
 ### Photos
 New photo captures are stored in Convex file storage and represented by ordered `assetPhotos` records. The first position is the primary image. Legacy assets can still contain a compressed `photoDataUrl`; that compatibility field remains until existing images are migrated.

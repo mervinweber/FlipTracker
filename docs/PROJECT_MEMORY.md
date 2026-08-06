@@ -18,6 +18,7 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- Inventory items separate pasted AI listing copy, buyer-facing item disclosures, and private internal notes. AI copy and disclosures compose into the eBay description; internal notes never do.
 - Inventory supports an aggregate Cards filter while preserving Pokemon Card, Sports Card, and Yu-Gi-Oh! Card as distinct item types. Seller Connection stores separate eBay category defaults for those three card markets.
 - eBay seller connection added: authorization-code OAuth through Convex HTTP, server-only refresh/access token storage, automatic token refresh, seller business-policy/location setup, category defaults, and creation/update of unpublished Inventory API offers. Publishing is intentionally not implemented.
 - Listings now has a selectable eBay queue: Ready for Pricing drafts go through sold-comp/manual price review, approved updates preserve price history, and Ready for eBay rows can be sent as a bounded batch of unpublished offers with per-item failure handling.

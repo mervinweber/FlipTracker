@@ -54,6 +54,8 @@ export default defineSchema({
     completeness: v.optional(v.string()),
     complete: v.optional(v.boolean()),
     manual: v.optional(v.boolean()),
+    aiDescription: v.optional(v.string()),
+    itemDisclosures: v.optional(v.string()),
     barcode: v.optional(v.string()),
     ebayTitle: v.optional(v.string()),
     ebayDescription: v.optional(v.string()),

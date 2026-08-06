@@ -65,6 +65,8 @@ type Asset = {
   completeness?: string;
   complete?: boolean;
   manual?: boolean;
+  aiDescription?: string;
+  itemDisclosures?: string;
   notes?: string;
   confidence?: string;
   ebayTitle?: string;
@@ -200,14 +202,14 @@ function generateEbayTitle(item: Partial<Asset>) {
 
 function generateDescription(item: Partial<Asset>) {
   const lines = [
+    item.aiDescription?.trim() || '',
     `${item.title || 'Media item'}${item.edition ? ` - ${item.edition}` : ''}`,
     item.mediaFormat || item.type ? `Format: ${item.mediaFormat || item.type}` : '',
     item.author ? `Author: ${item.author}` : '',
     item.condition ? `Condition: ${item.condition}` : '',
     item.completeness ? `Completeness: ${item.completeness}` : '',
     item.upc || item.barcode ? `UPC/Barcode: ${item.upc || item.barcode}` : '',
-    item.storageLocation ? `Internal bin: ${item.storageLocation}` : '',
-    item.notes ? `Notes: ${item.notes}` : '',
+    item.itemDisclosures ? `Item details: ${item.itemDisclosures.trim()}` : '',
   ].filter(Boolean);
   return lines.join('\n');
 }
@@ -326,6 +328,8 @@ function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem 
     completeness: asset.completeness,
     complete: asset.complete,
     manual: asset.manual,
+    aiDescription: asset.aiDescription,
+    itemDisclosures: asset.itemDisclosures,
     notes: asset.notes,
     confidence: asset.confidence,
     ebayTitle: asset.ebayTitle,
@@ -551,7 +555,10 @@ export default function App() {
 
   async function saveAsset() {
     if (!editing?.title?.trim()) return;
-    const prepared = recalcAsset(editing);
+    const prepared = {
+      ...recalcAsset(editing),
+      ebayDescription: editing.ebayDescription || generateDescription(editing),
+    };
     const patch = {
       type: prepared.type || 'Video Game',
       console: prepared.console || undefined,
@@ -593,6 +600,8 @@ export default function App() {
       completeness: prepared.completeness || undefined,
       complete: prepared.complete,
       manual: prepared.manual,
+      aiDescription: prepared.aiDescription?.trim() || undefined,
+      itemDisclosures: prepared.itemDisclosures?.trim() || undefined,
       ebayTitle: prepared.ebayTitle || undefined,
       ebayDescription: prepared.ebayDescription || undefined,
       ebayCategory: prepared.ebayCategory || undefined,
@@ -706,6 +715,8 @@ export default function App() {
           completeness: item.completeness || undefined,
           complete: item.complete,
           manual: item.manual,
+          aiDescription: item.aiDescription || undefined,
+          itemDisclosures: item.itemDisclosures || undefined,
           ebayTitle: item.ebayTitle || undefined,
           ebayDescription: item.ebayDescription || undefined,
           ebayCategory: item.ebayCategory || undefined,
@@ -918,16 +929,18 @@ export default function App() {
 
                 <div className="formSection span2"><h3>eBay Listing Draft Fields</h3><div className="sectionGrid">
                   <label className="span2">eBay Title<input value={editing.ebayTitle || ''} onChange={e => updateEditing({ ebayTitle:e.target.value }, false)}/></label>
+                  <label className="span2">AI Description / Listing Copy<textarea value={editing.aiDescription || ''} onChange={e => updateEditing({ aiDescription:e.target.value })} placeholder="Paste AI-generated listing copy here..."/></label>
+                  <label className="span2">Item Disclosures<textarea value={editing.itemDisclosures || ''} onChange={e => updateEditing({ itemDisclosures:e.target.value })} placeholder="Library copy, missing DVD disc, case damage, writing, scratches..."/></label>
                   <label>Category<input value={editing.ebayCategory || ''} onChange={e => updateEditing({ ebayCategory:e.target.value }, false)}/></label>
                   <label>Condition<input value={editing.ebayCondition || ''} onChange={e => updateEditing({ ebayCondition:e.target.value }, false)}/></label>
                   <label>Price<input type="number" value={editing.ebayPrice || ''} onChange={e => updateEditing({ ebayPrice:toNumber(e.target.value) }, false)}/></label>
                   <label>Shipping<input value={editing.ebayShipping || ''} onChange={e => updateEditing({ ebayShipping:e.target.value }, false)}/></label>
                   <label className="span2">Item Specifics<textarea value={editing.ebayItemSpecifics || ''} onChange={e => updateEditing({ ebayItemSpecifics:e.target.value }, false)}/></label>
-                  <label className="span2">Description<textarea value={editing.ebayDescription || ''} onChange={e => updateEditing({ ebayDescription:e.target.value }, false)}/></label>
+                  <label className="span2">eBay Description<textarea value={editing.ebayDescription || ''} onChange={e => updateEditing({ ebayDescription:e.target.value }, false)}/></label>
                 </div>{!('_id' in editing) ? <label className="checkRow reviewToggle"><input type="checkbox" checked={createDraftAfterSave} onChange={e => setCreateDraftAfterSave(e.target.checked)}/><span><strong>Add to eBay draft queue</strong><small>Generate the listing now, then find fair value and select it from Listings.</small></span></label> : null}</div>
 
                 <div className="formSection span2"><h3>Sale</h3><div className="sectionGrid"><label>Purchase Price<input type="number" value={editing.purchasePrice || ''} onChange={e => updateEditing({ purchasePrice:toNumber(e.target.value) }, false)}/></label><label>Sold Price<input type="number" value={editing.soldPrice || ''} onChange={e => updateEditing({ soldPrice:toNumber(e.target.value) }, false)}/></label></div></div>
-                <label className="span2">Notes<textarea value={editing.notes || ''} onChange={e => updateEditing({ notes:e.target.value })}/></label>
+                <label className="span2">Internal Notes<textarea value={editing.notes || ''} onChange={e => updateEditing({ notes:e.target.value }, false)} placeholder="Private sourcing, storage, or workflow notes..."/></label>
               </div>
             </div>
             <div className="actions right"><button className="secondary" onClick={() => { setCreateDraftAfterSave(false); setEditing(null); }}>Cancel</button><button onClick={saveAsset}><Save size={16}/> {createDraftAfterSave && !('_id' in editing) ? 'Save & Queue' : 'Save to Inventory'}</button></div>

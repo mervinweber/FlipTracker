@@ -45,6 +45,8 @@ export type InventoryItem = {
   manual?: boolean;
   listed?: boolean;
   sold?: boolean;
+  aiDescription?: string;
+  itemDisclosures?: string;
   notes?: string;
   confidence?: string;
   ebayTitle?: string;

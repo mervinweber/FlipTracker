@@ -15,6 +15,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Ignore normal camera decode misses instead of displaying a scanner error
 - [x] USB scanner bulk intake with serial lookup queue, duplicate-copy support, unique SKUs, and automatic internal eBay drafts
 - [x] Metadata review and correction screen
+- [x] Separate pasted AI listing copy, buyer-facing item disclosures, and private internal notes
 - [x] Condition, completeness, storage bin, photo, and eBay preparation fields
 - [x] Collections/purchase-lot foundation
 - [x] Saved research/value-check workflow
