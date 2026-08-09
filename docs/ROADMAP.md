@@ -166,6 +166,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Preserve eBay offer ID, sync status, timestamp, and errors on the listing
 - [x] Add selectable Ready for Pricing and Ready for eBay queue states
 - [x] Apply approved prices in bulk while preserving listing price history
+- [x] Update active eBay prices by percentage, exact value, or calculated profit floor with confirmation and history
 - [x] Add per-listing fulfillment-policy selection and reusable media package presets
 - [x] Send package weight/dimensions with the eBay inventory item
 - [x] Use eBay catalog matching only for eligible new/sealed media

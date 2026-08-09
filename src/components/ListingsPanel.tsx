@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Trash2, Truck, Upload, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -97,6 +97,8 @@ type ActivePricingResult = {
   source?: string;
   warning?: string;
 };
+
+type RepriceMode = 'percentage' | 'exact' | 'profit';
 
 type EbaySetup = {
   connected: boolean;
@@ -232,6 +234,10 @@ function optionalNumber(value: string) {
   return value === '' ? undefined : Number(value);
 }
 
+function priceEndingAt99(value: number) {
+  return Math.max(0.99, Math.ceil(value) - 0.01);
+}
+
 function queueStatus(listing: Listing) {
   if (listing.externalListingId || listing.status === 'Active') return 'Published';
   if (listing.ebayOfferId || ['eBay Draft Created', 'eBay Offer Staged'].includes(listing.pricingStatus || '')) return 'Staged for eBay';
@@ -298,8 +304,21 @@ export default function ListingsPanel() {
   const lookupActivePricing = useAction(api.ebay.lookupActivePricing);
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
   const publishEbayOffer = useAction(api.ebay.publishOffer);
+  const updateEbayPrice = useAction(api.ebay.updatePublishedPrice);
+  const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [saleEditing, setSaleEditing] = useState<Listing | null>(null);
+  const [repricing, setRepricing] = useState<Listing | null>(null);
+  const [repriceMode, setRepriceMode] = useState<RepriceMode>('percentage');
+  const [repricePercent, setRepricePercent] = useState('10');
+  const [repriceExact, setRepriceExact] = useState('');
+  const [repriceFeePercent, setRepriceFeePercent] = useState('15');
+  const [repriceShippingCost, setRepriceShippingCost] = useState('5');
+  const [repriceShippingCharged, setRepriceShippingCharged] = useState('0');
+  const [repriceTargetProfit, setRepriceTargetProfit] = useState('5');
+  const [repriceCharm, setRepriceCharm] = useState(true);
+  const [repriceBusy, setRepriceBusy] = useState(false);
+  const [repriceError, setRepriceError] = useState('');
   const markEditingPhotoReady = useCallback(() => {
     setEditing((current) => current && !current.hasActualPhoto ? { ...current, hasActualPhoto: true } : current);
   }, []);
@@ -320,13 +339,15 @@ export default function ListingsPanel() {
   const [selectedIds, setSelectedIds] = useState<Set<Id<'marketplaceListings'>>>(new Set());
   const [pricingRows, setPricingRows] = useState<PricingRow[] | null>(null);
   const [queueBusy, setQueueBusy] = useState(false);
+  const [descriptionBusy, setDescriptionBusy] = useState(false);
+  const [descriptionError, setDescriptionError] = useState('');
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !saleEditing && !pricingRows) return;
+    if (!editing && !saleEditing && !repricing && !pricingRows) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [editing, pricingRows, saleEditing]);
+  }, [editing, pricingRows, repricing, saleEditing]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -363,6 +384,39 @@ export default function ListingsPanel() {
     && ebaySettings.paymentPolicyId
     && ebaySettings.returnPolicyId,
   );
+  const repricePreview = useMemo(() => {
+    if (!repricing) return null;
+    const currentPrice = repricing.currentPrice ?? repricing.listedPrice ?? 0;
+    const feeRate = Number(repriceFeePercent) / 100;
+    const shippingCost = Number(repriceShippingCost);
+    const shippingCharged = Number(repriceShippingCharged);
+    const targetProfit = Number(repriceTargetProfit);
+    const purchaseCost = repricing.purchasePrice ?? 0;
+    let rawPrice = 0;
+    if (repriceMode === 'percentage') rawPrice = currentPrice * (1 - Number(repricePercent) / 100);
+    if (repriceMode === 'exact') rawPrice = Number(repriceExact);
+    if (repriceMode === 'profit' && feeRate >= 0 && feeRate < 1) {
+      rawPrice = (purchaseCost + shippingCost + targetProfit) / (1 - feeRate) - shippingCharged;
+      if (repriceCharm) rawPrice = priceEndingAt99(rawPrice);
+    }
+    const price = Math.round(rawPrice * 100) / 100;
+    const marketplaceFees = (price + shippingCharged) * feeRate;
+    const estimatedProfit = price + shippingCharged - marketplaceFees - purchaseCost - shippingCost;
+    const changePercent = currentPrice > 0 ? ((price - currentPrice) / currentPrice) * 100 : 0;
+    const percentage = Number(repricePercent);
+    const modeInputsValid = repriceMode === 'percentage'
+      ? percentage > 0 && percentage <= 90
+      : repriceMode === 'exact'
+        ? Number(repriceExact) >= 0.99
+        : feeRate >= 0 && feeRate <= 0.5 && shippingCost >= 0 && shippingCharged >= 0 && targetProfit >= 0;
+    const valid = Number.isFinite(price)
+      && price >= 0.99
+      && price !== currentPrice
+      && modeInputsValid
+      && Number.isFinite(marketplaceFees)
+      && [feeRate, shippingCost, shippingCharged, targetProfit].every(Number.isFinite);
+    return { currentPrice, price, marketplaceFees, estimatedProfit, changePercent, valid };
+  }, [repricing, repriceCharm, repriceExact, repriceFeePercent, repriceMode, repricePercent, repriceShippingCharged, repriceShippingCost, repriceTargetProfit]);
 
   function patchEditing(patch: Partial<Listing>) {
     setEditing((current) => current ? { ...current, ...patch } : current);
@@ -373,15 +427,106 @@ export default function ListingsPanel() {
     const isBookWithCover = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book') && Boolean(listing.photoUrl);
     const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
     setSaleEditing(null);
+    setDescriptionError('');
     setEditing({
       ...listing,
       language: listing.language || itemSpecificValue(listing.itemSpecifics, 'Language') || 'English',
-      bookTitle: listing.bookTitle || itemSpecificValue(listing.itemSpecifics, 'Book Title') || (isBookListing(listing) ? listing.assetTitle : undefined),
+      bookTitle: (listing.bookTitle || itemSpecificValue(listing.itemSpecifics, 'Book Title') || (isBookListing(listing) ? listing.assetTitle : undefined))?.slice(0, 65),
       author: listing.author || itemSpecificValue(listing.itemSpecifics, 'Author') || listing.assetAuthor,
       imageMode,
       packageType: listing.packageType || 'PACKAGE_THICK_ENVELOPE',
       packageWeightOz: listing.packageWeightOz ?? CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ,
     });
+  }
+
+  function openRepriceEditor(listing: Listing) {
+    const currentPrice = listing.currentPrice ?? listing.listedPrice ?? 0;
+    setEditing(null);
+    setSaleEditing(null);
+    setRepricing(listing);
+    setRepriceMode('percentage');
+    setRepricePercent('10');
+    setRepriceExact(currentPrice.toFixed(2));
+    setRepriceFeePercent('15');
+    setRepriceShippingCost((listing.shippingCost ?? 5).toFixed(2));
+    setRepriceShippingCharged((listing.shippingCharged ?? 0).toFixed(2));
+    setRepriceTargetProfit('5.00');
+    setRepriceCharm(true);
+    setRepriceError('');
+  }
+
+  async function submitReprice() {
+    if (!repricing || !repricePreview?.valid) {
+      setRepriceError('Enter values that calculate to a different eBay price of at least $0.99.');
+      return;
+    }
+    if (!adminKey) {
+      setRepriceError('Unlock eBay seller tools before updating a live price.');
+      return;
+    }
+    const reason = repriceMode === 'percentage'
+      ? `${Number(repricePercent).toFixed(1)}% live eBay markdown from ${money(repricePreview.currentPrice)}`
+      : repriceMode === 'profit'
+        ? `Profit-floor update targeting ${money(Number(repriceTargetProfit))} profit at ${Number(repriceFeePercent).toFixed(1)}% estimated fees`
+        : `Exact live eBay price change from ${money(repricePreview.currentPrice)}`;
+    const confirmation = [
+      `Update "${repricing.title}" on eBay?`,
+      `${money(repricePreview.currentPrice)} → ${money(repricePreview.price)}`,
+      `Estimated net profit: ${money(repricePreview.estimatedProfit)}`,
+      'This changes the public live listing price immediately.',
+    ].join('\n\n');
+    if (!confirm(confirmation)) return;
+    setRepriceBusy(true);
+    setRepriceError('');
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const result = await updateEbayPrice({
+        adminKey,
+        listingId: repricing._id,
+        newPrice: repricePreview.price,
+        reason,
+      });
+      setEbayNotice(`Updated live eBay listing ${result.listingId} from ${money(result.oldPrice)} to ${money(result.newPrice)}. The change was added to Price History.`);
+      setRepricing(null);
+    } catch (error) {
+      setRepriceError(error instanceof Error ? error.message : 'Could not update the live eBay price.');
+    } finally {
+      setRepriceBusy(false);
+    }
+  }
+
+  async function generateAiDescription() {
+    if (!editing?.title.trim()) {
+      setDescriptionError('Enter a listing title before generating the description.');
+      return;
+    }
+    if (!adminKey) {
+      setDescriptionError('Enter or load the Seller Access Key before using AI descriptions.');
+      return;
+    }
+    setDescriptionBusy(true);
+    setDescriptionError('');
+    try {
+      const result = await generateListingCopy({
+        adminKey,
+        title: editing.title.trim(),
+        type: editing.assetType || undefined,
+        mediaFormat: editing.mediaFormat || undefined,
+        author: editing.author || editing.assetAuthor || undefined,
+        barcode: editing.assetBarcode || undefined,
+        condition: editing.condition || undefined,
+        language: editing.language || undefined,
+        itemSpecifics: editing.itemSpecifics || undefined,
+        existingDescription: editing.description || undefined,
+        internalNotes: editing.notes || undefined,
+      });
+      patchEditing({ description: result.text });
+    } catch (error) {
+      setDescriptionError(error instanceof Error ? error.message : 'Description generation failed.');
+    } finally {
+      setDescriptionBusy(false);
+    }
   }
 
   function openSaleEditor(listing: Listing) {
@@ -1023,6 +1168,7 @@ export default function ListingsPanel() {
                   <td className="tableActionsCell"><div className="rowActions">
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Stage ${listing.title} with eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : 'Stage offer with eBay'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="iconButton ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Publish ${listing.title} on eBay`} title="Review and publish live on eBay" onClick={() => publishToEbay(listing)}><Rocket size={16}/></button> : null}
+                    {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.ebayOfferId && listing.externalListingId) ? <button className="iconButton ebayRepriceButton" disabled={repriceBusy} aria-label={`Update live eBay price for ${listing.title}`} title="Update live eBay price" onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={16}/></button> : null}
                     <button className="iconButton saleCloseButton" aria-label={`${listing.status === 'Sold' ? 'Edit sale for' : 'Record sale for'} ${listing.title}`} title={listing.status === 'Sold' ? 'Edit sale details' : 'Record sale'} onClick={() => openSaleEditor(listing)}><DollarSign size={15}/></button>
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
@@ -1034,6 +1180,36 @@ export default function ListingsPanel() {
           </div>
         )}
       </section>
+
+      {repricing ? (
+        <div className="modalBackdrop"><section className="modal repriceModal">
+          <header className="modalHeader"><div><h2>Update Live eBay Price</h2><p>{repricing.title}</p></div><button className="iconButton secondary" aria-label="Close price update" onClick={() => setRepricing(null)}><X size={18}/></button></header>
+          <div className="repriceCurrent"><span>Current public price</span><strong>{money(repricePreview?.currentPrice)}</strong><small>Original listing price: {money(repricing.listedPrice)}</small></div>
+          <div className="repriceModes" role="tablist" aria-label="Price calculation method">
+            <button type="button" className={repriceMode === 'percentage' ? 'active' : 'secondary'} onClick={() => setRepriceMode('percentage')}><Percent size={16}/> Percentage</button>
+            <button type="button" className={repriceMode === 'exact' ? 'active' : 'secondary'} onClick={() => setRepriceMode('exact')}><BadgeDollarSign size={16}/> Exact Price</button>
+            <button type="button" className={repriceMode === 'profit' ? 'active' : 'secondary'} onClick={() => setRepriceMode('profit')}><Calculator size={16}/> Profit Floor</button>
+          </div>
+          {repriceMode === 'percentage' ? <div className="repriceInputBand"><label>Reduce current price by<input type="number" inputMode="decimal" min="0.1" max="90" step="0.1" value={repricePercent} onChange={(event) => setRepricePercent(event.target.value)}/><span>%</span></label><small>A regular price update changes the visible eBay price. It does not create a crossed-out sale price.</small></div> : null}
+          {repriceMode === 'exact' ? <div className="repriceInputBand"><label>New public price ($)<input type="number" inputMode="decimal" min="0.99" step="0.01" value={repriceExact} onChange={(event) => setRepriceExact(event.target.value)}/></label><small>Use this when you already know the exact amount you want buyers to see.</small></div> : null}
+          {repriceMode === 'profit' ? <div className="repriceProfitGrid">
+            <label>Item Cost<input type="number" value={repricing.purchasePrice ?? 0} disabled/></label>
+            <label>Estimated eBay Fee %<input type="number" min="0" max="50" step="0.1" value={repriceFeePercent} onChange={(event) => setRepriceFeePercent(event.target.value)}/></label>
+            <label>Estimated Shipping Cost<input type="number" min="0" step="0.01" value={repriceShippingCost} onChange={(event) => setRepriceShippingCost(event.target.value)}/></label>
+            <label>Buyer Shipping Charge<input type="number" min="0" step="0.01" value={repriceShippingCharged} onChange={(event) => setRepriceShippingCharged(event.target.value)}/></label>
+            <label>Target Net Profit<input type="number" min="0" step="0.01" value={repriceTargetProfit} onChange={(event) => setRepriceTargetProfit(event.target.value)}/></label>
+            <label className="repriceCharm"><input type="checkbox" checked={repriceCharm} onChange={(event) => setRepriceCharm(event.target.checked)}/><span>Round up to a .99 price</span></label>
+          </div> : null}
+          <div className="repricePreview">
+            <div><span>New eBay Price</span><strong>{money(repricePreview?.price)}</strong><small className={(repricePreview?.changePercent ?? 0) <= 0 ? 'profitValue' : 'warningText'}>{repricePreview ? `${repricePreview.changePercent > 0 ? '+' : ''}${repricePreview.changePercent.toFixed(1)}% from current` : ''}</small></div>
+            <div><span>Estimated Fees</span><strong>{money(repricePreview?.marketplaceFees)}</strong><small>Using {Number(repriceFeePercent || 0).toFixed(1)}%</small></div>
+            <div><span>Estimated Net Profit</span><strong className={(repricePreview?.estimatedProfit ?? 0) < 0 ? 'lossValue' : 'profitValue'}>{money(repricePreview?.estimatedProfit)}</strong><small>Price + buyer shipping − fees − cost − shipping</small></div>
+          </div>
+          <p className="ebaySafetyNote">This updates the active eBay listing immediately. Estimates do not include taxes, promoted-listing fees, refunds, or other adjustments.</p>
+          {repriceError ? <p className="formError">{repriceError}</p> : null}
+          <div className="actions modalActions"><button className="secondary" disabled={repriceBusy} onClick={() => setRepricing(null)}>Cancel</button><button disabled={repriceBusy || !repricePreview?.valid} onClick={submitReprice}><BadgeDollarSign size={16}/>{repriceBusy ? 'Updating eBay...' : 'Confirm Price Update'}</button></div>
+        </section></div>
+      ) : null}
 
       {pricingRows ? (
         <div className="modalBackdrop"><section className="modal wideModal pricingReviewModal">
@@ -1091,7 +1267,7 @@ export default function ListingsPanel() {
             <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={(event) => patchEditing({ ebayCategoryId: event.target.value })}/></label>
             <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
             <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
-            {isBookListing(editing) ? <label className="span2">Book Title<input value={editing.bookTitle || ''} onChange={(event) => patchEditing({ bookTitle: event.target.value })}/><small>Required by eBay for book categories. Defaults to the inventory title.</small></label> : null}
+            {isBookListing(editing) ? <label className="span2">Book Title<input maxLength={65} value={editing.bookTitle || ''} onChange={(event) => patchEditing({ bookTitle: event.target.value })}/><small>Required by eBay for book categories. Maximum 65 characters. {(editing.bookTitle || '').length}/65</small></label> : null}
             {isBookListing(editing) ? <label className="span2">Author<input value={editing.author || ''} onChange={(event) => patchEditing({ author: event.target.value })}/><small>Required by eBay for book categories. Confirm the credited author before staging.</small></label> : null}
             <div className="formSection span2 ebayDeliverySection"><h3><Package size={17}/> Shipping & Photos</h3><div className="sectionGrid">
               <label>eBay Shipping Policy<select value={editing.fulfillmentPolicyId || ''} onChange={(event) => patchEditing({ fulfillmentPolicyId: event.target.value || undefined })}>
@@ -1124,7 +1300,9 @@ export default function ListingsPanel() {
               <label>Buyer<input value={editing.buyer || ''} onChange={(event) => patchEditing({ buyer: event.target.value })}/></label>
             </div></div>
             <label className="span2">Item Specifics<textarea value={editing.itemSpecifics || ''} onChange={(event) => patchEditing({ itemSpecifics: event.target.value })}/></label>
-            <label className="span2">eBay Description<textarea value={editing.description || ''} onChange={(event) => patchEditing({ description: event.target.value })}/></label>
+            <div className="aiCopyToolbar span2"><div><strong>eBay Description</strong><small>Builds editable buyer-facing copy from the listing and relevant notes.</small></div><button type="button" className="secondary" disabled={descriptionBusy || !editing.title.trim()} onClick={generateAiDescription}><Sparkles size={16}/>{descriptionBusy ? 'Generating...' : 'Generate with AI'}</button></div>
+            {descriptionError ? <p className="formError span2">{descriptionError}</p> : null}
+            <label className="span2">Editable Description<textarea value={editing.description || ''} onChange={(event) => patchEditing({ description: event.target.value })}/></label>
             <label className="span2">Internal Listing Notes<textarea value={editing.notes || ''} onChange={(event) => patchEditing({ notes: event.target.value })}/></label>
             <div className="formSection span2"><h3>Price History</h3><PriceHistory listingId={editing._id}/></div>
           </div>

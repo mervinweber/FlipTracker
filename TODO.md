@@ -16,6 +16,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] USB scanner bulk intake with serial lookup queue, duplicate-copy support, unique SKUs, and automatic internal eBay drafts
 - [x] Metadata review and correction screen
 - [x] Separate pasted AI listing copy, buyer-facing item disclosures, and private internal notes
+- [x] Add one-click Gemini/OpenAI listing descriptions in inventory review and listing edit, using metadata, disclosures, and filtered buyer-relevant notes while keeping private workflow details out of provider context and public copy
 - [x] Condition, completeness, storage bin, photo, and eBay preparation fields
 - [x] Collections/purchase-lot foundation
 - [x] Saved research/value-check workflow
@@ -27,6 +28,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add Convex `listingPriceHistory` table
 - [x] Add listing create, update, sold, and delete behavior
 - [x] Preserve listing price changes with a reason and timestamp
+- [x] Add confirmation-protected live eBay repricing by percentage, exact value, or calculated profit floor
 - [x] Add Inventory and Listings primary views
 - [x] Create an internal eBay draft from an inventory item
 - [x] Distinguish API-staged offers from Seller Hub drafts and require confirmation before publishing live
@@ -301,7 +303,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [x] Sourcing mode with Buy / Maybe / Pass recommendation
 - [ ] Import and populate the category-specific Create Drafts template downloaded from eBay Seller Hub Reports
 - [x] eBay OAuth and unpublished-offer creation after the internal listing workflow is stable
-- [ ] Read-only eBay listing audit before any automated edit/publish behavior
+- [ ] Add a read-only eBay listing audit/reconciliation view for changes made outside FlipTracker
 - [ ] Final logo, PWA icons, typography, and onboarding polish
 
 ## Known Beta Limitations

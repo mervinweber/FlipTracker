@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Sparkles, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
@@ -387,6 +387,8 @@ export default function App() {
   const [scannerAttempt, setScannerAttempt] = useState(0);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [createDraftAfterSave, setCreateDraftAfterSave] = useState(false);
+  const [descriptionBusy, setDescriptionBusy] = useState(false);
+  const [descriptionError, setDescriptionError] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControls = useRef<IScannerControls | null>(null);
 
@@ -411,6 +413,7 @@ export default function App() {
   const addValueCheck = useMutation(api.research.addValueCheck);
   const createListing = useMutation(api.listings.create);
   const lookupByBarcode = useAction(api.mediaLookup.lookupByBarcode);
+  const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
 
   const isLoading = assets === undefined || dashboard === undefined || collections === undefined;
   const rows: Asset[] = assets || [];
@@ -550,6 +553,45 @@ export default function App() {
       setScanError(error instanceof Error ? error.message : 'Lookup failed. Enter details manually.');
     } finally {
       setIsLookingUp(false);
+    }
+  }
+
+  async function generateAiDescription() {
+    if (!editing?.title?.trim()) {
+      setDescriptionError('Enter a title before generating the description.');
+      return;
+    }
+    const adminKey = localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey') || '';
+    if (!adminKey) {
+      setDescriptionError('Load the Seller Connection once on this device before using AI descriptions.');
+      return;
+    }
+    setDescriptionBusy(true);
+    setDescriptionError('');
+    try {
+      const result = await generateListingCopy({
+        adminKey,
+        title: editing.title.trim(),
+        type: editing.type || undefined,
+        mediaFormat: editing.mediaFormat || undefined,
+        edition: editing.edition || undefined,
+        releaseYear: editing.releaseYear || undefined,
+        studio: editing.studio || undefined,
+        author: editing.author || undefined,
+        rating: editing.rating || undefined,
+        barcode: editing.upc || editing.barcode || undefined,
+        condition: editing.condition || undefined,
+        completeness: editing.completeness || undefined,
+        itemSpecifics: editing.ebayItemSpecifics || undefined,
+        existingDescription: editing.aiDescription || editing.ebayDescription || undefined,
+        itemDisclosures: editing.itemDisclosures || undefined,
+        internalNotes: editing.notes || undefined,
+      });
+      updateEditing({ aiDescription: result.text });
+    } catch (error) {
+      setDescriptionError(error instanceof Error ? error.message : 'Description generation failed.');
+    } finally {
+      setDescriptionBusy(false);
     }
   }
 
@@ -929,7 +971,9 @@ export default function App() {
 
                 <div className="formSection span2"><h3>eBay Listing Draft Fields</h3><div className="sectionGrid">
                   <label className="span2">eBay Title<input value={editing.ebayTitle || ''} onChange={e => updateEditing({ ebayTitle:e.target.value }, false)}/></label>
-                  <label className="span2">AI Description / Listing Copy<textarea value={editing.aiDescription || ''} onChange={e => updateEditing({ aiDescription:e.target.value })} placeholder="Paste AI-generated listing copy here..."/></label>
+                  <div className="aiCopyToolbar span2"><div><strong>AI Description / Listing Copy</strong><small>Uses item facts, disclosures, and buyer-relevant notes. Review before saving.</small></div><button type="button" className="secondary" disabled={descriptionBusy || !editing.title?.trim()} onClick={generateAiDescription}><Sparkles size={16}/>{descriptionBusy ? 'Generating...' : 'Generate with AI'}</button></div>
+                  {descriptionError ? <p className="formError span2">{descriptionError}</p> : null}
+                  <label className="span2">Editable AI Copy<textarea value={editing.aiDescription || ''} onChange={e => updateEditing({ aiDescription:e.target.value })} placeholder="Generate a draft or enter your own listing copy..."/></label>
                   <label className="span2">Item Disclosures<textarea value={editing.itemDisclosures || ''} onChange={e => updateEditing({ itemDisclosures:e.target.value })} placeholder="Library copy, missing DVD disc, case damage, writing, scratches..."/></label>
                   <label>Category<input value={editing.ebayCategory || ''} onChange={e => updateEditing({ ebayCategory:e.target.value }, false)}/></label>
                   <label>Condition<input value={editing.ebayCondition || ''} onChange={e => updateEditing({ ebayCondition:e.target.value }, false)}/></label>

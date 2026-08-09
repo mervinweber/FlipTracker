@@ -99,6 +99,26 @@ npx convex env set EBAY_APP_URL "http://localhost:5173/"
 npx convex env set FLIPTRACKER_ADMIN_KEY "YOUR_LONG_RANDOM_SELLER_KEY"
 ```
 
+### AI listing descriptions
+
+The one-click description generator runs from Convex so provider keys are never sent to the browser. Gemini is the recommended free beta provider:
+
+```bash
+npx convex env set GEMINI_API_KEY "YOUR_GEMINI_API_KEY"
+npx convex env set AI_DESCRIPTION_PROVIDER "gemini"
+```
+
+`GEMINI_DESCRIPTION_MODEL` is optional; FlipTracker defaults to the free-tier-compatible `gemini-2.5-flash-lite`. When `AI_DESCRIPTION_PROVIDER` is omitted, FlipTracker chooses Gemini when `GEMINI_API_KEY` exists, then falls back to OpenAI when `OPENAI_API_KEY` exists.
+
+OpenAI remains available as an optional provider:
+
+```bash
+npx convex env set OPENAI_API_KEY "YOUR_OPENAI_API_KEY"
+npx convex env set AI_DESCRIPTION_PROVIDER "openai"
+```
+
+For production, select the production deployment in the Convex dashboard and add the same values under **Settings > Environment Variables**. Do not put either provider key in Vercel or use a `VITE_` prefix. Gemini free-tier prompts may be used by Google to improve its products, so FlipTracker filters internal notes down to buyer-relevant condition language before sending them.
+
 For production, set the same variables on the production Convex deployment with Production eBay keys, `EBAY_ENVIRONMENT=production`, and the Vercel app URL for `EBAY_APP_URL`. Never use a `VITE_` prefix for eBay secrets.
 
 ### 3. Prepare the eBay seller account

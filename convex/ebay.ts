@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -581,6 +581,34 @@ export const markOfferPublished = internalMutation({
   },
 });
 
+export const markPublishedPriceUpdated = internalMutation({
+  args: {
+    listingId: v.id("marketplaceListings"),
+    newPrice: v.number(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
+    if (!listing) throw new Error("Listing not found.");
+    const now = Date.now();
+    await ctx.db.insert("listingPriceHistory", {
+      listingId: listing._id,
+      assetId: listing.assetId,
+      date: now,
+      price: args.newPrice,
+      reason: args.reason,
+      createdAt: now,
+    });
+    await ctx.db.patch(listing._id, {
+      currentPrice: args.newPrice,
+      pricingSource: "eBay live price update",
+      pricingUpdatedAt: now,
+      ebayLastError: undefined,
+      updatedAt: now,
+    });
+  },
+});
+
 export const markDraftError = internalMutation({
   args: { listingId: v.id("marketplaceListings"), message: v.string() },
   handler: async (ctx, args) => {
@@ -1055,8 +1083,8 @@ export const createUnpublishedOffer = action({
       if (listing.language) setAspect(aspects, "Language", listing.language);
       else setAspectDefault(aspects, "Language", defaultLanguageForAsset(asset));
       if (isBook) {
-        if (listing.bookTitle) setAspect(aspects, "Book Title", listing.bookTitle);
-        else setAspectDefault(aspects, "Book Title", asset.title);
+        const bookTitle = (listing.bookTitle || asset.title).trim().slice(0, 65);
+        setAspect(aspects, "Book Title", bookTitle);
         if (listing.author) setAspect(aspects, "Author", listing.author);
         else setAspectDefault(aspects, "Author", asset.author);
         if (!aspectKey(aspects, "Author")) throw new Error("Add an Author to this book listing before staging it with eBay.");
@@ -1080,7 +1108,11 @@ export const createUnpublishedOffer = action({
       }
       const ebayCondition = conditionForEbay(listing.condition || asset.condition);
       const metadataCoverAllowed = isBook && Boolean(asset.coverImageUrl);
-      const imageMode = listing.imageMode || (ebayCondition === "NEW" || metadataCoverAllowed ? "eBay Catalog" : "Actual Item Photo");
+      const requestedImageMode = listing.imageMode || (ebayCondition === "NEW" || metadataCoverAllowed ? "eBay Catalog" : "Actual Item Photo");
+      const hasActualItemPhotos = bundle.photos.length > 0 || Boolean(asset.photoDataUrl);
+      // Actual photos are authoritative once attached. This also recovers older book
+      // drafts that requested catalog art before the seller photographed the item.
+      const imageMode = hasActualItemPhotos ? "Actual Item Photo" : requestedImageMode;
       let imageUrl: string | undefined;
       let imageFingerprint: string | undefined;
       let imageSource = "eBay catalog match";
@@ -1177,7 +1209,8 @@ export const createUnpublishedOffer = action({
         }
 
         // eBay occasionally reports 25001 for optional catalog data without naming the
-        // rejected field. Retry once with the stable core product fields and GTIN only.
+        // rejected field. Retry once with the stable core product fields, GTIN, and any
+        // eBay-hosted photos that were already accepted by Picture Services.
         const minimalProduct = { ...product };
         const requiredAspects: Record<string, string[]> = {};
         const languageKey = aspectKey(aspects, "Language");
@@ -1188,7 +1221,6 @@ export const createUnpublishedOffer = action({
         if (authorKey) requiredAspects.Author = aspects[authorKey];
         if (Object.keys(requiredAspects).length) minimalProduct.aspects = requiredAspects;
         else delete minimalProduct.aspects;
-        delete minimalProduct.imageUrls;
         const minimalInventoryItem = { ...inventoryItem, product: minimalProduct };
         try {
           await ebayFetch(accessToken, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
@@ -1265,7 +1297,7 @@ export const createUnpublishedOffer = action({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not create the eBay draft.";
       await ctx.runMutation(internal.ebay.markDraftError, { listingId: args.listingId, message });
-      throw new Error(message);
+      throw new ConvexError(message);
     }
   },
 });
@@ -1301,7 +1333,67 @@ export const publishOffer = action({
     } catch (error) {
       const message = `eBay publish failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`;
       await ctx.runMutation(internal.ebay.markDraftError, { listingId: args.listingId, message });
-      throw new Error(message);
+      throw new ConvexError(message);
+    }
+  },
+});
+
+export const updatePublishedPrice = action({
+  args: {
+    adminKey: v.string(),
+    listingId: v.id("marketplaceListings"),
+    newPrice: v.number(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ oldPrice: number; newPrice: number; listingId: string }> => {
+    requireAdminKey(args.adminKey);
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    if (!bundle) throw new ConvexError("Listing or inventory item not found.");
+    const { listing } = bundle;
+    if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId) {
+      throw new ConvexError("Only active eBay listings can be repriced through this action.");
+    }
+    if (!listing.ebayOfferId) throw new ConvexError("This listing is missing its eBay offer ID and cannot be repriced automatically.");
+    if (!Number.isFinite(args.newPrice) || args.newPrice < 0.99) throw new ConvexError("The new eBay price must be at least $0.99.");
+    const newPrice = moneyRound(args.newPrice);
+    const oldPrice = moneyRound(listing.currentPrice ?? listing.listedPrice ?? 0);
+    if (newPrice === oldPrice) throw new ConvexError("The calculated price is the same as the current eBay price.");
+
+    try {
+      const accessToken = await refreshAccessToken(ctx);
+      const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+      const response = await ebayFetch(accessToken, "/sell/inventory/v1/bulk_update_price_quantity", {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [{
+            offers: [{
+              offerId: listing.ebayOfferId,
+              price: { value: newPrice.toFixed(2), currency: settings?.currency ?? "USD" },
+            }],
+          }],
+        }),
+      }) as {
+        responses?: Array<{
+          offerId?: string;
+          statusCode?: number;
+          errors?: Array<{ errorId?: number; message?: string; longMessage?: string; parameters?: Array<{ name?: string; value?: string }> }>;
+        }>;
+      } | undefined;
+      const updateResult = response?.responses?.find((entry) => entry.offerId === listing.ebayOfferId)
+        ?? response?.responses?.[0];
+      if (!updateResult || updateResult.statusCode !== 200 || updateResult.errors?.length) {
+        throw new Error(ebayError({ errors: updateResult?.errors }, updateResult?.statusCode ?? 500));
+      }
+      await ctx.runMutation(internal.ebay.markPublishedPriceUpdated, {
+        listingId: listing._id,
+        newPrice,
+        reason: args.reason.trim().slice(0, 250) || "eBay live price updated",
+      });
+      return { oldPrice, newPrice, listingId: listing.externalListingId };
+    } catch (error) {
+      const message = `eBay price update failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`;
+      await ctx.runMutation(internal.ebay.markDraftError, { listingId: listing._id, message });
+      throw new ConvexError(message);
     }
   },
 });
