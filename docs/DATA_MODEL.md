@@ -35,6 +35,8 @@ The older boolean `complete` and `manual` fields remain for existing game rows. 
 ### Listing fields
 Assets can store media metadata including author/creator, release details, studio/publisher, rating, and cover image. `aiDescription` stores editable AI-generated or user-entered listing copy, `itemDisclosures` stores buyer-facing condition facts, and `notes` remains private workflow context. The server-side AI generator supports Gemini and OpenAI. Before either provider receives context, internal notes are reduced to statements containing buyer-relevant condition or completeness terms, while statements containing sourcing, cost, storage, buyer, or contact terms are discarded. First-pass eBay listing preparation fields include `listingRecommendation`, `ebayTitle`, `ebayDescription`, `ebayCategory`, `ebayCondition`, `ebayItemSpecifics`, `ebayPrice`, and `ebayShipping`. These are generated locally from the review form and recalculated when title, UPC/barcode, edition, condition, completeness, disclosures, AI copy, or price inputs change.
 
+Card assets additionally store `cardProductType`, `cardGame`, `cardSport`, `cardSet`, `cardNumber`, `cardPlayer`, and `cardTeam`. The UI exposes these only for Pokemon, Yu-Gi-Oh!, or sports card records. Marketplace drafts copy the fields so the seller can correct listing-specific values without changing unrelated media workflows.
+
 ### Photos
 New photo captures are stored in Convex file storage and represented by ordered `assetPhotos` records. The first position is the primary image. Legacy assets can still contain a compressed `photoDataUrl`; that compatibility field remains until existing images are migrated.
 
@@ -60,7 +62,7 @@ Short-lived, single-use hashes for eBay OAuth CSRF protection. The callback cons
 
 ## ebaySettings
 
-Seller defaults for marketplace/currency, inventory location, business policies, and numeric category IDs by media format. Pokemon, sports, and Yu-Gi-Oh! cards have separate defaults because eBay categorizes those markets differently. These defaults prepare offers consistently but do not publish them.
+Seller defaults for marketplace/currency, inventory location, business policies, and numeric category IDs by media format. Card categories are selected from the listing's card family and sale format instead of requiring one fixed category per game. These defaults prepare offers consistently but do not publish them.
 
 ## listingPriceHistory
 

@@ -405,8 +405,8 @@ function defaultPackageForAsset(asset: { type?: string; mediaFormat?: string }) 
 }
 
 function categoryForAsset(
-  listing: { ebayCategoryId?: string },
-  asset: { type?: string; mediaFormat?: string },
+  listing: { ebayCategoryId?: string; cardProductType?: string },
+  asset: { type?: string; mediaFormat?: string; cardProductType?: string },
   settings: {
     dvdCategoryId?: string;
     blurayCategoryId?: string;
@@ -421,13 +421,25 @@ function categoryForAsset(
 ) {
   if (listing.ebayCategoryId) return listing.ebayCategoryId;
   const format = `${asset.mediaFormat ?? ""} ${asset.type ?? ""}`.toLowerCase();
+  const cardProductType = (listing.cardProductType || asset.cardProductType || "Single Card").toLowerCase();
+  if (format.includes("sports card")) {
+    if (cardProductType.includes("lot")) return "261329";
+    if (cardProductType.includes("complete set")) return "261330";
+    if (cardProductType.includes("sealed pack")) return "261331";
+    if (cardProductType.includes("sealed box")) return "261332";
+    return "261328";
+  }
+  if (format.includes("pokemon") || format.includes("pokémon") || format.includes("yu-gi-oh") || format.includes("yugioh")) {
+    if (cardProductType.includes("lot")) return "183455";
+    if (cardProductType.includes("complete set")) return "183459";
+    if (cardProductType.includes("sealed pack")) return "183456";
+    if (cardProductType.includes("sealed box")) return "261044";
+    return "183454";
+  }
   if (format.includes("blu")) return settings?.blurayCategoryId;
   if (format.includes("dvd")) return settings?.dvdCategoryId;
   if (format.includes("book")) return settings?.bookCategoryId;
   if (format.includes("cd") || format.includes("music")) return settings?.cdCategoryId;
-  if (format.includes("pokemon") || format.includes("pokémon")) return settings?.pokemonCardCategoryId;
-  if (format.includes("sports card")) return settings?.sportsCardCategoryId;
-  if (format.includes("yu-gi-oh") || format.includes("yugioh")) return settings?.yugiohCardCategoryId;
   if (format.includes("game")) return settings?.gameCategoryId;
   return settings?.otherCategoryId;
 }
@@ -1154,6 +1166,7 @@ export const createUnpublishedOffer = action({
       const sku = (listing.sku || `FT-${asset._id}`).slice(0, 50);
       const categoryId = validatedCategoryId(categoryForAsset(listing, asset, settings));
       const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
+      const isCard = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("card");
       const aspects = removeCatalogIdentifiers(parseItemSpecifics(listing.itemSpecifics));
       if (listing.language) setAspect(aspects, "Language", listing.language);
       else setAspectDefault(aspects, "Language", defaultLanguageForAsset(asset));
@@ -1168,6 +1181,14 @@ export const createUnpublishedOffer = action({
       setAspectDefault(aspects, isBook ? "Publisher" : "Studio", asset.studio);
       setAspectDefault(aspects, "Release Year", asset.releaseYear);
       setAspectDefault(aspects, "Rating", asset.rating);
+      if (isCard) {
+        setAspectDefault(aspects, "Game", listing.cardGame || asset.cardGame);
+        setAspectDefault(aspects, "Sport", listing.cardSport || asset.cardSport);
+        setAspectDefault(aspects, "Set", listing.cardSet || asset.cardSet);
+        setAspectDefault(aspects, "Card Number", listing.cardNumber || asset.cardNumber);
+        setAspectDefault(aspects, "Player/Athlete", listing.cardPlayer || asset.cardPlayer);
+        setAspectDefault(aspects, "Team", listing.cardTeam || asset.cardTeam);
+      }
 
       const product: Record<string, unknown> = {
         title: listing.title.trim().slice(0, 80),

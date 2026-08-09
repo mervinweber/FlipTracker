@@ -21,6 +21,13 @@ type Listing = {
   language?: string;
   bookTitle?: string;
   author?: string;
+  cardProductType?: string;
+  cardGame?: string;
+  cardSport?: string;
+  cardSet?: string;
+  cardNumber?: string;
+  cardPlayer?: string;
+  cardTeam?: string;
   itemSpecifics?: string;
   listedPrice?: number;
   currentPrice?: number;
@@ -194,6 +201,9 @@ const EMPTY_SANDBOX_SETUP = {
 
 const PLATFORMS = ['eBay', 'Mercari', 'Facebook Marketplace', 'Vinted', 'OfferUp', 'Craigslist', 'Poshmark', 'Depop', 'Etsy', 'Amazon', 'Other'];
 const STATUSES = ['Draft', 'Active', 'Pending', 'Sold', 'Expired', 'Relisted', 'Cancelled'];
+const CARD_PRODUCT_TYPES = ['Single Card', 'Card Lot', 'Complete Set', 'Sealed Pack', 'Sealed Box'];
+const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One Piece Card Game', 'Disney Lorcana', 'Other CCG'];
+const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
 const CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ = 32;
 const SHIPPING_PRESETS = {
   'Single Media Mailer': { packageType: 'PACKAGE_THICK_ENVELOPE', packageWeightOz: 8, packageLengthIn: 10, packageWidthIn: 7, packageHeightIn: 1 },
@@ -265,6 +275,16 @@ function isNewCondition(condition?: string) {
 
 function isBookListing(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
   return `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book');
+}
+
+function isCardListing(listing: Pick<Listing, 'assetType'>) {
+  return Boolean(listing.assetType?.toLowerCase().includes('card'));
+}
+
+function defaultCardGame(type?: string) {
+  if (type === 'Pokemon Card') return 'Pokemon TCG';
+  if (type === 'Yu-Gi-Oh! Card') return 'Yu-Gi-Oh! TCG';
+  return undefined;
 }
 
 function canUseCatalogImage(listing: Pick<Listing, 'assetType' | 'mediaFormat' | 'photoUrl' | 'condition' | 'hasCatalogIdentifier'>) {
@@ -1027,6 +1047,13 @@ export default function ListingsPanel() {
       language: editing.language || undefined,
       bookTitle: editing.bookTitle || undefined,
       author: editing.author || undefined,
+      cardProductType: isCardListing(editing) ? editing.cardProductType || 'Single Card' : undefined,
+      cardGame: isCardListing(editing) && editing.assetType !== 'Sports Card' ? editing.cardGame || defaultCardGame(editing.assetType) : undefined,
+      cardSport: editing.assetType === 'Sports Card' ? editing.cardSport || undefined : undefined,
+      cardSet: isCardListing(editing) ? editing.cardSet || undefined : undefined,
+      cardNumber: isCardListing(editing) ? editing.cardNumber || undefined : undefined,
+      cardPlayer: editing.assetType === 'Sports Card' ? editing.cardPlayer || undefined : undefined,
+      cardTeam: editing.assetType === 'Sports Card' ? editing.cardTeam || undefined : undefined,
       itemSpecifics: editing.itemSpecifics || undefined,
       listedPrice: editing.listedPrice,
       currentPrice: editing.currentPrice,
@@ -1156,9 +1183,6 @@ export default function ListingsPanel() {
             <label>Book Category ID<input inputMode="numeric" value={ebaySettings.bookCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, bookCategoryId: event.target.value }))}/></label>
             <label>CD Category ID<input inputMode="numeric" value={ebaySettings.cdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, cdCategoryId: event.target.value }))}/></label>
             <label>Game Category ID<input inputMode="numeric" value={ebaySettings.gameCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, gameCategoryId: event.target.value }))}/></label>
-            <label>Pokemon Card Category ID<input inputMode="numeric" value={ebaySettings.pokemonCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, pokemonCardCategoryId: event.target.value }))}/></label>
-            <label>Sports Card Category ID<input inputMode="numeric" value={ebaySettings.sportsCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, sportsCardCategoryId: event.target.value }))}/></label>
-            <label>Yu-Gi-Oh! Card Category ID<input inputMode="numeric" value={ebaySettings.yugiohCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, yugiohCardCategoryId: event.target.value }))}/></label>
             <label>Other Media Category ID<input inputMode="numeric" value={ebaySettings.otherCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, otherCategoryId: event.target.value }))}/></label>
             <label>Active Listing Target<input type="number" min="1" max="25000" step="1" value={ebaySettings.activeListingTarget} onChange={(event) => setEbaySettings((current) => ({ ...current, activeListingTarget: event.target.value }))}/></label>
             <label>Media Mail Buyer Charge<input type="number" min="0" step="0.01" value={sandboxSetup.mediaMailCost} onChange={(event) => setSandboxSetup((current) => ({ ...current, mediaMailCost: event.target.value }))}/></label>
@@ -1322,6 +1346,16 @@ export default function ListingsPanel() {
             <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
             {isBookListing(editing) ? <label className="span2">Book Title<input maxLength={65} value={editing.bookTitle || ''} onChange={(event) => patchEditing({ bookTitle: event.target.value })}/><small>Required by eBay for book categories. Maximum 65 characters. {(editing.bookTitle || '').length}/65</small></label> : null}
             {isBookListing(editing) ? <label className="span2">Author<input value={editing.author || ''} onChange={(event) => patchEditing({ author: event.target.value })}/><small>Required by eBay for book categories. Confirm the credited author before staging.</small></label> : null}
+            {isCardListing(editing) ? <div className="formSection span2"><h3>Card Details</h3><div className="sectionGrid">
+              <label>Sale Format<select value={editing.cardProductType || 'Single Card'} onChange={(event) => patchEditing({ cardProductType: event.target.value, ebayCategoryId: undefined })}>{CARD_PRODUCT_TYPES.map(value => <option key={value}>{value}</option>)}</select><small>FlipTracker chooses the matching eBay card category.</small></label>
+              {editing.assetType === 'Sports Card'
+                ? <label>Sport<select value={editing.cardSport || ''} onChange={(event) => patchEditing({ cardSport: event.target.value })}><option value="">Select sport</option>{CARD_SPORTS.map(value => <option key={value}>{value}</option>)}</select></label>
+                : <label>Card Game<select value={editing.cardGame || defaultCardGame(editing.assetType) || ''} onChange={(event) => patchEditing({ cardGame: event.target.value })}>{CARD_GAMES.map(value => <option key={value}>{value}</option>)}</select></label>}
+              <label>Set<input value={editing.cardSet || ''} onChange={(event) => patchEditing({ cardSet: event.target.value })}/></label>
+              <label>Card Number<input value={editing.cardNumber || ''} onChange={(event) => patchEditing({ cardNumber: event.target.value })}/></label>
+              {editing.assetType === 'Sports Card' ? <label>Player / Athlete<input value={editing.cardPlayer || ''} onChange={(event) => patchEditing({ cardPlayer: event.target.value })}/></label> : null}
+              {editing.assetType === 'Sports Card' ? <label>Team<input value={editing.cardTeam || ''} onChange={(event) => patchEditing({ cardTeam: event.target.value })}/></label> : null}
+            </div></div> : null}
             <div className="formSection span2 ebayDeliverySection"><h3><Package size={17}/> Shipping & Photos</h3><div className="sectionGrid">
               <label>eBay Shipping Policy<select value={editing.fulfillmentPolicyId || ''} onChange={(event) => patchEditing({ fulfillmentPolicyId: event.target.value || undefined })}>
                 <option value="">Use seller default</option>

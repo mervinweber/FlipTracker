@@ -38,6 +38,13 @@ type Asset = {
   studio?: string;
   author?: string;
   rating?: string;
+  cardProductType?: string;
+  cardGame?: string;
+  cardSport?: string;
+  cardSet?: string;
+  cardNumber?: string;
+  cardPlayer?: string;
+  cardTeam?: string;
   coverImageUrl?: string;
   photoDataUrl?: string;
   metadataSource?: string;
@@ -118,6 +125,19 @@ type LookupResult = {
 };
 
 const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Other Media', 'Toy', 'Misc'];
+const CARD_PRODUCT_TYPES = ['Single Card', 'Card Lot', 'Complete Set', 'Sealed Pack', 'Sealed Box'];
+const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One Piece Card Game', 'Disney Lorcana', 'Other CCG'];
+const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
+
+function isCardType(type?: string) {
+  return Boolean(type?.toLowerCase().includes('card'));
+}
+
+function defaultCardGame(type?: string) {
+  if (type === 'Pokemon Card') return 'Pokemon TCG';
+  if (type === 'Yu-Gi-Oh! Card') return 'Yu-Gi-Oh! TCG';
+  return undefined;
+}
 const TYPE_FILTERS = ['All', 'Cards', ...MEDIA_TYPES];
 const CONDITIONS = ['New', 'Like New', 'Very Good', 'Good', 'Acceptable', 'For Parts'];
 const COMPLETENESS = ['Complete', 'Disc Only', 'Case Only', 'Case + Disc', 'No Manual', 'Sealed', 'Loose', 'Incomplete'];
@@ -192,7 +212,7 @@ function ebayConditionFor(item: Partial<Asset>) {
 }
 
 function generateEbayTitle(item: Partial<Asset>) {
-  return [item.title, item.edition, item.mediaFormat || (item.type === 'Video Game' ? item.console : item.type), item.releaseYear]
+  return [item.title, item.edition, item.cardSet, item.cardNumber ? `#${item.cardNumber.replace(/^#/, '')}` : '', item.cardProductType, item.mediaFormat || (item.type === 'Video Game' ? item.console : item.type), item.releaseYear]
     .filter(Boolean)
     .join(' ')
     .replace(/\s+/g, ' ')
@@ -221,6 +241,12 @@ function listingSpecifics(item: Partial<Asset>) {
     item.author ? `Author: ${item.author}` : '',
     item.rating ? `Rating: ${item.rating}` : '',
     item.releaseYear ? `Release Year: ${item.releaseYear}` : '',
+    item.cardGame ? `Game: ${item.cardGame}` : '',
+    item.cardSport ? `Sport: ${item.cardSport}` : '',
+    item.cardSet ? `Set: ${item.cardSet}` : '',
+    item.cardNumber ? `Card Number: ${item.cardNumber}` : '',
+    item.cardPlayer ? `Player/Athlete: ${item.cardPlayer}` : '',
+    item.cardTeam ? `Team: ${item.cardTeam}` : '',
     item.upc || item.barcode ? `UPC: ${item.upc || item.barcode}` : '',
   ].filter(Boolean).join('\n');
 }
@@ -615,6 +641,13 @@ export default function App() {
       studio: prepared.studio || undefined,
       author: prepared.author || undefined,
       rating: prepared.rating || undefined,
+      cardProductType: isCardType(prepared.type) ? prepared.cardProductType || 'Single Card' : undefined,
+      cardGame: isCardType(prepared.type) && prepared.type !== 'Sports Card' ? prepared.cardGame || defaultCardGame(prepared.type) : undefined,
+      cardSport: prepared.type === 'Sports Card' ? prepared.cardSport || undefined : undefined,
+      cardSet: isCardType(prepared.type) ? prepared.cardSet || undefined : undefined,
+      cardNumber: isCardType(prepared.type) ? prepared.cardNumber || undefined : undefined,
+      cardPlayer: prepared.type === 'Sports Card' ? prepared.cardPlayer || undefined : undefined,
+      cardTeam: prepared.type === 'Sports Card' ? prepared.cardTeam || undefined : undefined,
       coverImageUrl: prepared.coverImageUrl || undefined,
       photoDataUrl: prepared.photoDataUrl || undefined,
       metadataSource: prepared.metadataSource || undefined,
@@ -700,6 +733,13 @@ export default function App() {
       language: 'English',
       bookTitle: `${asset.type || ''} ${asset.mediaFormat || ''}`.toLowerCase().includes('book') ? asset.title : undefined,
       author: `${asset.type || ''} ${asset.mediaFormat || ''}`.toLowerCase().includes('book') ? asset.author : undefined,
+      cardProductType: asset.cardProductType,
+      cardGame: asset.cardGame || defaultCardGame(asset.type),
+      cardSport: asset.cardSport,
+      cardSet: asset.cardSet,
+      cardNumber: asset.cardNumber,
+      cardPlayer: asset.cardPlayer,
+      cardTeam: asset.cardTeam,
       itemSpecifics: asset.ebayItemSpecifics || listingSpecifics(asset),
       listedPrice: price || undefined,
       currentPrice: price || undefined,
@@ -938,8 +978,18 @@ export default function App() {
               </aside>
               <div className="formGrid">
                 <label className="span2">Title<input value={editing.title || ''} onChange={e => updateEditing({ title:e.target.value, needsValueCheck: '_id' in editing })}/></label>
-                <label>Type<select value={editing.type || 'Video Game'} onChange={e => updateEditing({ type:e.target.value })}>{MEDIA_TYPES.map(s => <option key={s}>{s}</option>)}</select></label>
+                <label>Type<select value={editing.type || 'Video Game'} onChange={e => updateEditing({ type:e.target.value, cardProductType: isCardType(e.target.value) ? editing.cardProductType || 'Single Card' : undefined, cardGame: isCardType(e.target.value) && e.target.value !== 'Sports Card' ? editing.cardGame || defaultCardGame(e.target.value) : undefined, cardSport: e.target.value === 'Sports Card' ? editing.cardSport : undefined })}>{MEDIA_TYPES.map(s => <option key={s}>{s}</option>)}</select></label>
                 <label>Format<input value={editing.mediaFormat || ''} onChange={e => updateEditing({ mediaFormat:e.target.value })}/></label>
+                {isCardType(editing.type) ? <div className="formSection span2"><h3>Card Details</h3><div className="sectionGrid">
+                  <label>Sale Format<select value={editing.cardProductType || 'Single Card'} onChange={e => updateEditing({ cardProductType:e.target.value })}>{CARD_PRODUCT_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>
+                  {editing.type === 'Sports Card'
+                    ? <label>Sport<select value={editing.cardSport || ''} onChange={e => updateEditing({ cardSport:e.target.value })}><option value="">Select sport</option>{CARD_SPORTS.map(value => <option key={value}>{value}</option>)}</select></label>
+                    : <label>Card Game<select value={editing.cardGame || defaultCardGame(editing.type) || ''} onChange={e => updateEditing({ cardGame:e.target.value })}>{CARD_GAMES.map(value => <option key={value}>{value}</option>)}</select></label>}
+                  <label>Set<input value={editing.cardSet || ''} onChange={e => updateEditing({ cardSet:e.target.value })} placeholder="Base Set, Prizm, Series 1..."/></label>
+                  <label>Card Number<input value={editing.cardNumber || ''} onChange={e => updateEditing({ cardNumber:e.target.value })} placeholder="4/102 or 150"/></label>
+                  {editing.type === 'Sports Card' ? <label>Player / Athlete<input value={editing.cardPlayer || ''} onChange={e => updateEditing({ cardPlayer:e.target.value })}/></label> : null}
+                  {editing.type === 'Sports Card' ? <label>Team<input value={editing.cardTeam || ''} onChange={e => updateEditing({ cardTeam:e.target.value })}/></label> : null}
+                </div></div> : null}
                 <label>Console / Platform<input value={editing.console || ''} onChange={e => updateEditing({ console:e.target.value })}/></label>
                 <label>Edition<input value={editing.edition || ''} onChange={e => updateEditing({ edition:e.target.value, needsValueCheck: '_id' in editing })}/></label>
                 <label>UPC / Barcode<input value={editing.upc || editing.barcode || ''} onChange={e => updateEditing({ upc:e.target.value, barcode:e.target.value, needsValueCheck: '_id' in editing })}/></label>

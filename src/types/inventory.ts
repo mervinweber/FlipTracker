@@ -17,6 +17,13 @@ export type InventoryItem = {
   studio?: string;
   author?: string;
   rating?: string;
+  cardProductType?: string;
+  cardGame?: string;
+  cardSport?: string;
+  cardSet?: string;
+  cardNumber?: string;
+  cardPlayer?: string;
+  cardTeam?: string;
   coverImageUrl?: string;
   photoDataUrl?: string;
   metadataSource?: string;

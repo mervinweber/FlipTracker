@@ -80,6 +80,8 @@ The Listings view retrieves the seller's account-wide active and scheduled listi
 
 Older listings without package data receive conservative media defaults during eBay synchronization: 16 oz for books, 8 oz for DVDs/Blu-rays/games, and 6 oz for CDs. Explicit listing-level package measurements override these defaults.
 
+Card fields are conditional in both inventory review and marketplace editing. Pokemon and Yu-Gi-Oh! cards send the eBay `Game` aspect; sports cards send `Sport`, plus set, card number, player, and team when available. Sale format routes the offer to eBay's current single-card, lot, complete-set, sealed-pack, or sealed-box category. Non-card records neither display nor send these fields, and an explicit listing-level category ID remains available as an advanced override.
+
 Inventory synchronization repeats total ship-to-home quantity and a quantity distribution for the selected `merchantLocationKey` on every replace request. Offer refresh retries error `25604` once after a short delay to account for Inventory Service propagation without creating another offer.
 
 ## Security Boundary
