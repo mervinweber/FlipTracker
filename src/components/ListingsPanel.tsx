@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -104,7 +104,7 @@ type EbaySetup = {
   connected: boolean;
   environment: 'sandbox' | 'production';
   connectedAt?: number;
-  settings: Record<string, string | undefined>;
+  settings: Record<string, string | number | undefined>;
   policies: {
     fulfillment: { id: string; name: string }[];
     payment: { id: string; name: string }[];
@@ -112,6 +112,12 @@ type EbaySetup = {
   };
   locations: { key: string; name: string }[];
   warning?: string;
+};
+
+type EbaySellerListingSummary = {
+  activeCount: number;
+  scheduledCount: number;
+  checkedAt: number;
 };
 
 const LANGUAGE_OPTIONS = [
@@ -156,6 +162,7 @@ type EbaySettings = {
   sportsCardCategoryId: string;
   yugiohCardCategoryId: string;
   otherCategoryId: string;
+  activeListingTarget: string;
 };
 
 const EMPTY_EBAY_SETTINGS: EbaySettings = {
@@ -174,6 +181,7 @@ const EMPTY_EBAY_SETTINGS: EbaySettings = {
   sportsCardCategoryId: '',
   yugiohCardCategoryId: '',
   otherCategoryId: '',
+  activeListingTarget: '200',
 };
 
 const EMPTY_SANDBOX_SETUP = {
@@ -297,6 +305,7 @@ export default function ListingsPanel() {
   const applyQueuePricing = useMutation(api.listings.applyQueuePricing);
   const beginEbayOauth = useAction(api.ebay.beginOauth);
   const loadEbaySetup = useAction(api.ebay.loadSetup);
+  const getSellerListingSummary = useAction(api.ebay.getSellerListingSummary);
   const saveEbaySettings = useAction(api.ebay.saveSettings);
   const createInventoryLocation = useAction(api.ebay.createInventoryLocation);
   const ensureMediaMailPolicy = useAction(api.ebay.ensureMediaMailPolicy);
@@ -333,6 +342,9 @@ export default function ListingsPanel() {
   const [ebaySetup, setEbaySetup] = useState<EbaySetup | null>(null);
   const [ebaySettings, setEbaySettings] = useState<EbaySettings>(EMPTY_EBAY_SETTINGS);
   const [ebayBusy, setEbayBusy] = useState(false);
+  const [sellerListingSummary, setSellerListingSummary] = useState<EbaySellerListingSummary | null>(null);
+  const [sellerListingCountBusy, setSellerListingCountBusy] = useState(false);
+  const [sellerListingCountError, setSellerListingCountError] = useState('');
   const [offerBusy, setOfferBusy] = useState<Id<'marketplaceListings'> | null>(null);
   const [ebayNotice, setEbayNotice] = useState('');
   const [ebayError, setEbayError] = useState('');
@@ -384,6 +396,10 @@ export default function ListingsPanel() {
     && ebaySettings.paymentPolicyId
     && ebaySettings.returnPolicyId,
   );
+  const activeListingTarget = Math.max(1, Math.round(Number(ebaySettings.activeListingTarget) || 200));
+  const projectedEbayListings = (sellerListingSummary?.activeCount ?? 0) + (sellerListingSummary?.scheduledCount ?? 0);
+  const roomToListingTarget = Math.max(0, activeListingTarget - projectedEbayListings);
+  const listingTargetPercent = Math.min(100, (projectedEbayListings / activeListingTarget) * 100);
   const repricePreview = useMemo(() => {
     if (!repricing) return null;
     const currentPrice = repricing.currentPrice ?? repricing.listedPrice ?? 0;
@@ -611,6 +627,8 @@ export default function ListingsPanel() {
     setRememberSellerKey(false);
     setEbaySetup(null);
     setEbaySettings(EMPTY_EBAY_SETTINGS);
+    setSellerListingSummary(null);
+    setSellerListingCountError('');
     setEbayError('');
     setEbayNotice('Seller access was removed from this device. The eBay authorization stored in Convex was not revoked.');
   }
@@ -618,22 +636,37 @@ export default function ListingsPanel() {
   function applyEbaySetup(setup: EbaySetup) {
     setEbaySetup(setup);
     setEbaySettings({
-      marketplaceId: setup.settings.marketplaceId || 'EBAY_US',
-      currency: setup.settings.currency || 'USD',
-      merchantLocationKey: setup.settings.merchantLocationKey || '',
-      fulfillmentPolicyId: setup.settings.fulfillmentPolicyId || '',
-      paymentPolicyId: setup.settings.paymentPolicyId || '',
-      returnPolicyId: setup.settings.returnPolicyId || '',
-      dvdCategoryId: setup.settings.dvdCategoryId || '',
-      blurayCategoryId: setup.settings.blurayCategoryId || '',
-      bookCategoryId: setup.settings.bookCategoryId || '',
-      cdCategoryId: setup.settings.cdCategoryId || '',
-      gameCategoryId: setup.settings.gameCategoryId || '',
-      pokemonCardCategoryId: setup.settings.pokemonCardCategoryId || '',
-      sportsCardCategoryId: setup.settings.sportsCardCategoryId || '',
-      yugiohCardCategoryId: setup.settings.yugiohCardCategoryId || '',
-      otherCategoryId: setup.settings.otherCategoryId || '',
+      marketplaceId: String(setup.settings.marketplaceId || 'EBAY_US'),
+      currency: String(setup.settings.currency || 'USD'),
+      merchantLocationKey: String(setup.settings.merchantLocationKey || ''),
+      fulfillmentPolicyId: String(setup.settings.fulfillmentPolicyId || ''),
+      paymentPolicyId: String(setup.settings.paymentPolicyId || ''),
+      returnPolicyId: String(setup.settings.returnPolicyId || ''),
+      dvdCategoryId: String(setup.settings.dvdCategoryId || ''),
+      blurayCategoryId: String(setup.settings.blurayCategoryId || ''),
+      bookCategoryId: String(setup.settings.bookCategoryId || ''),
+      cdCategoryId: String(setup.settings.cdCategoryId || ''),
+      gameCategoryId: String(setup.settings.gameCategoryId || ''),
+      pokemonCardCategoryId: String(setup.settings.pokemonCardCategoryId || ''),
+      sportsCardCategoryId: String(setup.settings.sportsCardCategoryId || ''),
+      yugiohCardCategoryId: String(setup.settings.yugiohCardCategoryId || ''),
+      otherCategoryId: String(setup.settings.otherCategoryId || ''),
+      activeListingTarget: String(setup.settings.activeListingTarget || 200),
     });
+  }
+
+  async function refreshSellerListingCount(sellerKey = adminKey) {
+    if (!sellerKey) return;
+    setSellerListingCountBusy(true);
+    setSellerListingCountError('');
+    try {
+      const summary = await getSellerListingSummary({ adminKey: sellerKey }) as EbaySellerListingSummary;
+      setSellerListingSummary(summary);
+    } catch (error) {
+      setSellerListingCountError(error instanceof Error ? error.message : 'Could not load the eBay account listing count.');
+    } finally {
+      setSellerListingCountBusy(false);
+    }
   }
 
   async function unlockEbaySetup() {
@@ -645,6 +678,7 @@ export default function ListingsPanel() {
       const setup = await loadEbaySetup({ adminKey }) as EbaySetup;
       rememberSellerAccessKey();
       applyEbaySetup(setup);
+      void refreshSellerListingCount(adminKey);
       if (setup.warning) setEbayError(setup.warning);
     } catch (error) {
       setEbaySetup(null);
@@ -690,6 +724,7 @@ export default function ListingsPanel() {
         sportsCardCategoryId: optionalText(ebaySettings.sportsCardCategoryId),
         yugiohCardCategoryId: optionalText(ebaySettings.yugiohCardCategoryId),
         otherCategoryId: optionalText(ebaySettings.otherCategoryId),
+        activeListingTarget,
       });
       await unlockEbaySetup();
       setEbayNotice('eBay draft defaults saved.');
@@ -1058,7 +1093,8 @@ export default function ListingsPanel() {
     <>
       <section className="cards listingCards">
         <div className="metric"><span>Drafts</span><strong>{stats?.draftCount ?? '-'}</strong></div>
-        <div className="metric"><span>Active Listings</span><strong>{stats?.activeCount ?? '-'}</strong></div>
+        <div className="metric"><span>eBay Account Active</span><strong>{sellerListingSummary?.activeCount ?? '-'}</strong></div>
+        <div className="metric"><span>FlipTracker Active</span><strong>{stats?.activeCount ?? '-'}</strong></div>
         <div className="metric"><span>Active Value</span><strong>{stats ? money(stats.activeValue) : '-'}</strong></div>
         <div className="metric"><span>Sold Revenue</span><strong>{stats ? money(stats.soldRevenue) : '-'}</strong></div>
         <div className="metric"><span>Net Profit</span><strong className={stats && stats.soldNetProfit < 0 ? 'lossValue' : 'profitValue'}>{stats ? money(stats.soldNetProfit) : '-'}</strong></div>
@@ -1095,6 +1131,21 @@ export default function ListingsPanel() {
           </div>
         ) : null}
         {ebaySetup?.connected ? (
+          <>
+          <div className={`sellerListingMeter ${projectedEbayListings >= activeListingTarget ? 'atTarget' : ''}`}>
+            <div className="sellerListingMeterHeader">
+              <div><span className="eyebrow">Account-wide eBay count</span><h3>{sellerListingSummary ? `${sellerListingSummary.activeCount} active listing${sellerListingSummary.activeCount === 1 ? '' : 's'}` : 'Count not checked yet'}</h3></div>
+              <button className="secondary" disabled={sellerListingCountBusy} onClick={() => refreshSellerListingCount()}><RefreshCw size={16}/>{sellerListingCountBusy ? 'Checking...' : 'Refresh Count'}</button>
+            </div>
+            <div className="sellerListingMeterStats">
+              <div><span>Active</span><strong>{sellerListingSummary?.activeCount ?? '-'}</strong></div>
+              <div><span>Scheduled</span><strong>{sellerListingSummary?.scheduledCount ?? '-'}</strong></div>
+              <div><span>Room to {activeListingTarget}</span><strong>{sellerListingSummary ? roomToListingTarget : '-'}</strong></div>
+            </div>
+            <div className="listingTargetTrack" role="progressbar" aria-label="eBay listing target usage" aria-valuemin={0} aria-valuemax={activeListingTarget} aria-valuenow={sellerListingSummary ? projectedEbayListings : 0}><span style={{ width: `${sellerListingSummary ? listingTargetPercent : 0}%` }}/></div>
+            <p>{sellerListingSummary ? `Checked ${new Date(sellerListingSummary.checkedAt).toLocaleString()}. ` : ''}This is eBay's account-wide active count, including listings created outside FlipTracker. It is a planning guardrail, not eBay's monthly zero-insertion-fee usage.</p>
+            {sellerListingCountError ? <div className="listingCountError"><p className="formError">{sellerListingCountError}</p><button onClick={connectEbay}><Link size={16}/> Authorize Account Count</button></div> : null}
+          </div>
           <div className="ebaySettingsGrid">
             <label>Inventory Location<select value={ebaySettings.merchantLocationKey} onChange={(event) => setEbaySettings((current) => ({ ...current, merchantLocationKey: event.target.value }))}><option value="">Choose location</option>{ebaySetup.locations.map((location) => <option key={location.key} value={location.key}>{location.name}</option>)}</select></label>
             <label>Shipping Policy<select value={ebaySettings.fulfillmentPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, fulfillmentPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
@@ -1109,9 +1160,11 @@ export default function ListingsPanel() {
             <label>Sports Card Category ID<input inputMode="numeric" value={ebaySettings.sportsCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, sportsCardCategoryId: event.target.value }))}/></label>
             <label>Yu-Gi-Oh! Card Category ID<input inputMode="numeric" value={ebaySettings.yugiohCardCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, yugiohCardCategoryId: event.target.value }))}/></label>
             <label>Other Media Category ID<input inputMode="numeric" value={ebaySettings.otherCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, otherCategoryId: event.target.value }))}/></label>
+            <label>Active Listing Target<input type="number" min="1" max="25000" step="1" value={ebaySettings.activeListingTarget} onChange={(event) => setEbaySettings((current) => ({ ...current, activeListingTarget: event.target.value }))}/></label>
             <label>Media Mail Buyer Charge<input type="number" min="0" step="0.01" value={sandboxSetup.mediaMailCost} onChange={(event) => setSandboxSetup((current) => ({ ...current, mediaMailCost: event.target.value }))}/></label>
             <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button className="secondary" disabled={ebayBusy || Number(sandboxSetup.mediaMailCost) < 0} onClick={() => createMediaMailPolicy()}><Truck size={16}/> Create/Select Media Mail</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button><button className="secondary forgetDeviceButton" disabled={ebayBusy} onClick={forgetSellerDevice}><LogOut size={16}/> Forget Device</button></div>
           </div>
+          </>
         ) : null}
         {ebaySetup?.connected && ebaySetup.environment === 'production' && !ebaySetup.locations.length ? (
           <div className="sandboxSetupPanel">

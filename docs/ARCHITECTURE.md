@@ -76,6 +76,8 @@ Queue pricing is an explicit review action. It writes the approved current/liste
 
 Active Inventory API listings can be repriced through a separate seller-key-gated action using eBay's bulk price/quantity endpoint. The browser calculates either a percentage reduction, an exact target, or a conservative profit-floor target from acquisition cost, estimated marketplace fees, shipping income/cost, and desired net profit. It previews the public price and estimated profit, then requires confirmation. Convex updates local `currentPrice` and inserts `listingPriceHistory` only after eBay reports a successful offer update, preventing local and marketplace prices from drifting after a rejected request.
 
+The Listings view retrieves the seller's account-wide active and scheduled listing totals through the Trading API `GetMyeBaySelling` call. This count includes listings created outside FlipTracker and is intentionally separate from local marketplace-listing totals. A configurable target defaults to 200 and acts only as a planning warning. It does not represent or attempt to calculate eBay's monthly zero-insertion-fee usage, because renewals, relists, category rules, and account billing allowances make that a separate Seller Hub figure.
+
 Older listings without package data receive conservative media defaults during eBay synchronization: 16 oz for books, 8 oz for DVDs/Blu-rays/games, and 6 oz for CDs. Explicit listing-level package measurements override these defaults.
 
 Inventory synchronization repeats total ship-to-home quantity and a quantity distribution for the selected `merchantLocationKey` on every replace request. Offer refresh retries error `25604` once after a short delay to account for Inventory Service propagation without creating another offer.

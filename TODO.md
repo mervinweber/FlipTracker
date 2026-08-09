@@ -29,6 +29,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add listing create, update, sold, and delete behavior
 - [x] Preserve listing price changes with a reason and timestamp
 - [x] Add confirmation-protected live eBay repricing by percentage, exact value, or calculated profit floor
+- [x] Add an account-wide eBay active/scheduled listing count with a configurable 200-listing planning target
 - [x] Add Inventory and Listings primary views
 - [x] Create an internal eBay draft from an inventory item
 - [x] Distinguish API-staged offers from Seller Hub drafts and require confirmation before publishing live

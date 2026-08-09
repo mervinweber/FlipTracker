@@ -91,7 +91,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .viewTabs { display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:10px; }
 .viewTabs button { border:1px solid transparent; }
 .viewTabs button.active { background:var(--primary-strong); border-color:#60a5fa; }
-.listingCards { grid-template-columns:repeat(6, minmax(0, 1fr)); }
+.listingCards { grid-template-columns:repeat(7, minmax(0, 1fr)); }
 .listingControls { display:grid; grid-template-columns:minmax(240px, 1fr) 160px 200px auto; gap:12px; margin-bottom:18px; }
 .listingTools { flex-wrap:nowrap; }
 .listingTools .button, .listingTools button { white-space:nowrap; }
@@ -106,6 +106,21 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .badge.pending { border-color:rgba(245,158,11,.55); color:#fde68a; background:rgba(245,158,11,.1); }
 .badge.expired, .badge.cancelled { border-color:rgba(153,27,27,.7); color:#fecaca; background:rgba(153,27,27,.16); }
 .ebaySetupPanel { margin-bottom:18px; }
+.sellerListingMeter { display:grid; gap:12px; margin-top:16px; padding:16px; border:1px solid rgba(20,184,166,.45); border-radius:8px; background:rgba(20,184,166,.07); }
+.sellerListingMeter.atTarget { border-color:rgba(245,158,11,.7); background:rgba(245,158,11,.08); }
+.sellerListingMeterHeader { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.sellerListingMeterHeader h3 { margin:3px 0 0; font-size:20px; }
+.sellerListingMeterStats { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
+.sellerListingMeterStats div { padding:12px; background:var(--surface-3); }
+.sellerListingMeterStats span, .sellerListingMeterStats strong { display:block; }
+.sellerListingMeterStats span { color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase; }
+.sellerListingMeterStats strong { margin-top:4px; font-size:22px; }
+.listingTargetTrack { height:10px; overflow:hidden; border:1px solid var(--border-strong); border-radius:5px; background:#020617; }
+.listingTargetTrack span { display:block; height:100%; background:#14b8a6; }
+.sellerListingMeter.atTarget .listingTargetTrack span { background:#f59e0b; }
+.sellerListingMeter p { margin:0; color:var(--muted); font-size:12px; line-height:1.45; }
+.listingCountError { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.listingCountError .formError { color:#fca5a5; }
 .ebayUnlockRow { display:grid; grid-template-columns:minmax(260px, 1fr) auto auto; gap:12px; align-items:end; }
 .sellerKeyField { display:grid; gap:7px; }
 .rememberSellerKey { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; }
@@ -326,6 +341,7 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 @media (max-width:1050px) { .pricingReviewRow { grid-template-columns:minmax(220px, 1fr) minmax(180px, .8fr); } }
 @media (max-width:560px) { .viewTabs, .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } }
 @media (max-width:700px) { .ebayUnlockRow, .ebaySettingsGrid { grid-template-columns:1fr; } .ebaySetupActions { grid-column:auto; } .forgetDeviceButton { margin-left:0; } }
+@media (max-width:560px) { .sellerListingMeterHeader, .listingCountError { align-items:flex-start; flex-direction:column; } .sellerListingMeterStats { grid-template-columns:1fr; } }
 @media (max-width:700px) { .queueSummary { flex-direction:column; } .queueSteps { justify-content:flex-start; } .pricingReviewRow { grid-template-columns:1fr; } .pricingCompare { max-width:260px; } }
 @media (max-width:900px) { .workflowStrip { grid-template-columns:1fr; } .workflowStep { border-right:0; border-bottom:1px solid var(--border); } .workflowStep:last-child { border-bottom:0; } }
 @media (max-width:620px) { .guideHeader { flex-direction:column; } .guideContent > section { grid-template-columns:1fr; } }

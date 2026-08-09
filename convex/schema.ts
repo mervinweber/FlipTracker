@@ -202,6 +202,7 @@ export default defineSchema({
     sportsCardCategoryId: v.optional(v.string()),
     yugiohCardCategoryId: v.optional(v.string()),
     otherCategoryId: v.optional(v.string()),
+    activeListingTarget: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_singletonKey", ["singletonKey"]),
 

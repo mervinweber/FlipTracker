@@ -1,9 +1,11 @@
 import { ConvexError, v } from "convex/values";
+import { XMLParser } from "fast-xml-parser";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const EBAY_SCOPES = [
+  "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/sell.account.readonly",
@@ -23,6 +25,11 @@ type TokenResponse = {
 
 type Policy = { id: string; name: string };
 type Location = { key: string; name: string };
+type SellerListingSummary = {
+  activeCount: number;
+  scheduledCount: number;
+  checkedAt: number;
+};
 type BrowseItem = {
   title?: string;
   itemWebUrl?: string;
@@ -144,6 +151,32 @@ async function ebayFetch(accessToken: string, path: string, init: RequestInit = 
   const body = await responseBody(response);
   if (!response.ok) throw new Error(ebayError(body, response.status));
   return body;
+}
+
+async function tradingApiFetch(accessToken: string, callName: string, requestXml: string) {
+  const response = await fetch(`${endpoints().api}/ws/api.dll`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml",
+      "X-EBAY-API-CALL-NAME": callName,
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1423",
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-IAF-TOKEN": accessToken,
+    },
+    body: requestXml,
+  });
+  const text = await response.text();
+  const parsed = new XMLParser({ ignoreAttributes: false, parseTagValue: true }).parse(text) as Record<string, unknown>;
+  const result = parsed[`${callName}Response`] as {
+    Ack?: string;
+    Errors?: { LongMessage?: string; ShortMessage?: string } | Array<{ LongMessage?: string; ShortMessage?: string }>;
+  } | undefined;
+  const errors = result?.Errors ? (Array.isArray(result.Errors) ? result.Errors : [result.Errors]) : [];
+  if (!response.ok || !result || result.Ack === "Failure" || result.Ack === "PartialFailure") {
+    const detail = errors.map((error) => error.LongMessage || error.ShortMessage).filter(Boolean).join(" ");
+    throw new Error(detail || `eBay ${callName} request failed (${response.status}).`);
+  }
+  return result;
 }
 
 async function browseFetch(accessToken: string, params: URLSearchParams) {
@@ -272,10 +305,10 @@ async function uploadActualPhoto(accessToken: string, dataUrl: string) {
   return await uploadPhotoBlob(accessToken, blob, filename);
 }
 
-async function refreshAccessToken(ctx: ActionCtx) {
+async function refreshAccessToken(ctx: ActionCtx, forceRefresh = false) {
   const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: singletonKey() });
   if (!connection) throw new Error("Connect an eBay seller account first.");
-  if (connection.accessTokenExpiresAt > Date.now() + 300_000) return connection.accessToken;
+  if (!forceRefresh && connection.accessTokenExpiresAt > Date.now() + 300_000) return connection.accessToken;
 
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -522,6 +555,7 @@ export const saveSettingsRecord = internalMutation({
     sportsCardCategoryId: v.optional(v.string()),
     yugiohCardCategoryId: v.optional(v.string()),
     otherCategoryId: v.optional(v.string()),
+    activeListingTarget: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.query("ebaySettings").withIndex("by_singletonKey", (q) => q.eq("singletonKey", args.singletonKey)).unique();
@@ -662,7 +696,7 @@ export const loadSetup = action({
     connected: boolean;
     environment: EbayEnvironment;
     connectedAt?: number;
-    settings: Record<string, string | undefined>;
+    settings: Record<string, string | number | undefined>;
     policies: { fulfillment: Policy[]; payment: Policy[]; returns: Policy[] };
     locations: Location[];
     warning?: string;
@@ -690,6 +724,7 @@ export const loadSetup = action({
         sportsCardCategoryId: settings?.sportsCardCategoryId,
         yugiohCardCategoryId: settings?.yugiohCardCategoryId,
         otherCategoryId: settings?.otherCategoryId,
+        activeListingTarget: settings?.activeListingTarget ?? 200,
       },
       policies: { fulfillment: [] as Policy[], payment: [] as Policy[], returns: [] as Policy[] },
       locations: [] as Location[],
@@ -729,6 +764,45 @@ export const loadSetup = action({
   },
 });
 
+export const getSellerListingSummary = action({
+  args: { adminKey: v.string() },
+  handler: async (ctx, args): Promise<SellerListingSummary> => {
+    requireAdminKey(args.adminKey);
+    try {
+      const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: singletonKey() });
+      const grantedScopes = new Set(connection?.scopes.split(/\s+/).filter(Boolean) ?? []);
+      const accessToken = await refreshAccessToken(ctx, !grantedScopes.has(EBAY_BROWSE_SCOPE));
+      const response = await tradingApiFetch(accessToken, "GetMyeBaySelling", `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ActiveList>
+    <Include>true</Include>
+    <Pagination><EntriesPerPage>1</EntriesPerPage><PageNumber>1</PageNumber></Pagination>
+  </ActiveList>
+  <ScheduledList>
+    <Include>true</Include>
+    <Pagination><EntriesPerPage>1</EntriesPerPage><PageNumber>1</PageNumber></Pagination>
+  </ScheduledList>
+</GetMyeBaySellingRequest>`);
+      const payload = response as {
+        ActiveList?: { PaginationResult?: { TotalNumberOfEntries?: number | string } };
+        ScheduledList?: { PaginationResult?: { TotalNumberOfEntries?: number | string } };
+      };
+      const activeCount = Number(payload.ActiveList?.PaginationResult?.TotalNumberOfEntries ?? 0);
+      const scheduledCount = Number(payload.ScheduledList?.PaginationResult?.TotalNumberOfEntries ?? 0);
+      if (!Number.isFinite(activeCount) || !Number.isFinite(scheduledCount)) {
+        throw new Error("eBay returned an invalid seller listing count.");
+      }
+      return { activeCount, scheduledCount, checkedAt: Date.now() };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not load the eBay account listing count.";
+      const needsAuthorization = /scope|permission|access denied|authorization|token/i.test(message);
+      throw new ConvexError(needsAuthorization
+        ? "Reconnect eBay once to authorize the account-wide listing count."
+        : message);
+    }
+  },
+});
+
 export const saveSettings = action({
   args: {
     adminKey: v.string(),
@@ -747,6 +821,7 @@ export const saveSettings = action({
     sportsCardCategoryId: v.optional(v.string()),
     yugiohCardCategoryId: v.optional(v.string()),
     otherCategoryId: v.optional(v.string()),
+    activeListingTarget: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     requireAdminKey(args.adminKey);
