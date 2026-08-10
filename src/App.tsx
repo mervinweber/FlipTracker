@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Sparkles, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
@@ -11,6 +11,8 @@ import QuickGuide from './components/QuickGuide';
 import BulkIntakePanel from './components/BulkIntakePanel';
 import SourcingPanel from './components/SourcingPanel';
 import PhotoQueuePanel from './components/PhotoQueuePanel';
+import ListingPhotoManager from './components/ListingPhotoManager';
+import { resizeForListing } from './utils/listingPhotos';
 
 type AppView = 'Inventory' | 'Listings' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
 
@@ -122,6 +124,11 @@ type LookupResult = {
   source: string;
   confidence: string;
   notes?: string;
+};
+
+type PendingPhoto = {
+  file: File;
+  previewUrl: string;
 };
 
 const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Other Media', 'Toy', 'Misc'];
@@ -370,32 +377,6 @@ function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem 
   };
 }
 
-async function compressImage(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-
-  const maxSide = 720;
-  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(image.width * scale);
-  canvas.height = Math.round(image.height * scale);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return dataUrl;
-  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.72);
-}
-
 export default function App() {
   const [activeView, setActiveView] = useState<AppView>(viewFromHash);
   const [query, setQuery] = useState('');
@@ -415,6 +396,10 @@ export default function App() {
   const [createDraftAfterSave, setCreateDraftAfterSave] = useState(false);
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionError, setDescriptionError] = useState('');
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const pendingPhotosRef = useRef<PendingPhoto[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControls = useRef<IScannerControls | null>(null);
 
@@ -438,6 +423,16 @@ export default function App() {
   const removeCollection = useMutation(api.collections.remove);
   const addValueCheck = useMutation(api.research.addValueCheck);
   const createListing = useMutation(api.listings.create);
+  const generatePhotoUploadUrl = useMutation(api.photos.generateUploadUrl);
+  const attachPhoto = useMutation(api.photos.attach);
+
+  useEffect(() => {
+    pendingPhotosRef.current = pendingPhotos;
+  }, [pendingPhotos]);
+
+  useEffect(() => () => {
+    pendingPhotosRef.current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+  }, []);
   const lookupByBarcode = useAction(api.mediaLookup.lookupByBarcode);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
 
@@ -541,6 +536,59 @@ export default function App() {
     });
   }
 
+  function clearPendingPhotos() {
+    setPendingPhotos((current) => {
+      current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      return [];
+    });
+    setPhotoError('');
+  }
+
+  function addPendingPhotos(files: FileList | File[]) {
+    const selected = Array.from(files);
+    setPhotoError('');
+    setPendingPhotos((current) => {
+      const room = 12 - current.length;
+      if (room <= 0) {
+        setPhotoError('This item already has the maximum of 12 photos.');
+        return current;
+      }
+      if (selected.length > room) setPhotoError(`Only the first ${room} photos were added because eBay supports up to 12.`);
+      return [...current, ...selected.slice(0, room).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))];
+    });
+  }
+
+  function removePendingPhoto(index: number) {
+    setPendingPhotos((current) => {
+      URL.revokeObjectURL(current[index].previewUrl);
+      return current.filter((_, photoIndex) => photoIndex !== index);
+    });
+  }
+
+  function makePendingPhotoPrimary(index: number) {
+    if (index === 0) return;
+    setPendingPhotos((current) => {
+      const selected = current[index];
+      return [selected, ...current.filter((_, photoIndex) => photoIndex !== index)];
+    });
+  }
+
+  async function handlePendingPhotos(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.files?.length) addPendingPhotos(event.target.files);
+    event.target.value = '';
+  }
+
+  async function uploadPendingPhotos(assetId: Id<'assets'>) {
+    for (const photo of pendingPhotos) {
+      const blob = await resizeForListing(photo.file);
+      const uploadUrl = await generatePhotoUploadUrl();
+      const response = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+      if (!response.ok) throw new Error('Photo upload failed. The item was saved; retry the photos from this screen.');
+      const result = await response.json() as { storageId: Id<'_storage'> };
+      await attachPhoto({ assetId, storageId: result.storageId, filename: photo.file.name, contentType: blob.type || 'image/jpeg' });
+    }
+  }
+
   async function lookupBarcode(barcodeInput = manualBarcode) {
     const barcode = barcodeInput.trim();
     if (!barcode) return;
@@ -574,6 +622,7 @@ export default function App() {
       setScannerOpen(false);
       setManualBarcode('');
       setCreateDraftAfterSave(true);
+      clearPendingPhotos();
       setEditing(draft);
     } catch (error) {
       setScanError(error instanceof Error ? error.message : 'Lookup failed. Enter details manually.');
@@ -622,7 +671,7 @@ export default function App() {
   }
 
   async function saveAsset() {
-    if (!editing?.title?.trim()) return;
+    if (!editing?.title?.trim() || photoBusy) return;
     const prepared = {
       ...recalcAsset(editing),
       ebayDescription: editing.ebayDescription || generateDescription(editing),
@@ -688,16 +737,31 @@ export default function App() {
       confidence: prepared.confidence || undefined,
     };
 
-    if ('_id' in editing && editing._id) {
-      await updateAsset({ id: editing._id as Id<'assets'>, ...patch });
-    } else {
-      const assetId = await createAsset(patch);
-      if (createDraftAfterSave) {
-        await createListingDraft({ ...prepared, ...patch, _id: assetId } as Asset);
+    setPhotoBusy(true);
+    setPhotoError('');
+    try {
+      if ('_id' in editing && editing._id) {
+        await updateAsset({ id: editing._id as Id<'assets'>, ...patch });
+      } else {
+        const assetId = await createAsset(patch);
+        try {
+          await uploadPendingPhotos(assetId);
+        } catch (error) {
+          clearPendingPhotos();
+          setEditing({ ...prepared, ...patch, _id: assetId } as Asset);
+          setPhotoError(error instanceof Error ? error.message : 'The item was saved, but its photos could not be uploaded.');
+          return;
+        }
+        clearPendingPhotos();
+        if (createDraftAfterSave) {
+          await createListingDraft({ ...prepared, ...patch, _id: assetId } as Asset);
+        }
       }
+      setCreateDraftAfterSave(false);
+      setEditing(null);
+    } finally {
+      setPhotoBusy(false);
     }
-    setCreateDraftAfterSave(false);
-    setEditing(null);
   }
 
   async function saveCollection() {
@@ -846,13 +910,6 @@ export default function App() {
     setResearchDraft(blankResearchDraft());
   }
 
-  async function onPhotoSelected(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const photoDataUrl = await compressImage(file);
-    updateEditing({ photoDataUrl }, false);
-  }
-
   return (
     <main className="app">
       <header className="hero">
@@ -865,10 +922,10 @@ export default function App() {
           </div>
         </div>
         <div className="actions">
-          <button onClick={() => { setCreateDraftAfterSave(false); setScannerOpen(true); }}><Barcode size={16}/> Scan Media</button>
+          <button onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setScannerOpen(true); }}><Barcode size={16}/> Scan Media</button>
           <button onClick={() => changeView('Bulk')}><Keyboard size={16}/> Scan Stack</button>
           <button onClick={() => changeView('Photos')}><Camera size={16}/> Add Photos</button>
-          <button onClick={() => { setCreateDraftAfterSave(false); setEditing(blankAsset()); }}><Plus size={16}/> Add Item</button>
+          <button onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankAsset()); }}><Plus size={16}/> Add Item</button>
           <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Collection</button>
           <label className="button"><Upload size={16}/> Import Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => onImport(e.target.files?.[0])}/></label>
           <button onClick={() => exportInventory(rows.map((item) => toInventoryForExport(item, collectionName(item.collectionId))))}><Download size={16}/> Export Excel</button>
@@ -935,7 +992,7 @@ export default function App() {
                     <td><span className={badgeClass(item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td><span className={badgeClass(String(item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
+                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -956,7 +1013,7 @@ export default function App() {
               <div className="scannerPanel">
                 <label>Manual Barcode<input inputMode="numeric" value={manualBarcode} onChange={e => setManualBarcode(e.target.value)} placeholder="Scan or type UPC/EAN/ISBN"/></label>
                 {scanError ? <p className="warningText">{scanError}</p> : <p>Aim at the full barcode and hold steady. You can also enter the code manually.</p>}
-                <div className="actions right">{scanError ? <button className="secondary" onClick={() => setScannerAttempt((attempt) => attempt + 1)}><Camera size={16}/> Retry Camera</button> : null}<button className="secondary" onClick={() => { const barcode = manualBarcode.trim(); scannerControls.current?.stop(); setScannerOpen(false); setCreateDraftAfterSave(true); setEditing({ ...blankAsset(), barcode: barcode || undefined, upc: barcode || undefined }); }}>Manual Add</button><button onClick={() => lookupBarcode()} disabled={isLookingUp}><Search size={16}/>{isLookingUp ? 'Looking Up...' : 'Lookup'}</button></div>
+                <div className="actions right">{scanError ? <button className="secondary" onClick={() => setScannerAttempt((attempt) => attempt + 1)}><Camera size={16}/> Retry Camera</button> : null}<button className="secondary" onClick={() => { const barcode = manualBarcode.trim(); scannerControls.current?.stop(); setScannerOpen(false); setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing({ ...blankAsset(), barcode: barcode || undefined, upc: barcode || undefined }); }}>Manual Add</button><button onClick={() => lookupBarcode()} disabled={isLookingUp}><Search size={16}/>{isLookingUp ? 'Looking Up...' : 'Lookup'}</button></div>
               </div>
             </div>
           </section>
@@ -968,12 +1025,19 @@ export default function App() {
           <section className="modal wideModal">
             <header className="modalHeader">
               <div><h2>{'_id' in editing ? 'Edit Item' : editing.barcode || editing.upc ? 'Review Scanned Item' : 'Add Item'}</h2>{editing.needsValueCheck ? <span className="statusPill warning">Value check needed</span> : <span className="statusPill">Value current</span>}</div>
-              <button className="iconButton secondary" aria-label="Close" onClick={() => setEditing(null)}><X size={18}/></button>
+              <button className="iconButton secondary" aria-label="Close" onClick={() => { clearPendingPhotos(); setEditing(null); }}><X size={18}/></button>
             </header>
             <div className="reviewLayout">
               <aside className="mediaPreview">
-                {editing.photoDataUrl || editing.coverImageUrl ? <img src={editing.photoDataUrl || editing.coverImageUrl} alt="Item preview" /> : <div className="previewPlaceholder"><Camera size={36}/><span>No photo yet</span></div>}
-                <label className="button secondary photoButton"><ImagePlus size={16}/> Capture Photo<input type="file" accept="image/*" capture="environment" hidden onChange={onPhotoSelected}/></label>
+                {pendingPhotos[0]?.previewUrl || editing.photoDataUrl || editing.coverImageUrl ? <img src={pendingPhotos[0]?.previewUrl || editing.photoDataUrl || editing.coverImageUrl} alt="Item preview" /> : <div className="previewPlaceholder"><Camera size={36}/><span>No photo yet</span></div>}
+                {'_id' in editing && editing._id
+                  ? <ListingPhotoManager assetId={editing._id as Id<'assets'>} title={editing.title || 'Inventory item'}/>
+                  : <div className="scanPhotoManager">
+                    <div className="listingPhotoHeader"><div><strong>Item Photos</strong><small>First image is primary and uploads to eBay first.</small></div><span className="statusPill">{pendingPhotos.length} / 12</span></div>
+                    <div className="photoCaptureActions"><label className="button photoCaptureButton"><Camera size={17}/> Take Photo<input type="file" accept="image/*" capture="environment" hidden disabled={photoBusy || pendingPhotos.length >= 12} onChange={handlePendingPhotos}/></label><label className="button secondary photoCaptureButton"><ImagePlus size={17}/> Choose Photos<input type="file" accept="image/*" multiple hidden disabled={photoBusy || pendingPhotos.length >= 12} onChange={handlePendingPhotos}/></label></div>
+                    {photoError ? <p className="setupNotice errorNotice">{photoError}</p> : null}
+                    {pendingPhotos.length ? <div className="photoGrid scanPhotoGrid">{pendingPhotos.map((photo, index) => <article key={photo.previewUrl} className={`photoTile ${index === 0 ? 'primary' : ''}`}><img src={photo.previewUrl} alt={`${editing.title || 'Item'} photo ${index + 1}`}/><div className="photoTileBar"><span>{index === 0 ? <><Star size={12}/> Primary</> : `Photo ${index + 1}`}</span><div>{index !== 0 ? <button type="button" className="iconButton secondary" title="Make primary" aria-label={`Make photo ${index + 1} primary`} onClick={() => makePendingPhotoPrimary(index)}><Star size={14}/></button> : null}<button type="button" className="iconButton danger" title="Remove photo" aria-label={`Remove photo ${index + 1}`} onClick={() => removePendingPhoto(index)}><Trash2 size={14}/></button></div></div></article>)}</div> : <p className="compactText">Take the front cover first, then add the back, disc, spine, and any flaws.</p>}
+                  </div>}
                 {editing.metadataSource ? <p className="lookupMeta">{editing.metadataSource} - {editing.metadataConfidence || 'Review'}</p> : null}
               </aside>
               <div className="formGrid">
@@ -1037,7 +1101,7 @@ export default function App() {
                 <label className="span2">Internal Notes<textarea value={editing.notes || ''} onChange={e => updateEditing({ notes:e.target.value }, false)} placeholder="Private sourcing, storage, or workflow notes..."/></label>
               </div>
             </div>
-            <div className="actions right"><button className="secondary" onClick={() => { setCreateDraftAfterSave(false); setEditing(null); }}>Cancel</button><button onClick={saveAsset}><Save size={16}/> {createDraftAfterSave && !('_id' in editing) ? 'Save & Queue' : 'Save to Inventory'}</button></div>
+            <div className="actions right"><button className="secondary" disabled={photoBusy} onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(null); }}>Cancel</button><button disabled={photoBusy} onClick={saveAsset}><Save size={16}/> {photoBusy ? 'Saving Photos...' : createDraftAfterSave && !('_id' in editing) ? 'Save & Queue' : 'Save to Inventory'}</button></div>
           </section>
         </div>
       ) : null}

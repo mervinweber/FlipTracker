@@ -60,7 +60,7 @@ Desktop USB intake -> internal eBay draft -> phone Photos queue -> SKU/UPC match
 
 `assetPhotos` stores ordered references to Convex file storage, keeping each physical copy's photos separate even when several assets share a UPC. The mobile queue finds Draft/Pending eBay listings that require actual photos. SKU is the preferred identifier; UPC lookup can return multiple copies and requires the user to choose by SKU and bin.
 
-The browser resizes new captures before requesting a Convex upload URL. Users can capture or select up to 12 photos, choose the primary image, delete mistakes, and move directly to the next queued item. During eBay draft creation, stored images are uploaded in order and the resulting eBay URLs are cached for safe retries. Legacy inline `photoDataUrl` records remain readable until a separate migration removes them.
+The browser resizes new captures before requesting a Convex upload URL. Single-item scan review can stage up to 12 photos before the asset exists; immediately after the inventory record is created, those photos are uploaded and attached in their reviewed order. The listing editor and mobile queue can add or manage the same stored photo set later. Users can choose the primary image, delete mistakes, and move directly to the next queued item. During eBay draft creation, stored images are uploaded in order and the resulting eBay URLs are cached for safe retries. Legacy inline `photoDataUrl` records remain readable until a separate migration removes them.
 
 ## eBay Seller Workflow
 

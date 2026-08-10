@@ -4,6 +4,7 @@ import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { ArrowRight, Barcode, Camera, CheckCircle2, ImagePlus, Images, MapPin, Search, Star, Trash2, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
+import { resizeForListing } from '../utils/listingPhotos';
 
 type PhotoTarget = {
   assetId: Id<'assets'>;
@@ -19,45 +20,6 @@ type PhotoTarget = {
   primaryPhotoUrl?: string | null;
   hasDraft: boolean;
 };
-
-async function resizeForListing(file: File) {
-  let image: CanvasImageSource;
-  let width: number;
-  let height: number;
-  let cleanup = () => {};
-  if ('createImageBitmap' in window) {
-    const bitmap = await window.createImageBitmap(file);
-    image = bitmap;
-    width = bitmap.width;
-    height = bitmap.height;
-    cleanup = () => bitmap.close();
-  } else {
-    const objectUrl = URL.createObjectURL(file);
-    const element = new Image();
-    await new Promise<void>((resolve, reject) => {
-      element.onload = () => resolve();
-      element.onerror = () => reject(new Error('This browser could not read the selected photo.'));
-      element.src = objectUrl;
-    });
-    image = element;
-    width = element.naturalWidth;
-    height = element.naturalHeight;
-    cleanup = () => URL.revokeObjectURL(objectUrl);
-  }
-  const maxSide = 1600;
-  const scale = Math.min(1, maxSide / Math.max(width, height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
-  const context = canvas.getContext('2d');
-  if (!context) {
-    cleanup();
-    return file;
-  }
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  cleanup();
-  return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not prepare the photo.')), 'image/jpeg', 0.84));
-}
 
 export default function PhotoQueuePanel() {
   const queue = useQuery(api.photos.queue) as PhotoTarget[] | undefined;

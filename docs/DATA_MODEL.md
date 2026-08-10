@@ -38,7 +38,7 @@ Assets can store media metadata including author/creator, release details, studi
 Card assets additionally store `cardProductType`, `cardGame`, `cardSport`, `cardSet`, `cardNumber`, `cardPlayer`, and `cardTeam`. The UI exposes these only for Pokemon, Yu-Gi-Oh!, or sports card records. Marketplace drafts copy the fields so the seller can correct listing-specific values without changing unrelated media workflows.
 
 ### Photos
-New photo captures are stored in Convex file storage and represented by ordered `assetPhotos` records. The first position is the primary image. Legacy assets can still contain a compressed `photoDataUrl`; that compatibility field remains until existing images are migrated.
+New photo captures are stored in Convex file storage and represented by ordered `assetPhotos` records. Scan review stages selected files in the browser until the asset is created, then uploads up to 12 records in order. The first position is the primary image. Legacy assets can still contain a compressed `photoDataUrl`; that compatibility field remains until existing images are migrated.
 
 ## assetPhotos
 
