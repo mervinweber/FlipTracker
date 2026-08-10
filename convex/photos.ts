@@ -58,6 +58,25 @@ export const remove = mutation({
   },
 });
 
+export const replace = mutation({
+  args: {
+    photoId: v.id("assetPhotos"),
+    storageId: v.id("_storage"),
+    contentType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const photo = await ctx.db.get(args.photoId);
+    if (!photo) throw new Error("Photo not found.");
+    await ctx.db.patch(photo._id, {
+      storageId: args.storageId,
+      contentType: args.contentType?.slice(0, 80),
+      ebayImageUrl: undefined,
+      ebayUploadedAt: undefined,
+    });
+    await ctx.storage.delete(photo.storageId);
+  },
+});
+
 export const makePrimary = mutation({
   args: { photoId: v.id("assetPhotos") },
   handler: async (ctx, args) => {

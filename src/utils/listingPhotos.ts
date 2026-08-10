@@ -35,3 +35,43 @@ export async function resizeForListing(file: File) {
   cleanup();
   return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not prepare the photo.')), 'image/jpeg', 0.84));
 }
+
+export async function rotatePhotoClockwise(blob: Blob) {
+  let image: CanvasImageSource;
+  let width: number;
+  let height: number;
+  let cleanup = () => {};
+  if ('createImageBitmap' in window) {
+    const bitmap = await window.createImageBitmap(blob);
+    image = bitmap;
+    width = bitmap.width;
+    height = bitmap.height;
+    cleanup = () => bitmap.close();
+  } else {
+    const objectUrl = URL.createObjectURL(blob);
+    const element = new Image();
+    await new Promise<void>((resolve, reject) => {
+      element.onload = () => resolve();
+      element.onerror = () => reject(new Error('This browser could not rotate the photo.'));
+      element.src = objectUrl;
+    });
+    image = element;
+    width = element.naturalWidth;
+    height = element.naturalHeight;
+    cleanup = () => URL.revokeObjectURL(objectUrl);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = height;
+  canvas.height = width;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    cleanup();
+    throw new Error('This browser could not rotate the photo.');
+  }
+  context.translate(canvas.width, 0);
+  context.rotate(Math.PI / 2);
+  context.drawImage(image, 0, 0);
+  cleanup();
+  return await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error('Could not prepare the rotated photo.')), 'image/jpeg', 0.84));
+}

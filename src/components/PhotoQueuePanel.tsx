@@ -1,10 +1,10 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
-import { ArrowRight, Barcode, Camera, CheckCircle2, ImagePlus, Images, MapPin, Search, Star, Trash2, X } from 'lucide-react';
+import { ArrowRight, Barcode, Camera, CheckCircle2, ImagePlus, Images, MapPin, RotateCw, Search, Star, Trash2, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
-import { resizeForListing } from '../utils/listingPhotos';
+import { resizeForListing, rotatePhotoClockwise } from '../utils/listingPhotos';
 
 type PhotoTarget = {
   assetId: Id<'assets'>;
@@ -31,6 +31,7 @@ export default function PhotoQueuePanel() {
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
   const attachPhoto = useMutation(api.photos.attach);
   const removePhoto = useMutation(api.photos.remove);
+  const replacePhoto = useMutation(api.photos.replace);
   const makePrimary = useMutation(api.photos.makePrimary);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -114,6 +115,26 @@ export default function PhotoQueuePanel() {
     event.target.value = '';
   }
 
+  async function rotateStoredPhoto(photo: NonNullable<typeof photos>[number]) {
+    if (!photo.url || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const source = await fetch(photo.url);
+      if (!source.ok) throw new Error('Could not load the photo for rotation.');
+      const blob = await rotatePhotoClockwise(await source.blob());
+      const uploadUrl = await generateUploadUrl();
+      const response = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+      if (!response.ok) throw new Error('Could not save the rotated photo.');
+      const result = await response.json() as { storageId: Id<'_storage'> };
+      await replacePhoto({ photoId: photo._id, storageId: result.storageId, contentType: blob.type || 'image/jpeg' });
+    } catch (rotateError) {
+      setError(rotateError instanceof Error ? rotateError.message : 'Could not rotate the photo.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function chooseTarget(item: PhotoTarget) {
     setTarget(item);
     setLookupCode('');
@@ -154,7 +175,7 @@ export default function PhotoQueuePanel() {
             <div className="photoTargetHeader"><div><p className="eyebrow">Current item</p><h2>{target.title}</h2><p>{[target.edition, target.format, target.condition].filter(Boolean).join(' · ')}</p><div className="photoTargetMeta">{target.sku ? <span>SKU {target.sku}</span> : null}{target.upc ? <span>UPC {target.upc}</span> : null}{target.storageLocation ? <span><MapPin size={13}/>{target.storageLocation}</span> : null}</div></div><span className="statusPill">{photos?.length ?? 0} / 12 photos</span></div>
             <div className="photoCaptureActions"><label className="button photoCaptureButton"><Camera size={18}/>{busy ? 'Uploading...' : 'Take Photo'}<input type="file" accept="image/*" capture="environment" hidden disabled={busy} onChange={handleFiles}/></label><label className="button secondary photoCaptureButton"><ImagePlus size={18}/> Choose Photos<input type="file" accept="image/*" multiple hidden disabled={busy} onChange={handleFiles}/></label></div>
             {error ? <p className="setupNotice errorNotice">{error}</p> : null}
-            <div className="photoGrid">{photos?.map((photo, index) => <article key={photo._id} className={`photoTile ${index === 0 ? 'primary' : ''}`}>{photo.url ? <img src={photo.url} alt={`${target.title} photo ${index + 1}`}/> : <div className="previewPlaceholder">Loading...</div>}<div className="photoTileBar"><span>{index === 0 ? <><Star size={13}/> Primary</> : `Photo ${index + 1}`}</span><div>{index !== 0 ? <button className="iconButton secondary" title="Make primary" aria-label="Make this the primary photo" onClick={() => makePrimary({ photoId: photo._id })}><Star size={15}/></button> : null}<button className="iconButton danger" title="Delete photo" aria-label="Delete photo" onClick={() => removePhoto({ photoId: photo._id })}><Trash2 size={15}/></button></div></div></article>)}</div>
+            <div className="photoGrid">{photos?.map((photo, index) => <article key={photo._id} className={`photoTile ${index === 0 ? 'primary' : ''}`}>{photo.url ? <img src={photo.url} alt={`${target.title} photo ${index + 1}`}/> : <div className="previewPlaceholder">Loading...</div>}<div className="photoTileBar"><span>{index === 0 ? <><Star size={13}/> Primary</> : `Photo ${index + 1}`}</span><div><button className="iconButton secondary" title="Rotate clockwise" aria-label={`Rotate photo ${index + 1} clockwise`} disabled={busy} onClick={() => rotateStoredPhoto(photo)}><RotateCw size={15}/></button>{index !== 0 ? <button className="iconButton secondary" title="Make primary" aria-label="Make this the primary photo" disabled={busy} onClick={() => makePrimary({ photoId: photo._id })}><Star size={15}/></button> : null}<button className="iconButton danger" title="Delete photo" aria-label="Delete photo" disabled={busy} onClick={() => removePhoto({ photoId: photo._id })}><Trash2 size={15}/></button></div></div></article>)}</div>
             <div className="photoWorkflowFooter"><p>Recommended: front, back, spine, open case/disc, and any flaws.</p><button disabled={!photos?.length || busy} onClick={nextItem}>Done & Next <ArrowRight size={17}/></button></div>
           </>}
         </section>

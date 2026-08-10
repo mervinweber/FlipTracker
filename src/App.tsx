@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
@@ -12,7 +12,7 @@ import BulkIntakePanel from './components/BulkIntakePanel';
 import SourcingPanel from './components/SourcingPanel';
 import PhotoQueuePanel from './components/PhotoQueuePanel';
 import ListingPhotoManager from './components/ListingPhotoManager';
-import { resizeForListing } from './utils/listingPhotos';
+import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
 
 type AppView = 'Inventory' | 'Listings' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
 
@@ -573,6 +573,27 @@ export default function App() {
     });
   }
 
+  async function rotatePendingPhoto(index: number) {
+    const photo = pendingPhotos[index];
+    if (!photo || photoBusy) return;
+    setPhotoBusy(true);
+    setPhotoError('');
+    try {
+      const blob = await rotatePhotoClockwise(photo.file);
+      const file = new File([blob], photo.file.name, { type: blob.type || 'image/jpeg', lastModified: Date.now() });
+      const previewUrl = URL.createObjectURL(file);
+      setPendingPhotos((current) => current.map((item, photoIndex) => {
+        if (photoIndex !== index) return item;
+        URL.revokeObjectURL(item.previewUrl);
+        return { file, previewUrl };
+      }));
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'Could not rotate the photo.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
   async function handlePendingPhotos(event: ChangeEvent<HTMLInputElement>) {
     if (event.target.files?.length) addPendingPhotos(event.target.files);
     event.target.value = '';
@@ -1036,7 +1057,7 @@ export default function App() {
                     <div className="listingPhotoHeader"><div><strong>Item Photos</strong><small>First image is primary and uploads to eBay first.</small></div><span className="statusPill">{pendingPhotos.length} / 12</span></div>
                     <div className="photoCaptureActions"><label className="button photoCaptureButton"><Camera size={17}/> Take Photo<input type="file" accept="image/*" capture="environment" hidden disabled={photoBusy || pendingPhotos.length >= 12} onChange={handlePendingPhotos}/></label><label className="button secondary photoCaptureButton"><ImagePlus size={17}/> Choose Photos<input type="file" accept="image/*" multiple hidden disabled={photoBusy || pendingPhotos.length >= 12} onChange={handlePendingPhotos}/></label></div>
                     {photoError ? <p className="setupNotice errorNotice">{photoError}</p> : null}
-                    {pendingPhotos.length ? <div className="photoGrid scanPhotoGrid">{pendingPhotos.map((photo, index) => <article key={photo.previewUrl} className={`photoTile ${index === 0 ? 'primary' : ''}`}><img src={photo.previewUrl} alt={`${editing.title || 'Item'} photo ${index + 1}`}/><div className="photoTileBar"><span>{index === 0 ? <><Star size={12}/> Primary</> : `Photo ${index + 1}`}</span><div>{index !== 0 ? <button type="button" className="iconButton secondary" title="Make primary" aria-label={`Make photo ${index + 1} primary`} onClick={() => makePendingPhotoPrimary(index)}><Star size={14}/></button> : null}<button type="button" className="iconButton danger" title="Remove photo" aria-label={`Remove photo ${index + 1}`} onClick={() => removePendingPhoto(index)}><Trash2 size={14}/></button></div></div></article>)}</div> : <p className="compactText">Take the front cover first, then add the back, disc, spine, and any flaws.</p>}
+                    {pendingPhotos.length ? <div className="photoGrid scanPhotoGrid">{pendingPhotos.map((photo, index) => <article key={photo.previewUrl} className={`photoTile ${index === 0 ? 'primary' : ''}`}><img src={photo.previewUrl} alt={`${editing.title || 'Item'} photo ${index + 1}`}/><div className="photoTileBar"><span>{index === 0 ? <><Star size={12}/> Primary</> : `Photo ${index + 1}`}</span><div><button type="button" className="iconButton secondary" title="Rotate clockwise" aria-label={`Rotate photo ${index + 1} clockwise`} disabled={photoBusy} onClick={() => rotatePendingPhoto(index)}><RotateCw size={14}/></button>{index !== 0 ? <button type="button" className="iconButton secondary" title="Make primary" aria-label={`Make photo ${index + 1} primary`} disabled={photoBusy} onClick={() => makePendingPhotoPrimary(index)}><Star size={14}/></button> : null}<button type="button" className="iconButton danger" title="Remove photo" aria-label={`Remove photo ${index + 1}`} disabled={photoBusy} onClick={() => removePendingPhoto(index)}><Trash2 size={14}/></button></div></div></article>)}</div> : <p className="compactText">Take the front cover first, then add the back, disc, spine, and any flaws.</p>}
                   </div>}
                 {editing.metadataSource ? <p className="lookupMeta">{editing.metadataSource} - {editing.metadataConfidence || 'Review'}</p> : null}
               </aside>

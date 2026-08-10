@@ -67,6 +67,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add a mobile photo queue that finds existing physical copies by SKU or UPC
 - [x] Store up to 12 ordered item photos per asset in Convex file storage
 - [x] Capture or select up to 12 ordered photos directly during single-item scan review
+- [x] Rotate staged and stored listing photos clockwise before eBay upload
 - [x] Select a primary photo, remove mistakes, and advance to the next queued draft
 - [x] Upload the stored photo set to eBay Picture Services and reuse cached eBay URLs
 

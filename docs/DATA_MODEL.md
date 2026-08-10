@@ -42,7 +42,7 @@ New photo captures are stored in Convex file storage and represented by ordered 
 
 ## assetPhotos
 
-One actual-item photo attached to an asset. It stores the Convex storage identifier, original filename/content type, display order, and optional cached eBay Picture Services URL/upload timestamp. Each asset can hold up to 12 stored photos.
+One actual-item photo attached to an asset. It stores the Convex storage identifier, original filename/content type, display order, and optional cached eBay Picture Services URL/upload timestamp. Each asset can hold up to 12 stored photos. A rotation replaces the storage object while retaining the record and order, then clears the cached eBay URL so the corrected pixels are uploaded on the next synchronization.
 
 ## marketplaceListings
 
