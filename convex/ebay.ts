@@ -9,6 +9,7 @@ const EBAY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/sell.account.readonly",
+  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
 ].join(" ");
 
 const EBAY_BROWSE_SCOPE = "https://api.ebay.com/oauth/api_scope";
@@ -29,6 +30,25 @@ type SellerListingSummary = {
   activeCount: number;
   scheduledCount: number;
   checkedAt: number;
+};
+type EbayAmount = { value?: string; currency?: string };
+type EbayOrderLineItem = {
+  legacyItemId?: string;
+  sku?: string;
+  title?: string;
+  quantity?: number;
+  lineItemCost?: EbayAmount;
+  discountedLineItemCost?: EbayAmount;
+};
+type EbayOrder = {
+  orderId?: string;
+  creationDate?: string;
+  orderPaymentStatus?: string;
+  cancelStatus?: { cancelState?: string };
+  buyer?: { username?: string };
+  lineItems?: EbayOrderLineItem[];
+  pricingSummary?: { deliveryCost?: EbayAmount };
+  totalMarketplaceFee?: EbayAmount;
 };
 type BrowseItem = {
   title?: string;
@@ -662,6 +682,79 @@ export const markDraftError = internalMutation({
   },
 });
 
+export const reconcileSoldOrderLine = internalMutation({
+  args: {
+    externalListingId: v.optional(v.string()),
+    sku: v.optional(v.string()),
+    orderId: v.string(),
+    soldDate: v.string(),
+    soldPrice: v.number(),
+    shippingCharged: v.optional(v.number()),
+    fees: v.optional(v.number()),
+    buyer: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const listingById = args.externalListingId
+      ? await ctx.db.query("marketplaceListings").withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId)).unique()
+      : null;
+    const listingBySku = !listingById && args.sku
+      ? await ctx.db.query("marketplaceListings").withIndex("by_sku", (q) => q.eq("sku", args.sku)).filter((q) => q.eq(q.field("platform"), "eBay")).first()
+      : null;
+    const listing = listingById ?? listingBySku;
+    if (!listing || listing.platform.toLowerCase() !== "ebay") return { matched: false, updated: false };
+
+    const now = Date.now();
+    const alreadyCurrent = listing.status === "Sold"
+      && listing.ebayOrderId === args.orderId
+      && listing.soldPrice === args.soldPrice
+      && listing.shippingCharged === args.shippingCharged
+      && listing.fees === args.fees;
+    if (alreadyCurrent) {
+      await ctx.db.patch(listing._id, { ebayLastSyncedAt: now, updatedAt: now });
+      return { matched: true, updated: false };
+    }
+
+    await ctx.db.patch(listing._id, {
+      status: "Sold",
+      soldDate: args.soldDate,
+      soldPrice: args.soldPrice,
+      shippingCharged: args.shippingCharged,
+      fees: args.fees,
+      buyer: args.buyer,
+      ebayOrderId: args.orderId,
+      ebayLastSyncedAt: now,
+      ebayDraftStatus: "Sold on eBay",
+      ebayLastError: undefined,
+      updatedAt: now,
+    });
+    const asset = await ctx.db.get(listing.assetId);
+    await ctx.db.patch(listing.assetId, {
+      status: "Sold",
+      soldPrice: args.soldPrice,
+      fees: args.fees,
+      updatedAt: now,
+    });
+    const existingSale = await ctx.db.query("sales").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).unique();
+    const saleRecord = {
+      assetId: listing.assetId,
+      listingId: listing._id,
+      platform: "eBay",
+      soldDate: args.soldDate,
+      soldPrice: args.soldPrice,
+      purchasePrice: asset?.purchasePrice,
+      shippingCharged: args.shippingCharged,
+      fees: args.fees,
+      shipping: listing.shippingCost,
+      buyer: args.buyer,
+      notes: existingSale?.notes || `Synced from eBay order ${args.orderId}`,
+      updatedAt: now,
+    };
+    if (existingSale) await ctx.db.patch(existingSale._id, saleRecord);
+    else await ctx.db.insert("sales", { ...saleRecord, createdAt: now });
+    return { matched: true, updated: true };
+  },
+});
+
 export const saveUploadedImage = internalMutation({
   args: {
     listingId: v.id("marketplaceListings"),
@@ -812,6 +905,69 @@ export const getSellerListingSummary = action({
         ? "Reconnect eBay once to authorize the account-wide listing count."
         : message);
     }
+  },
+});
+
+export const syncSoldOrders = action({
+  args: { adminKey: v.string(), days: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ ordersChecked: number; lineItemsChecked: number; matched: number; updated: number; unmatched: number }> => {
+    requireAdminKey(args.adminKey);
+    const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: singletonKey() });
+    const grantedScopes = new Set(connection?.scopes.split(/\s+/).filter(Boolean) ?? []);
+    const fulfillmentScope = "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly";
+    if (!grantedScopes.has(fulfillmentScope)) {
+      throw new ConvexError("Reconnect eBay once to allow FlipTracker to read your sold orders.");
+    }
+    const accessToken = await refreshAccessToken(ctx);
+    const days = Math.min(90, Math.max(1, Math.round(args.days ?? 30)));
+    const end = new Date();
+    const start = new Date(end.getTime() - days * 86_400_000);
+    const filter = `creationdate:[${start.toISOString()}..${end.toISOString()}]`;
+    let offset = 0;
+    let ordersChecked = 0;
+    let lineItemsChecked = 0;
+    let matched = 0;
+    let updated = 0;
+    let unmatched = 0;
+
+    while (offset < 1000) {
+      const params = new URLSearchParams({ filter, limit: "200", offset: String(offset) });
+      const page = await ebayFetch(accessToken, `/sell/fulfillment/v1/order?${params.toString()}`) as {
+        orders?: EbayOrder[];
+        total?: number;
+      };
+      const orders = page.orders ?? [];
+      ordersChecked += orders.length;
+      for (const order of orders) {
+        if (!order.orderId || order.orderPaymentStatus !== "PAID" || /cancel/i.test(order.cancelStatus?.cancelState ?? "")) continue;
+        const lineItems = order.lineItems ?? [];
+        const orderItemTotal = lineItems.reduce((sum, lineItem) => sum + Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0), 0);
+        const shippingTotal = Number(order.pricingSummary?.deliveryCost?.value ?? 0);
+        const feeTotal = Number(order.totalMarketplaceFee?.value ?? 0);
+        for (const lineItem of lineItems) {
+          lineItemsChecked += 1;
+          const soldPrice = Math.round(Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0) * 100) / 100;
+          if (!Number.isFinite(soldPrice) || soldPrice <= 0) continue;
+          const share = orderItemTotal > 0 ? soldPrice / orderItemTotal : 1 / Math.max(1, lineItems.length);
+          const result: { matched: boolean; updated: boolean } = await ctx.runMutation(internal.ebay.reconcileSoldOrderLine, {
+            externalListingId: lineItem.legacyItemId,
+            sku: lineItem.sku,
+            orderId: order.orderId,
+            soldDate: (order.creationDate ?? new Date().toISOString()).slice(0, 10),
+            soldPrice,
+            shippingCharged: Number.isFinite(shippingTotal) ? Math.round(shippingTotal * share * 100) / 100 : undefined,
+            fees: Number.isFinite(feeTotal) ? Math.round(feeTotal * share * 100) / 100 : undefined,
+            buyer: order.buyer?.username,
+          });
+          if (result.matched) matched += 1;
+          else unmatched += 1;
+          if (result.updated) updated += 1;
+        }
+      }
+      offset += orders.length;
+      if (!orders.length || offset >= (page.total ?? 0)) break;
+    }
+    return { ordersChecked, lineItemsChecked, matched, updated, unmatched };
   },
 });
 

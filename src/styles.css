@@ -92,8 +92,8 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .viewTabs button { border:1px solid transparent; }
 .viewTabs button.active { background:var(--primary-strong); border-color:#60a5fa; }
 .listingCards { grid-template-columns:repeat(7, minmax(0, 1fr)); }
-.listingControls { display:grid; grid-template-columns:minmax(240px, 1fr) 160px 200px auto; gap:12px; margin-bottom:18px; }
-.listingTools { flex-wrap:nowrap; }
+.listingControls { display:grid; grid-template-columns:minmax(220px, 1fr) 140px 170px 160px auto; gap:12px; margin-bottom:18px; }
+.listingTools { flex-wrap:wrap; justify-content:flex-end; }
 .listingTools .button, .listingTools button { white-space:nowrap; }
 .panelMessage { padding:0 18px 18px; }
 .profitValue { color:#86efac; font-weight:900; }

@@ -164,6 +164,8 @@ export default defineSchema({
     ebayDraftStatus: v.optional(v.string()),
     ebayDraftCreatedAt: v.optional(v.number()),
     ebayLastError: v.optional(v.string()),
+    ebayOrderId: v.optional(v.string()),
+    ebayLastSyncedAt: v.optional(v.number()),
     pricingStatus: v.optional(v.string()),
     pricingSource: v.optional(v.string()),
     pricingUpdatedAt: v.optional(v.number()),
@@ -172,6 +174,7 @@ export default defineSchema({
   })
     .index("by_assetId", ["assetId"])
     .index("by_sku", ["sku"])
+    .index("by_externalListingId", ["externalListingId"])
     .index("by_status", ["status"])
     .index("by_platform", ["platform"])
     .index("by_platform_and_status", ["platform", "status"])

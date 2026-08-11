@@ -58,6 +58,9 @@ type Listing = {
   pricingStatus?: string;
   pricingSource?: string;
   pricingUpdatedAt?: number;
+  ebayOrderId?: string;
+  ebayLastSyncedAt?: number;
+  updatedAt: number;
   assetTitle: string;
   assetType?: string;
   assetBarcode?: string;
@@ -126,6 +129,8 @@ type EbaySellerListingSummary = {
   scheduledCount: number;
   checkedAt: number;
 };
+
+type ListingSort = 'Newest' | 'Queue' | 'Status' | 'Price High' | 'Price Low';
 
 const LANGUAGE_OPTIONS = [
   'English',
@@ -326,6 +331,7 @@ export default function ListingsPanel() {
   const beginEbayOauth = useAction(api.ebay.beginOauth);
   const loadEbaySetup = useAction(api.ebay.loadSetup);
   const getSellerListingSummary = useAction(api.ebay.getSellerListingSummary);
+  const syncSoldOrders = useAction(api.ebay.syncSoldOrders);
   const saveEbaySettings = useAction(api.ebay.saveSettings);
   const createInventoryLocation = useAction(api.ebay.createInventoryLocation);
   const ensureMediaMailPolicy = useAction(api.ebay.ensureMediaMailPolicy);
@@ -354,6 +360,7 @@ export default function ListingsPanel() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
   const [platform, setPlatform] = useState('All');
+  const [sortBy, setSortBy] = useState<ListingSort>('Newest');
   const [priceChangeReason, setPriceChangeReason] = useState('');
   const [adminKey, setAdminKey] = useState(() => localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey') || '');
   const [rememberSellerKey, setRememberSellerKey] = useState(() => Boolean(localStorage.getItem('fliptrackerRememberedSellerKey')));
@@ -365,6 +372,7 @@ export default function ListingsPanel() {
   const [sellerListingSummary, setSellerListingSummary] = useState<EbaySellerListingSummary | null>(null);
   const [sellerListingCountBusy, setSellerListingCountBusy] = useState(false);
   const [sellerListingCountError, setSellerListingCountError] = useState('');
+  const [sellerSalesSyncBusy, setSellerSalesSyncBusy] = useState(false);
   const [offerBusy, setOfferBusy] = useState<Id<'marketplaceListings'> | null>(null);
   const [ebayNotice, setEbayNotice] = useState('');
   const [ebayError, setEbayError] = useState('');
@@ -401,11 +409,25 @@ export default function ListingsPanel() {
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return (listings || []).filter((listing) => {
+    const matches = (listings || []).filter((listing) => {
       const matchesQuery = !normalized || `${listing.title} ${listing.assetTitle} ${listing.sku || ''} ${listing.externalListingId || ''}`.toLowerCase().includes(normalized);
       return matchesQuery && (status === 'All' || listing.status === status) && (platform === 'All' || listing.platform === platform);
     });
-  }, [listings, platform, query, status]);
+    const queueOrder = ['Ready for Pricing', 'Needs Photo', 'Ready for eBay', 'Staged for eBay', 'Published', 'Sold'];
+    const statusOrder = ['Draft', 'Pending', 'Active', 'Sold', 'Ended'];
+    const price = (listing: Listing) => listing.status === 'Sold' ? listing.soldPrice ?? 0 : listing.currentPrice ?? listing.listedPrice ?? 0;
+    const rank = (values: string[], value: string) => {
+      const index = values.indexOf(value);
+      return index < 0 ? values.length : index;
+    };
+    return [...matches].sort((a, b) => {
+      if (sortBy === 'Queue') return rank(queueOrder, queueStatus(a)) - rank(queueOrder, queueStatus(b)) || b.updatedAt - a.updatedAt;
+      if (sortBy === 'Status') return rank(statusOrder, a.status) - rank(statusOrder, b.status) || b.updatedAt - a.updatedAt;
+      if (sortBy === 'Price High') return price(b) - price(a) || b.updatedAt - a.updatedAt;
+      if (sortBy === 'Price Low') return price(a) - price(b) || b.updatedAt - a.updatedAt;
+      return b.updatedAt - a.updatedAt;
+    });
+  }, [listings, platform, query, sortBy, status]);
 
   const queueListings = useMemo(() => filtered.filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status)), [filtered]);
   const selectedListings = useMemo(() => (listings || []).filter((listing) => selectedIds.has(listing._id)), [listings, selectedIds]);
@@ -686,6 +708,22 @@ export default function ListingsPanel() {
       setSellerListingCountError(error instanceof Error ? error.message : 'Could not load the eBay account listing count.');
     } finally {
       setSellerListingCountBusy(false);
+    }
+  }
+
+  async function refreshEbaySales() {
+    if (!adminKey) return;
+    setSellerSalesSyncBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const result = await syncSoldOrders({ adminKey, days: 90 });
+      setEbayNotice(`eBay sales refreshed: ${result.updated} listing${result.updated === 1 ? '' : 's'} moved to Sold, ${result.matched} matched, and ${result.unmatched} order item${result.unmatched === 1 ? '' : 's'} did not match a FlipTracker listing.`);
+      void refreshSellerListingCount();
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not refresh sold eBay orders.');
+    } finally {
+      setSellerSalesSyncBusy(false);
     }
   }
 
@@ -1224,7 +1262,8 @@ export default function ListingsPanel() {
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search listings..." value={query} onChange={(event) => setQuery(event.target.value)}/></div>
         <select value={status} onChange={(event) => setStatus(event.target.value)}>{['All', ...STATUSES].map((value) => <option key={value}>{value}</option>)}</select>
         <select value={platform} onChange={(event) => setPlatform(event.target.value)}>{['All', ...PLATFORMS].map((value) => <option key={value}>{value}</option>)}</select>
-        <div className="actions listingTools"><label className="button secondary"><Upload size={16}/> Import Old JSON<input type="file" accept="application/json,.json" hidden onChange={importOldJson}/></label><button className="secondary" onClick={exportCsv}><Download size={16}/> Export CSV</button></div>
+        <select aria-label="Sort listings" value={sortBy} onChange={(event) => setSortBy(event.target.value as ListingSort)}>{(['Newest', 'Queue', 'Status', 'Price High', 'Price Low'] as ListingSort[]).map((value) => <option key={value} value={value}>{`Sort: ${value}`}</option>)}</select>
+        <div className="actions listingTools"><button className="secondary" disabled={sellerSalesSyncBusy || !ebaySetup?.connected} onClick={refreshEbaySales}><RefreshCw size={16}/>{sellerSalesSyncBusy ? 'Refreshing Sales...' : 'Sync eBay Sales'}</button><label className="button secondary"><Upload size={16}/> Import Old JSON<input type="file" accept="application/json,.json" hidden onChange={importOldJson}/></label><button className="secondary" onClick={exportCsv}><Download size={16}/> Export CSV</button></div>
       </section>
 
       <section className="panel inventoryPanel">
@@ -1239,7 +1278,7 @@ export default function ListingsPanel() {
                   <td><span className="consoleTag">{listing.platform}</span></td>
                   <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small></td>
                   <td><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
-                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
+                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions">

@@ -48,6 +48,8 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Synchronize corrected listing closeouts with linked sale records
 - [x] Default unsaved custom listing packages to 32 oz
 - [x] Update inventory status and add a sale record when a listing becomes Sold
+- [x] Refresh the authenticated seller's paid eBay orders, import sold amounts/fees/shipping, and close matched listings without duplicate sales
+- [x] Sort marketplace listings by queue stage, status, or price
 - [x] Import Sales Tracker JSON into inventory, marketplace listings, and price history
 - [x] Export the filtered Listings view to CSV
 - [x] Add a hosted in-app Quick Guide and `/README.md` for scanning, research, eBay listing, and sale tracking
