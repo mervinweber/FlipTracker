@@ -912,62 +912,65 @@ export const syncSoldOrders = action({
   args: { adminKey: v.string(), days: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ ordersChecked: number; lineItemsChecked: number; matched: number; updated: number; unmatched: number }> => {
     requireAdminKey(args.adminKey);
-    const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: singletonKey() });
-    const grantedScopes = new Set(connection?.scopes.split(/\s+/).filter(Boolean) ?? []);
-    const fulfillmentScope = "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly";
-    if (!grantedScopes.has(fulfillmentScope)) {
-      throw new ConvexError("Reconnect eBay once to allow FlipTracker to read your sold orders.");
-    }
-    const accessToken = await refreshAccessToken(ctx);
-    const days = Math.min(90, Math.max(1, Math.round(args.days ?? 30)));
-    const end = new Date();
-    const start = new Date(end.getTime() - days * 86_400_000);
-    const filter = `creationdate:[${start.toISOString()}..${end.toISOString()}]`;
-    let offset = 0;
-    let ordersChecked = 0;
-    let lineItemsChecked = 0;
-    let matched = 0;
-    let updated = 0;
-    let unmatched = 0;
+    try {
+      const accessToken = await refreshAccessToken(ctx);
+      const days = Math.min(90, Math.max(1, Math.round(args.days ?? 30)));
+      const end = new Date();
+      const start = new Date(end.getTime() - days * 86_400_000);
+      const filter = `creationdate:[${start.toISOString()}..${end.toISOString()}]`;
+      let offset = 0;
+      let ordersChecked = 0;
+      let lineItemsChecked = 0;
+      let matched = 0;
+      let updated = 0;
+      let unmatched = 0;
 
-    while (offset < 1000) {
-      const params = new URLSearchParams({ filter, limit: "200", offset: String(offset) });
-      const page = await ebayFetch(accessToken, `/sell/fulfillment/v1/order?${params.toString()}`) as {
-        orders?: EbayOrder[];
-        total?: number;
-      };
-      const orders = page.orders ?? [];
-      ordersChecked += orders.length;
-      for (const order of orders) {
-        if (!order.orderId || order.orderPaymentStatus !== "PAID" || /cancel/i.test(order.cancelStatus?.cancelState ?? "")) continue;
-        const lineItems = order.lineItems ?? [];
-        const orderItemTotal = lineItems.reduce((sum, lineItem) => sum + Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0), 0);
-        const shippingTotal = Number(order.pricingSummary?.deliveryCost?.value ?? 0);
-        const feeTotal = Number(order.totalMarketplaceFee?.value ?? 0);
-        for (const lineItem of lineItems) {
-          lineItemsChecked += 1;
-          const soldPrice = Math.round(Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0) * 100) / 100;
-          if (!Number.isFinite(soldPrice) || soldPrice <= 0) continue;
-          const share = orderItemTotal > 0 ? soldPrice / orderItemTotal : 1 / Math.max(1, lineItems.length);
-          const result: { matched: boolean; updated: boolean } = await ctx.runMutation(internal.ebay.reconcileSoldOrderLine, {
-            externalListingId: lineItem.legacyItemId,
-            sku: lineItem.sku,
-            orderId: order.orderId,
-            soldDate: (order.creationDate ?? new Date().toISOString()).slice(0, 10),
-            soldPrice,
-            shippingCharged: Number.isFinite(shippingTotal) ? Math.round(shippingTotal * share * 100) / 100 : undefined,
-            fees: Number.isFinite(feeTotal) ? Math.round(feeTotal * share * 100) / 100 : undefined,
-            buyer: order.buyer?.username,
-          });
-          if (result.matched) matched += 1;
-          else unmatched += 1;
-          if (result.updated) updated += 1;
+      while (offset < 1000) {
+        const params = new URLSearchParams({ filter, limit: "200", offset: String(offset) });
+        const page = await ebayFetch(accessToken, `/sell/fulfillment/v1/order?${params.toString()}`) as {
+          orders?: EbayOrder[];
+          total?: number;
+        };
+        const orders = page.orders ?? [];
+        ordersChecked += orders.length;
+        for (const order of orders) {
+          if (!order.orderId || order.orderPaymentStatus !== "PAID" || /cancel/i.test(order.cancelStatus?.cancelState ?? "")) continue;
+          const lineItems = order.lineItems ?? [];
+          const orderItemTotal = lineItems.reduce((sum, lineItem) => sum + Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0), 0);
+          const shippingTotal = Number(order.pricingSummary?.deliveryCost?.value ?? 0);
+          const feeTotal = Number(order.totalMarketplaceFee?.value ?? 0);
+          for (const lineItem of lineItems) {
+            lineItemsChecked += 1;
+            const soldPrice = Math.round(Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0) * 100) / 100;
+            if (!Number.isFinite(soldPrice) || soldPrice <= 0) continue;
+            const share = orderItemTotal > 0 ? soldPrice / orderItemTotal : 1 / Math.max(1, lineItems.length);
+            const result: { matched: boolean; updated: boolean } = await ctx.runMutation(internal.ebay.reconcileSoldOrderLine, {
+              externalListingId: lineItem.legacyItemId,
+              sku: lineItem.sku,
+              orderId: order.orderId,
+              soldDate: (order.creationDate ?? new Date().toISOString()).slice(0, 10),
+              soldPrice,
+              shippingCharged: Number.isFinite(shippingTotal) ? Math.round(shippingTotal * share * 100) / 100 : undefined,
+              fees: Number.isFinite(feeTotal) ? Math.round(feeTotal * share * 100) / 100 : undefined,
+              buyer: order.buyer?.username,
+            });
+            if (result.matched) matched += 1;
+            else unmatched += 1;
+            if (result.updated) updated += 1;
+          }
         }
+        offset += orders.length;
+        if (!orders.length || offset >= (page.total ?? 0)) break;
       }
-      offset += orders.length;
-      if (!orders.length || offset >= (page.total ?? 0)) break;
+      return { ordersChecked, lineItemsChecked, matched, updated, unmatched };
+    } catch (error) {
+      if (error instanceof ConvexError) throw error;
+      const message = error instanceof Error ? error.message : "Unknown eBay error.";
+      const needsAuthorization = /scope|permission|access denied|authorization|token|forbidden|unauthorized/i.test(message);
+      throw new ConvexError(needsAuthorization
+        ? "eBay has not authorized sold-order access. Reconnect eBay, approve access, then retry Sync eBay Sales."
+        : `eBay sold-order sync failed: ${message}`);
     }
-    return { ordersChecked, lineItemsChecked, matched, updated, unmatched };
   },
 });
 
