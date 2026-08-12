@@ -10,6 +10,8 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Excel inventory import and export
 - [x] User price overrides and `needsValueCheck` behavior
 - [x] Universal media model for games, DVDs, Blu-rays, CDs, books, and other media
+- [x] Add General Merchandise inventory/listing entry points for non-media odds and ends
+- [x] Add eBay Taxonomy category suggestions that save the selected leaf category ID on inventory and listing drafts
 - [x] Add an aggregate Cards inventory filter plus Pokemon, sports, and Yu-Gi-Oh! card types
 - [x] Show card-only sale format, game/sport, set, number, player, and team fields and automatically route eBay card categories
 - [x] Mobile UPC/EAN/ISBN camera scanning with manual fallback
@@ -129,6 +131,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [x] Select and save eBay inventory location and payment/fulfillment/return policies
 - [x] Create an enabled Production inventory location from Seller Connection without modifying business policies
 - [x] Save default numeric category IDs for DVDs, Blu-rays, books, CDs, games, and other media
+- [x] Find a production eBay leaf category by item keywords and apply its numeric ID before staging
 - [x] Create or update the SKU-backed eBay inventory item
 - [x] Map resale conditions to current Inventory API enums and retain detailed eBay validation errors
 - [x] Create or update an unpublished eBay offer and save its offer ID/status/error

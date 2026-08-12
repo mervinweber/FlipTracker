@@ -1,4 +1,4 @@
-export type ItemType = 'Video Game' | 'DVD' | 'Blu-ray' | 'CD' | 'Book' | 'Pokemon Card' | 'Sports Card' | 'Yu-Gi-Oh! Card' | 'Toy' | 'Other Media' | 'Misc';
+export type ItemType = 'Video Game' | 'DVD' | 'Blu-ray' | 'CD' | 'Book' | 'Pokemon Card' | 'Sports Card' | 'Yu-Gi-Oh! Card' | 'Toy' | 'Other Media' | 'General Merchandise' | 'Misc';
 
 export type ListingRecommendation = 'Sell Individually' | 'Bundle' | 'Skip' | 'Review';
 
@@ -59,6 +59,7 @@ export type InventoryItem = {
   ebayTitle?: string;
   ebayDescription?: string;
   ebayCategory?: string;
+  ebayCategoryId?: string;
   ebayCondition?: string;
   ebayItemSpecifics?: string;
   ebayPrice?: number;

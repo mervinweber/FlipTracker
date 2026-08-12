@@ -57,6 +57,12 @@ type BrowseItem = {
   price?: { value?: string; currency?: string };
   shippingOptions?: Array<{ shippingCost?: { value?: string; currency?: string } }>;
 };
+type TaxonomyCategory = { categoryId?: string; categoryName?: string };
+type TaxonomyAncestor = TaxonomyCategory & { categoryTreeNodeLevel?: number };
+type TaxonomySuggestion = {
+  category?: TaxonomyCategory;
+  categoryTreeNodeAncestors?: TaxonomyAncestor[];
+};
 
 function environment(): EbayEnvironment {
   return process.env.EBAY_ENVIRONMENT?.toLowerCase() === "production" ? "production" : "sandbox";
@@ -211,6 +217,54 @@ async function browseFetch(accessToken: string, params: URLSearchParams) {
   if (!response.ok) throw new Error(ebayError(body, response.status));
   return (body as { itemSummaries?: BrowseItem[] } | undefined)?.itemSummaries ?? [];
 }
+
+export const suggestCategories = action({
+  args: {
+    query: v.string(),
+    marketplaceId: v.optional(v.string()),
+  },
+  handler: async (_ctx, args): Promise<Array<{ categoryId: string; categoryName: string; categoryPath: string }>> => {
+    const query = args.query.trim().replace(/\s+/g, " ").slice(0, 350);
+    if (query.length < 3) throw new ConvexError("Enter at least three characters to search eBay categories.");
+    if (environment() !== "production") {
+      throw new ConvexError("eBay category suggestions require the Production eBay configuration; Sandbox returns unreliable category data.");
+    }
+
+    try {
+      const accessToken = await applicationAccessToken();
+      const marketplaceId = args.marketplaceId?.trim() || "EBAY_US";
+      const tree = await ebayFetch(
+        accessToken,
+        `/commerce/taxonomy/v1/get_default_category_tree_id?marketplace_id=${encodeURIComponent(marketplaceId)}`,
+      ) as { categoryTreeId?: string };
+      if (!tree.categoryTreeId) throw new Error("eBay did not return a category tree for this marketplace.");
+
+      const response = await ebayFetch(
+        accessToken,
+        `/commerce/taxonomy/v1_beta/category_tree/${encodeURIComponent(tree.categoryTreeId)}/get_category_suggestions?q=${encodeURIComponent(query)}`,
+      ) as { categorySuggestions?: TaxonomySuggestion[] };
+
+      return (response.categorySuggestions ?? []).flatMap((suggestion) => {
+        const categoryId = suggestion.category?.categoryId?.trim();
+        const categoryName = suggestion.category?.categoryName?.trim();
+        if (!categoryId || !categoryName) return [];
+        const ancestors = [...(suggestion.categoryTreeNodeAncestors ?? [])]
+          .filter((ancestor) => ancestor.categoryName && ancestor.categoryId !== tree.categoryTreeId)
+          .sort((left, right) => (left.categoryTreeNodeLevel ?? 0) - (right.categoryTreeNodeLevel ?? 0))
+          .map((ancestor) => ancestor.categoryName?.trim())
+          .filter((name): name is string => Boolean(name));
+        return [{
+          categoryId,
+          categoryName,
+          categoryPath: [...ancestors, categoryName].filter((name, index, values) => values.indexOf(name) === index).join(" > "),
+        }];
+      }).slice(0, 8);
+    } catch (error) {
+      if (error instanceof ConvexError) throw error;
+      throw new ConvexError(`eBay category lookup failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+    }
+  },
+});
 
 function median(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);

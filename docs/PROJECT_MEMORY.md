@@ -18,6 +18,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- Inventory and Listings can add `General Merchandise` records for non-media odds and ends. Both routes use the normal asset review form, while the Listings route also queues an internal marketplace draft.
+- Inventory and listing editors include an eBay Taxonomy category finder. It searches Production eBay by item keywords, displays ranked leaf-category breadcrumbs, and saves the chosen numeric category ID through inventory, draft creation, and Excel export.
 - Inventory items separate pasted AI listing copy, buyer-facing item disclosures, and private internal notes. AI copy and disclosures compose into the eBay description; internal notes never do.
 - Inventory supports an aggregate Cards filter while preserving Pokemon Card, Sports Card, and Yu-Gi-Oh! Card as distinct item types. Seller Connection stores separate eBay category defaults for those three card markets.
 - eBay seller connection added: authorization-code OAuth through Convex HTTP, server-only refresh/access token storage, automatic token refresh, seller business-policy/location setup, category defaults, and creation/update of unpublished Inventory API offers. Publishing is intentionally not implemented.

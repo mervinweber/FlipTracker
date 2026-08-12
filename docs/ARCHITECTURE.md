@@ -21,6 +21,8 @@ The PWA uses `@zxing/browser` for camera barcode scanning and keeps a manual bar
 
 The app saves scanned items to inventory first. Generated eBay listing fields are stored on the asset and copied into an internal marketplace draft.
 
+Manual entry also supports `General Merchandise` for physical items outside the media-specific model. Inventory and Listings both open the same asset review workflow; starting from Listings checks the internal-draft option so the physical asset remains the source of truth.
+
 ## Combined Inventory And Sales Workflow
 
 ```text
@@ -83,6 +85,8 @@ Seller-owned sales reconciliation uses the read-only eBay Fulfillment API, not m
 Older listings without package data receive conservative media defaults during eBay synchronization: 16 oz for books, 8 oz for DVDs/Blu-rays/games, and 6 oz for CDs. Explicit listing-level package measurements override these defaults.
 
 Card fields are conditional in both inventory review and marketplace editing. Pokemon and Yu-Gi-Oh! cards send the eBay `Game` aspect; sports cards send `Sport`, plus set, card number, player, and team when available. Sale format routes the offer to eBay's current single-card, lot, complete-set, sealed-pack, or sealed-box category. Non-card records neither display nor send these fields, and an explicit listing-level category ID remains available as an advanced override.
+
+For general merchandise and unusual editions, the shared category finder calls eBay's Taxonomy API with reviewed title/type keywords. It displays eBay's ranked leaf-category suggestions and full category breadcrumbs; the user selects one before FlipTracker saves both the readable path and numeric category ID. The selected ID is copied from the asset into new marketplace drafts and exported through Excel. Category suggestions are Production-only because eBay Sandbox taxonomy results are intentionally unreliable.
 
 Inventory synchronization repeats total ship-to-home quantity and a quantity distribution for the selected `merchantLocationKey` on every replace request. Offer refresh retries error `25604` once after a short delay to account for Inventory Service propagation without creating another offer.
 

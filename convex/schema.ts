@@ -67,6 +67,7 @@ export default defineSchema({
     ebayTitle: v.optional(v.string()),
     ebayDescription: v.optional(v.string()),
     ebayCategory: v.optional(v.string()),
+    ebayCategoryId: v.optional(v.string()),
     ebayCondition: v.optional(v.string()),
     ebayItemSpecifics: v.optional(v.string()),
     ebayPrice: v.optional(v.number()),

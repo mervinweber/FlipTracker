@@ -1,9 +1,10 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
+import EbayCategoryFinder from './EbayCategoryFinder';
 
 type Listing = {
   _id: Id<'marketplaceListings'>;
@@ -321,7 +322,7 @@ function PriceHistory({ listingId }: { listingId: Id<'marketplaceListings'> }) {
   );
 }
 
-export default function ListingsPanel() {
+export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () => void }) {
   const listings = useQuery(api.listings.list) as Listing[] | undefined;
   const stats = useQuery(api.listings.stats);
   const updateListing = useMutation(api.listings.update);
@@ -1267,7 +1268,7 @@ export default function ListingsPanel() {
       </section>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>Marketplace Listings</h2><p>{listings === undefined ? 'Loading Convex data...' : `${filtered.length} listing${filtered.length === 1 ? '' : 's'} in this view`}</p></div></div>
+        <div className="panelHeader"><div><h2>Marketplace Listings</h2><p>{listings === undefined ? 'Loading Convex data...' : `${filtered.length} listing${filtered.length === 1 ? '' : 's'} in this view`}</p></div><button className="secondary" onClick={onAddOtherItem}><Plus size={16}/> Add Other Item</button></div>
         {listings === undefined ? <p className="panelMessage">Loading listings...</p> : filtered.length === 0 ? <div className="empty"><h2>No listings found</h2><p>Create a draft from an item in Inventory, then track it through sale.</p></div> : (
           <div className="tableWrap">
             <table>
@@ -1381,6 +1382,7 @@ export default function ListingsPanel() {
             <label className="span2">Listing URL<input type="url" value={editing.listingUrl || ''} onChange={(event) => patchEditing({ listingUrl: event.target.value })}/></label>
             <label>Category<input value={editing.category || ''} onChange={(event) => patchEditing({ category: event.target.value })}/></label>
             <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={(event) => patchEditing({ ebayCategoryId: event.target.value })}/></label>
+            <EbayCategoryFinder query={[editing.title, editing.assetType, editing.mediaFormat].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => patchEditing({ category: suggestion.categoryPath, ebayCategoryId: suggestion.categoryId })}/>
             <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
             <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
             {isBookListing(editing) ? <label className="span2">Book Title<input maxLength={65} value={editing.bookTitle || ''} onChange={(event) => patchEditing({ bookTitle: event.target.value })}/><small>Required by eBay for book categories. Maximum 65 characters. {(editing.bookTitle || '').length}/65</small></label> : null}

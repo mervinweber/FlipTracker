@@ -12,6 +12,7 @@ import BulkIntakePanel from './components/BulkIntakePanel';
 import SourcingPanel from './components/SourcingPanel';
 import PhotoQueuePanel from './components/PhotoQueuePanel';
 import ListingPhotoManager from './components/ListingPhotoManager';
+import EbayCategoryFinder from './components/EbayCategoryFinder';
 import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
 
 type AppView = 'Inventory' | 'Listings' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
@@ -81,6 +82,7 @@ type Asset = {
   ebayTitle?: string;
   ebayDescription?: string;
   ebayCategory?: string;
+  ebayCategoryId?: string;
   ebayCondition?: string;
   ebayItemSpecifics?: string;
   ebayPrice?: number;
@@ -131,7 +133,7 @@ type PendingPhoto = {
   previewUrl: string;
 };
 
-const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Other Media', 'Toy', 'Misc'];
+const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Other Media', 'Toy', 'General Merchandise', 'Misc'];
 const CARD_PRODUCT_TYPES = ['Single Card', 'Card Lot', 'Complete Set', 'Sealed Pack', 'Sealed Box'];
 const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One Piece Card Game', 'Disney Lorcana', 'Other CCG'];
 const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
@@ -281,7 +283,7 @@ function recalcAsset(item: Partial<Asset>): Partial<Asset> {
   next.strategy = next.listingRecommendation === 'Sell Individually' ? 'Flip Now' : next.listingRecommendation || next.strategy || 'Review';
   next.ebayTitle = generateEbayTitle(next);
   next.ebayDescription = generateDescription(next);
-  next.ebayCategory = ebayCategoryFor(next);
+  next.ebayCategory = next.ebayCategory || ebayCategoryFor(next);
   next.ebayCondition = ebayConditionFor(next);
   next.ebayItemSpecifics = listingSpecifics(next);
   next.ebayPrice = next.valueSource === 'User Override' ? next.userHigh || next.userLow : next.estimatedHigh || next.estimatedLow;
@@ -303,6 +305,21 @@ function blankAsset(): Partial<Asset> {
     condition: 'Good',
     completeness: 'Complete',
     strategy: 'Flip Now',
+  });
+}
+
+function blankGeneralAsset(): Partial<Asset> {
+  return recalcAsset({
+    type: 'General Merchandise',
+    mediaFormat: 'General Merchandise',
+    title: '',
+    status: 'Inventory',
+    valueSource: 'Estimated',
+    needsValueCheck: true,
+    condition: 'Good',
+    completeness: 'Complete',
+    strategy: 'Review',
+    ebayCategory: '',
   });
 }
 
@@ -368,6 +385,7 @@ function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem 
     ebayTitle: asset.ebayTitle,
     ebayDescription: asset.ebayDescription,
     ebayCategory: asset.ebayCategory,
+    ebayCategoryId: asset.ebayCategoryId,
     ebayCondition: asset.ebayCondition,
     ebayItemSpecifics: asset.ebayItemSpecifics,
     ebayPrice: asset.ebayPrice,
@@ -750,6 +768,7 @@ export default function App() {
       ebayTitle: prepared.ebayTitle || undefined,
       ebayDescription: prepared.ebayDescription || undefined,
       ebayCategory: prepared.ebayCategory || undefined,
+      ebayCategoryId: prepared.ebayCategoryId || undefined,
       ebayCondition: prepared.ebayCondition || undefined,
       ebayItemSpecifics: prepared.ebayItemSpecifics || undefined,
       ebayPrice: prepared.ebayPrice,
@@ -814,6 +833,7 @@ export default function App() {
       title: asset.ebayTitle || generateEbayTitle(asset) || asset.title,
       description: asset.ebayDescription || generateDescription(asset),
       category: asset.ebayCategory || ebayCategoryFor(asset),
+      ebayCategoryId: asset.ebayCategoryId,
       condition: asset.ebayCondition || ebayConditionFor(asset),
       language: 'English',
       bookTitle: `${asset.type || ''} ${asset.mediaFormat || ''}`.toLowerCase().includes('book') ? asset.title : undefined,
@@ -887,6 +907,7 @@ export default function App() {
           ebayTitle: item.ebayTitle || undefined,
           ebayDescription: item.ebayDescription || undefined,
           ebayCategory: item.ebayCategory || undefined,
+          ebayCategoryId: item.ebayCategoryId || undefined,
           ebayCondition: item.ebayCondition || undefined,
           ebayItemSpecifics: item.ebayItemSpecifics || undefined,
           ebayPrice: item.ebayPrice,
@@ -997,7 +1018,7 @@ export default function App() {
       </section>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div></div>
+        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div>
         {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>No inventory yet</h2><p>Import your spreadsheet, add your first item, or scan media.</p></div> : (
           <div className="tableWrap">
             <table className="inventoryTable">
@@ -1020,7 +1041,7 @@ export default function App() {
             </table>
           </div>
         )}
-      </section></> : activeView === 'Listings' ? <ListingsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
+      </section></> : activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
 
       {scannerOpen ? (
         <div className="modalBackdrop">
@@ -1063,7 +1084,7 @@ export default function App() {
               </aside>
               <div className="formGrid">
                 <label className="span2">Title<input value={editing.title || ''} onChange={e => updateEditing({ title:e.target.value, needsValueCheck: '_id' in editing })}/></label>
-                <label>Type<select value={editing.type || 'Video Game'} onChange={e => updateEditing({ type:e.target.value, cardProductType: isCardType(e.target.value) ? editing.cardProductType || 'Single Card' : undefined, cardGame: isCardType(e.target.value) && e.target.value !== 'Sports Card' ? editing.cardGame || defaultCardGame(e.target.value) : undefined, cardSport: e.target.value === 'Sports Card' ? editing.cardSport : undefined })}>{MEDIA_TYPES.map(s => <option key={s}>{s}</option>)}</select></label>
+                <label>Type<select value={editing.type || 'Video Game'} onChange={e => updateEditing({ type:e.target.value, mediaFormat: e.target.value === 'General Merchandise' ? 'General Merchandise' : editing.mediaFormat, ebayCategory: '', ebayCategoryId: undefined, cardProductType: isCardType(e.target.value) ? editing.cardProductType || 'Single Card' : undefined, cardGame: isCardType(e.target.value) && e.target.value !== 'Sports Card' ? editing.cardGame || defaultCardGame(e.target.value) : undefined, cardSport: e.target.value === 'Sports Card' ? editing.cardSport : undefined })}>{MEDIA_TYPES.map(s => <option key={s}>{s}</option>)}</select></label>
                 <label>Format<input value={editing.mediaFormat || ''} onChange={e => updateEditing({ mediaFormat:e.target.value })}/></label>
                 {isCardType(editing.type) ? <div className="formSection span2"><h3>Card Details</h3><div className="sectionGrid">
                   <label>Sale Format<select value={editing.cardProductType || 'Single Card'} onChange={e => updateEditing({ cardProductType:e.target.value })}>{CARD_PRODUCT_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>
@@ -1111,6 +1132,8 @@ export default function App() {
                   <label className="span2">Editable AI Copy<textarea value={editing.aiDescription || ''} onChange={e => updateEditing({ aiDescription:e.target.value })} placeholder="Generate a draft or enter your own listing copy..."/></label>
                   <label className="span2">Item Disclosures<textarea value={editing.itemDisclosures || ''} onChange={e => updateEditing({ itemDisclosures:e.target.value })} placeholder="Library copy, missing DVD disc, case damage, writing, scratches..."/></label>
                   <label>Category<input value={editing.ebayCategory || ''} onChange={e => updateEditing({ ebayCategory:e.target.value }, false)}/></label>
+                  <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={e => updateEditing({ ebayCategoryId:e.target.value }, false)}/></label>
+                  <EbayCategoryFinder query={[editing.ebayTitle || editing.title, editing.edition, editing.mediaFormat, editing.type].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => updateEditing({ ebayCategory:suggestion.categoryPath, ebayCategoryId:suggestion.categoryId }, false)}/>
                   <label>Condition<input value={editing.ebayCondition || ''} onChange={e => updateEditing({ ebayCondition:e.target.value }, false)}/></label>
                   <label>Price<input type="number" value={editing.ebayPrice || ''} onChange={e => updateEditing({ ebayPrice:toNumber(e.target.value) }, false)}/></label>
                   <label>Shipping<input value={editing.ebayShipping || ''} onChange={e => updateEditing({ ebayShipping:e.target.value }, false)}/></label>
