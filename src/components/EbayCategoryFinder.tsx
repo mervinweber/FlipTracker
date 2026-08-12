@@ -67,7 +67,7 @@ export default function EbayCategoryFinder({ query, selectedCategoryId, onSelect
           <strong>eBay Category Finder</strong>
           <small>Search eBay and choose the closest leaf category before staging.</small>
         </div>
-        <button type="button" className="secondary" disabled={busy} onClick={() => findCategories()}>
+        <button type="button" className="secondary" disabled={busy} onClick={() => findCategories(open ? searchText : query)}>
           <Search size={16}/>{busy ? 'Searching...' : 'Find Category'}
         </button>
       </div>
