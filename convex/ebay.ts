@@ -223,11 +223,14 @@ export const suggestCategories = action({
     query: v.string(),
     marketplaceId: v.optional(v.string()),
   },
-  handler: async (_ctx, args): Promise<Array<{ categoryId: string; categoryName: string; categoryPath: string }>> => {
+  handler: async (_ctx, args): Promise<
+    | { ok: true; suggestions: Array<{ categoryId: string; categoryName: string; categoryPath: string }> }
+    | { ok: false; error: string }
+  > => {
     const query = args.query.trim().replace(/\s+/g, " ").slice(0, 350);
-    if (query.length < 3) throw new ConvexError("Enter at least three characters to search eBay categories.");
+    if (query.length < 3) return { ok: false, error: "Enter at least three characters to search eBay categories." };
     if (environment() !== "production") {
-      throw new ConvexError("eBay category suggestions require the Production eBay configuration; Sandbox returns unreliable category data.");
+      return { ok: false, error: "eBay category suggestions require the Production eBay configuration; Sandbox returns unreliable category data." };
     }
 
     try {
@@ -241,10 +244,10 @@ export const suggestCategories = action({
 
       const response = await ebayFetch(
         accessToken,
-        `/commerce/taxonomy/v1_beta/category_tree/${encodeURIComponent(tree.categoryTreeId)}/get_category_suggestions?q=${encodeURIComponent(query)}`,
+        `/commerce/taxonomy/v1/category_tree/${encodeURIComponent(tree.categoryTreeId)}/get_category_suggestions?q=${encodeURIComponent(query)}`,
       ) as { categorySuggestions?: TaxonomySuggestion[] };
 
-      return (response.categorySuggestions ?? []).flatMap((suggestion) => {
+      const suggestions = (response.categorySuggestions ?? []).flatMap((suggestion) => {
         const categoryId = suggestion.category?.categoryId?.trim();
         const categoryName = suggestion.category?.categoryName?.trim();
         if (!categoryId || !categoryName) return [];
@@ -259,9 +262,9 @@ export const suggestCategories = action({
           categoryPath: [...ancestors, categoryName].filter((name, index, values) => values.indexOf(name) === index).join(" > "),
         }];
       }).slice(0, 8);
+      return { ok: true, suggestions };
     } catch (error) {
-      if (error instanceof ConvexError) throw error;
-      throw new ConvexError(`eBay category lookup failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`);
+      return { ok: false, error: `eBay category lookup failed: ${error instanceof Error ? error.message : "Unknown eBay error."}` };
     }
   },
 });

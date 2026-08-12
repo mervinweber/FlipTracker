@@ -45,8 +45,13 @@ export default function EbayCategoryFinder({ query, selectedCategoryId, onSelect
     setError('');
     try {
       const result = await suggestCategories({ query: normalized, marketplaceId: 'EBAY_US' });
-      setSuggestions(result);
-      if (!result.length) setError('eBay did not return a matching leaf category. Try a more specific description.');
+      if (!result.ok) {
+        setSuggestions([]);
+        setError(result.error);
+        return;
+      }
+      setSuggestions(result.suggestions);
+      if (!result.suggestions.length) setError('eBay did not return a matching leaf category. Try a more specific description.');
     } catch (lookupError) {
       setSuggestions([]);
       setError(readableLookupError(lookupError));
