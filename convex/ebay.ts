@@ -1067,8 +1067,8 @@ export const lookupActivePricing = action({
   args: { adminKey: v.string(), listingIds: v.array(v.id("marketplaceListings")) },
   handler: async (ctx, args) => {
     requireAdminKey(args.adminKey);
-    if (!args.listingIds.length) throw new Error("Select at least one listing to price.");
-    if (args.listingIds.length > 25) throw new Error("Price up to 25 listings at a time.");
+    if (!args.listingIds.length) throw new ConvexError("Select at least one listing to price.");
+    if (args.listingIds.length > 25) throw new ConvexError("Price up to 25 listings at a time.");
     const accessToken = await applicationAccessToken();
     const results = [];
     for (const listingId of args.listingIds) {

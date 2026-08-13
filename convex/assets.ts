@@ -222,6 +222,59 @@ export const remove = mutation({
   },
 });
 
+export const removeMany = mutation({
+  args: { ids: v.array(v.id("assets")) },
+  handler: async (ctx, args) => {
+    const ids = [...new Set(args.ids)];
+    if (!ids.length) return { deleted: 0, deletedListings: 0, blocked: undefined };
+    if (ids.length > 100) throw new Error("Bulk delete supports up to 100 inventory items at a time.");
+
+    const records = [];
+    for (const id of ids) {
+      const asset = await ctx.db.get(id);
+      if (!asset) continue;
+      const sales = await ctx.db.query("sales").withIndex("by_asset", (q) => q.eq("assetId", id)).take(1);
+      const listings = await ctx.db.query("marketplaceListings").withIndex("by_assetId", (q) => q.eq("assetId", id)).collect();
+      const protectedListing = listings.find((listing) =>
+        !["Draft", "Pending"].includes(listing.status) || Boolean(listing.ebayOfferId || listing.externalListingId),
+      );
+      if (sales.length || protectedListing) {
+        return {
+          deleted: 0,
+          deletedListings: 0,
+          blocked: `Cannot bulk delete "${asset.title}" because it has a sale, staged eBay offer, or active/sold listing. No selected items were deleted.`,
+        };
+      }
+      records.push({ asset, listings });
+    }
+
+    let deletedListings = 0;
+    for (const { asset, listings } of records) {
+      for (const listing of listings) {
+        const history = await ctx.db.query("listingPriceHistory").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+        for (const entry of history) await ctx.db.delete(entry._id);
+        await ctx.db.delete(listing._id);
+        deletedListings += 1;
+      }
+
+      const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", asset._id)).collect();
+      for (const photo of photos) {
+        await ctx.storage.delete(photo.storageId);
+        await ctx.db.delete(photo._id);
+      }
+      const valueHistory = await ctx.db.query("valueHistory").withIndex("by_asset", (q) => q.eq("assetId", asset._id)).collect();
+      for (const entry of valueHistory) await ctx.db.delete(entry._id);
+      const researchChecks = await ctx.db.query("researchChecks").withIndex("by_asset", (q) => q.eq("assetId", asset._id)).collect();
+      for (const check of researchChecks) await ctx.db.delete(check._id);
+      const analyses = await ctx.db.query("sourcingAnalyses").withIndex("by_assetId", (q) => q.eq("assetId", asset._id)).collect();
+      for (const analysis of analyses) await ctx.db.patch(analysis._id, { assetId: undefined });
+      await ctx.db.delete(asset._id);
+    }
+
+    return { deleted: records.length, deletedListings, blocked: undefined };
+  },
+});
+
 export const importMany = mutation({
   args: { assets: v.array(v.object(assetInput)) },
   handler: async (ctx, args) => {

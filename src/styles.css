@@ -58,15 +58,16 @@ button.danger { background:var(--danger); }
 .tableWrap { overflow:auto; }
 table { width:100%; border-collapse:collapse; font-size:14px; }
 .inventoryTable { min-width:1120px; table-layout:fixed; }
-.inventoryTable th:nth-child(1) { width:7%; }
-.inventoryTable th:nth-child(2) { width:14%; }
-.inventoryTable th:nth-child(3) { width:8%; }
+.inventoryTable th:nth-child(1) { width:4%; }
+.inventoryTable th:nth-child(2) { width:7%; }
+.inventoryTable th:nth-child(3) { width:14%; }
 .inventoryTable th:nth-child(4) { width:8%; }
 .inventoryTable th:nth-child(5) { width:8%; }
-.inventoryTable th:nth-child(6) { width:10%; }
-.inventoryTable th:nth-child(7) { width:12%; }
-.inventoryTable th:nth-child(8) { width:8%; }
-.inventoryTable th:nth-child(9) { width:25%; }
+.inventoryTable th:nth-child(6) { width:8%; }
+.inventoryTable th:nth-child(7) { width:10%; }
+.inventoryTable th:nth-child(8) { width:12%; }
+.inventoryTable th:nth-child(9) { width:8%; }
+.inventoryTable th:nth-child(10) { width:21%; }
 th, td { text-align:left; padding:11px 14px; border-bottom:1px solid #1f2937; vertical-align:middle; }
 th { color:#93c5fd; position:sticky; top:0; background:var(--surface); font-size:12px; text-transform:uppercase; letter-spacing:.06em; z-index:1; }
 td small { display:block; color:var(--muted); margin-top:3px; }
@@ -92,7 +93,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .viewTabs button { border:1px solid transparent; }
 .viewTabs button.active { background:var(--primary-strong); border-color:#60a5fa; }
 .listingCards { grid-template-columns:repeat(7, minmax(0, 1fr)); }
-.listingControls { display:grid; grid-template-columns:minmax(220px, 1fr) 140px 170px 160px auto; gap:12px; margin-bottom:18px; }
+.listingControls { display:grid; grid-template-columns:minmax(220px, 1fr) 130px 145px 180px 150px auto; gap:12px; margin-bottom:18px; }
 .listingTools { flex-wrap:wrap; justify-content:flex-end; }
 .listingTools .button, .listingTools button { white-space:nowrap; }
 .panelMessage { padding:0 18px 18px; }
@@ -226,6 +227,10 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .rowActions button { padding:7px 9px; }
 .tableActionsCell { min-width:0; }
 .tableActionsCell .rowActions { gap:6px; }
+.selectionCell { text-align:center; padding-left:8px; padding-right:8px; }
+.selectionCell input { width:18px; height:18px; margin:0; accent-color:var(--primary); cursor:pointer; }
+.inventoryBulkActions { align-items:center; }
+.bulkDeleteNotice { margin:0 18px 12px; padding:10px 12px; border:1px solid var(--border-strong); border-radius:var(--radius); font-size:13px; font-weight:700; }
 .needsCheck td { background: rgba(245, 158, 11, 0.08); }
 .modalBackdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.72); display:flex; align-items:flex-start; justify-content:center; padding:16px; overflow-y:auto; }
 .modalBackdrop > .modal { margin:auto 0; }

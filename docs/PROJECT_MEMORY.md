@@ -56,6 +56,9 @@ The product should feel like a serious tool for making buying, listing, and coll
 - Convex backend added for assets, collections, research/value history, and reports.
 - Main inventory table reads from Convex with `useQuery`.
 - Add/edit/delete inventory actions use Convex mutations.
+- Inventory supports confirmation-protected bulk deletion for up to 100 selected records. The mutation cleans up linked Draft/Pending listings, price history, research/value history, and stored photos, but refuses the entire batch when any selected record is tied to a sale, staged eBay offer, external listing, Active listing, or Sold listing.
+- Find Fair Value batches selected eBay draft pricing lookups into sequential groups of 25, matching the bounded Convex/eBay action while presenting one combined pricing review to the user.
+- Listings can be filtered by workflow queue type, and Select All in View targets only eligible Draft/Pending eBay rows currently visible under the active search and filters. Changing the view drops hidden selections so bulk pricing or staging cannot accidentally include them.
 - Dashboard cards use Convex report data.
 - Excel import writes to Convex through `assets.importMany`.
 - Excel export still works from current Convex query rows.

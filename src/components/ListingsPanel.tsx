@@ -96,6 +96,8 @@ type PricingRow = {
   price: string;
 };
 
+const QUEUE_TYPES = ['Ready for Pricing', 'Needs Photo', 'Ready for eBay', 'Staged for eBay', 'Published', 'Sold'] as const;
+
 type ActivePricingResult = {
   listingId: Id<'marketplaceListings'>;
   matchCount: number;
@@ -361,6 +363,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
   const [platform, setPlatform] = useState('All');
+  const [queueType, setQueueType] = useState('All');
   const [sortBy, setSortBy] = useState<ListingSort>('Newest');
   const [priceChangeReason, setPriceChangeReason] = useState('');
   const [adminKey, setAdminKey] = useState(() => localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey') || '');
@@ -412,7 +415,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     const normalized = query.trim().toLowerCase();
     const matches = (listings || []).filter((listing) => {
       const matchesQuery = !normalized || `${listing.title} ${listing.assetTitle} ${listing.sku || ''} ${listing.externalListingId || ''}`.toLowerCase().includes(normalized);
-      return matchesQuery && (status === 'All' || listing.status === status) && (platform === 'All' || listing.platform === platform);
+      return matchesQuery
+        && (status === 'All' || listing.status === status)
+        && (platform === 'All' || listing.platform === platform)
+        && (queueType === 'All' || queueStatus(listing) === queueType);
     });
     const queueOrder = ['Ready for Pricing', 'Needs Photo', 'Ready for eBay', 'Staged for eBay', 'Published', 'Sold'];
     const statusOrder = ['Draft', 'Pending', 'Active', 'Sold', 'Ended'];
@@ -428,11 +434,20 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       if (sortBy === 'Price Low') return price(a) - price(b) || b.updatedAt - a.updatedAt;
       return b.updatedAt - a.updatedAt;
     });
-  }, [listings, platform, query, sortBy, status]);
+  }, [listings, platform, query, queueType, sortBy, status]);
 
   const queueListings = useMemo(() => filtered.filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status)), [filtered]);
   const selectedListings = useMemo(() => (listings || []).filter((listing) => selectedIds.has(listing._id)), [listings, selectedIds]);
   const selectedReadyForEbay = useMemo(() => selectedListings.filter((listing) => queueStatus(listing) === 'Ready for eBay'), [selectedListings]);
+
+  useEffect(() => {
+    const visibleIds = new Set(queueListings.map((listing) => listing._id));
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((id) => visibleIds.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
+      return next;
+    });
+  }, [queueListings]);
   const sellerDefaultsReady = Boolean(
     ebaySettings.merchantLocationKey
     && ebaySettings.fulfillmentPolicyId
@@ -928,14 +943,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   function toggleQueueView() {
     const queueIds = queueListings.map((listing) => listing._id);
     const allSelected = queueIds.length > 0 && queueIds.every((id) => selectedIds.has(id));
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      for (const id of queueIds) {
-        if (allSelected) next.delete(id);
-        else next.add(id);
-      }
-      return next;
-    });
+    setSelectedIds(allSelected ? new Set() : new Set(queueIds));
   }
 
   async function openPricingReview() {
@@ -966,10 +974,15 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setQueueBusy(true);
     setEbayError('');
     try {
-      const liveResults = await lookupActivePricing({
-        adminKey,
-        listingIds: baseRows.map((row) => row.listingId),
-      }) as ActivePricingResult[];
+      const liveResults: ActivePricingResult[] = [];
+      const listingIds = baseRows.map((row) => row.listingId);
+      for (let offset = 0; offset < listingIds.length; offset += 25) {
+        const batch = await lookupActivePricing({
+          adminKey,
+          listingIds: listingIds.slice(offset, offset + 25),
+        }) as ActivePricingResult[];
+        liveResults.push(...batch);
+      }
       const byListing = new Map(liveResults.map((result) => [result.listingId, result]));
       setPricingRows(baseRows.map((row) => {
         const live = byListing.get(row.listingId);
@@ -1173,7 +1186,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <div className="queueSteps" aria-label="Listing queue stages"><span>1. Select</span><span>2. Find Fair Value</span><span>3. Stage with eBay</span><span>4. Publish</span></div>
         </div>
         <div className="actions queueActions">
-          <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear View' : 'Select Queue'}</button>
+          <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear Selection' : 'Select All in View'}</button>
           <button disabled={!selectedIds.size || queueBusy} onClick={openPricingReview}><DollarSign size={16}/> {queueBusy ? 'Checking eBay...' : 'Find Fair Value'}</button>
           <button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage with eBay${selectedReadyForEbay.length ? ` (${selectedReadyForEbay.length})` : ''}`}</button>
         </div>
@@ -1263,6 +1276,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search listings..." value={query} onChange={(event) => setQuery(event.target.value)}/></div>
         <select value={status} onChange={(event) => setStatus(event.target.value)}>{['All', ...STATUSES].map((value) => <option key={value}>{value}</option>)}</select>
         <select value={platform} onChange={(event) => setPlatform(event.target.value)}>{['All', ...PLATFORMS].map((value) => <option key={value}>{value}</option>)}</select>
+        <select aria-label="Filter by queue type" value={queueType} onChange={(event) => setQueueType(event.target.value)}><option value="All">Queue: All</option>{QUEUE_TYPES.map((value) => <option key={value} value={value}>{`Queue: ${value}`}</option>)}</select>
         <select aria-label="Sort listings" value={sortBy} onChange={(event) => setSortBy(event.target.value as ListingSort)}>{(['Newest', 'Queue', 'Status', 'Price High', 'Price Low'] as ListingSort[]).map((value) => <option key={value} value={value}>{`Sort: ${value}`}</option>)}</select>
         <div className="actions listingTools"><button className="secondary" disabled={sellerSalesSyncBusy || !ebaySetup?.connected} onClick={refreshEbaySales}><RefreshCw size={16}/>{sellerSalesSyncBusy ? 'Refreshing Sales...' : 'Sync eBay Sales'}</button><label className="button secondary"><Upload size={16}/> Import Old JSON<input type="file" accept="application/json,.json" hidden onChange={importOldJson}/></label><button className="secondary" onClick={exportCsv}><Download size={16}/> Export CSV</button></div>
       </section>
@@ -1272,7 +1286,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         {listings === undefined ? <p className="panelMessage">Loading listings...</p> : filtered.length === 0 ? <div className="empty"><h2>No listings found</h2><p>Create a draft from an item in Inventory, then track it through sale.</p></div> : (
           <div className="tableWrap">
             <table>
-              <thead><tr><th className="selectColumn"><input type="checkbox" aria-label="Select all queued listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/></th><th>Platform</th><th>Title</th><th>Queue</th><th>Status</th><th>Price</th><th>Location</th><th>Actions</th></tr></thead>
+              <thead><tr><th className="selectColumn"><input type="checkbox" aria-label="Select all eligible listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/></th><th>Platform</th><th>Title</th><th>Queue</th><th>Status</th><th>Price</th><th>Location</th><th>Actions</th></tr></thead>
               <tbody>{filtered.map((listing) => (
                 <tr key={listing._id}>
                   <td className="selectColumn">{listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <input type="checkbox" aria-label={`Select ${listing.title}`} checked={selectedIds.has(listing._id)} onChange={() => toggleSelected(listing._id)}/> : null}</td>

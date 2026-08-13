@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
@@ -417,6 +417,9 @@ export default function App() {
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<Id<'assets'>>>(new Set());
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
+  const [bulkDeleteMessage, setBulkDeleteMessage] = useState('');
   const pendingPhotosRef = useRef<PendingPhoto[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControls = useRef<IScannerControls | null>(null);
@@ -435,6 +438,7 @@ export default function App() {
   const createAsset = useMutation(api.assets.create);
   const updateAsset = useMutation(api.assets.update);
   const removeAsset = useMutation(api.assets.remove);
+  const removeAssets = useMutation(api.assets.removeMany);
   const importMany = useMutation(api.assets.importMany);
   const createCollection = useMutation(api.collections.create);
   const updateCollection = useMutation(api.collections.update);
@@ -462,6 +466,11 @@ export default function App() {
     document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || scannerOpen);
     return () => document.body.classList.remove('modalOpen');
   }, [editing, editingCollection, researchAsset, scannerOpen]);
+
+  useEffect(() => {
+    const visibleIds = new Set(rows.map((item) => item._id));
+    setSelectedAssetIds((current) => new Set([...current].filter((id) => visibleIds.has(id))));
+  }, [assets]);
 
   useEffect(() => {
     const syncView = () => setActiveView(viewFromHash());
@@ -824,6 +833,44 @@ export default function App() {
     await removeAsset({ id });
   }
 
+  function toggleAssetSelection(id: Id<'assets'>) {
+    setSelectedAssetIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setBulkDeleteMessage('');
+  }
+
+  function toggleVisibleSelection() {
+    const visibleIds = rows.slice(0, 100).map((item) => item._id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedAssetIds.has(id));
+    setSelectedAssetIds(allSelected ? new Set() : new Set(visibleIds));
+    setBulkDeleteMessage(rows.length > 100 && !allSelected ? 'Selected the first 100 items in this view.' : '');
+  }
+
+  async function deleteSelectedAssets() {
+    const ids = [...selectedAssetIds];
+    if (!ids.length || bulkDeleteBusy) return;
+    if (!confirm(`Permanently delete ${ids.length} selected inventory item${ids.length === 1 ? '' : 's'}? Unsubmitted linked drafts and saved photos will also be removed. This cannot be undone.`)) return;
+    setBulkDeleteBusy(true);
+    setBulkDeleteMessage('');
+    try {
+      const result = await removeAssets({ ids });
+      if (result.blocked) {
+        setBulkDeleteMessage(result.blocked);
+        return;
+      }
+      setSelectedAssetIds(new Set());
+      setBulkDeleteMessage(`Deleted ${result.deleted} inventory item${result.deleted === 1 ? '' : 's'}${result.deletedListings ? ` and ${result.deletedListings} linked draft${result.deletedListings === 1 ? '' : 's'}` : ''}.`);
+    } catch (error) {
+      setBulkDeleteMessage(error instanceof Error ? error.message : 'Bulk delete failed. No selected items were deleted.');
+    } finally {
+      setBulkDeleteBusy(false);
+    }
+  }
+
   async function createListingDraft(asset: Asset) {
     const price = asset.ebayPrice ?? effectiveHigh(asset) ?? undefined;
     await createListing({
@@ -1018,14 +1065,16 @@ export default function App() {
       </section>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div>
+        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{selectedAssetIds.size ? <button className="danger" disabled={bulkDeleteBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
+        {bulkDeleteMessage ? <p className={`bulkDeleteNotice ${bulkDeleteMessage.startsWith('Deleted') || bulkDeleteMessage.startsWith('Selected') ? 'successNotice' : 'errorNotice'}`}>{bulkDeleteMessage}</p> : null}
         {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>No inventory yet</h2><p>Import your spreadsheet, add your first item, or scan media.</p></div> : (
           <div className="tableWrap">
             <table className="inventoryTable">
-              <thead><tr><th>Format</th><th>Title</th><th>Collection</th><th>Location</th><th>Value</th><th>Source</th><th>Plan</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th className="selectionCell"><input type="checkbox" aria-label="Select all items in current view" checked={rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id))} onChange={toggleVisibleSelection}/></th><th>Format</th><th>Title</th><th>Collection</th><th>Location</th><th>Value</th><th>Source</th><th>Plan</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {rows.slice().sort((a, b) => (a.console || a.mediaFormat || '').localeCompare(b.console || b.mediaFormat || '') || effectiveHigh(b) - effectiveHigh(a)).map((item) => (
                   <tr key={item._id} className={item.needsValueCheck ? 'needsCheck' : ''}>
+                    <td className="selectionCell"><input type="checkbox" aria-label={`Select ${item.title}`} checked={selectedAssetIds.has(item._id)} onChange={() => toggleAssetSelection(item._id)}/></td>
                     <td><span className="consoleTag">{item.mediaFormat || item.console || item.type}</span></td>
                     <td><strong>{item.title}</strong>{item.edition ? <small>{item.edition}</small> : null}{item.upc || item.barcode ? <small>UPC {item.upc || item.barcode}</small> : null}</td>
                     <td>{item.collectionId ? <span className="consoleTag">{collectionName(item.collectionId)}</span> : ''}</td>
