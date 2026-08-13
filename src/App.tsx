@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
@@ -420,6 +420,11 @@ export default function App() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<Id<'assets'>>>(new Set());
   const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
   const [bulkDeleteMessage, setBulkDeleteMessage] = useState('');
+  const [bulkCostOpen, setBulkCostOpen] = useState(false);
+  const [bulkCostMode, setBulkCostMode] = useState<'splitTotal' | 'samePerItem'>('splitTotal');
+  const [bulkCostAmount, setBulkCostAmount] = useState('');
+  const [bulkCostBusy, setBulkCostBusy] = useState(false);
+  const [bulkCostError, setBulkCostError] = useState('');
   const pendingPhotosRef = useRef<PendingPhoto[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControls = useRef<IScannerControls | null>(null);
@@ -439,6 +444,7 @@ export default function App() {
   const updateAsset = useMutation(api.assets.update);
   const removeAsset = useMutation(api.assets.remove);
   const removeAssets = useMutation(api.assets.removeMany);
+  const updatePurchasePrices = useMutation(api.assets.updatePurchasePriceMany);
   const importMany = useMutation(api.assets.importMany);
   const createCollection = useMutation(api.collections.create);
   const updateCollection = useMutation(api.collections.update);
@@ -463,9 +469,9 @@ export default function App() {
   const collectionRows: Collection[] = collections || [];
 
   useEffect(() => {
-    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || scannerOpen);
+    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || scannerOpen || bulkCostOpen);
     return () => document.body.classList.remove('modalOpen');
-  }, [editing, editingCollection, researchAsset, scannerOpen]);
+  }, [bulkCostOpen, editing, editingCollection, researchAsset, scannerOpen]);
 
   useEffect(() => {
     const visibleIds = new Set(rows.map((item) => item._id));
@@ -871,6 +877,35 @@ export default function App() {
     }
   }
 
+  function openBulkCostEditor() {
+    setBulkCostMode('splitTotal');
+    setBulkCostAmount('');
+    setBulkCostError('');
+    setBulkCostOpen(true);
+  }
+
+  async function saveBulkCost() {
+    const amount = Number(bulkCostAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setBulkCostError('Enter a valid cost of zero or more.');
+      return;
+    }
+    setBulkCostBusy(true);
+    setBulkCostError('');
+    try {
+      const result = await updatePurchasePrices({ ids: [...selectedAssetIds], mode: bulkCostMode, amount });
+      const range = result.minimumPerItem === result.maximumPerItem
+        ? `$${result.minimumPerItem.toFixed(2)} each`
+        : `$${result.minimumPerItem.toFixed(2)}-$${result.maximumPerItem.toFixed(2)} each`;
+      setBulkDeleteMessage(`Updated purchase cost for ${result.updated} item${result.updated === 1 ? '' : 's'}: ${range}, $${result.total.toFixed(2)} total.`);
+      setBulkCostOpen(false);
+    } catch (error) {
+      setBulkCostError(error instanceof Error ? error.message : 'Could not update the selected purchase costs.');
+    } finally {
+      setBulkCostBusy(false);
+    }
+  }
+
   async function createListingDraft(asset: Asset) {
     const price = asset.ebayPrice ?? effectiveHigh(asset) ?? undefined;
     await createListing({
@@ -1065,7 +1100,7 @@ export default function App() {
       </section>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{selectedAssetIds.size ? <button className="danger" disabled={bulkDeleteBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
+        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{selectedAssetIds.size ? <button className="secondary" disabled={bulkDeleteBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size ? <button className="danger" disabled={bulkDeleteBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
         {bulkDeleteMessage ? <p className={`bulkDeleteNotice ${bulkDeleteMessage.startsWith('Deleted') || bulkDeleteMessage.startsWith('Selected') ? 'successNotice' : 'errorNotice'}`}>{bulkDeleteMessage}</p> : null}
         {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>No inventory yet</h2><p>Import your spreadsheet, add your first item, or scan media.</p></div> : (
           <div className="tableWrap">
@@ -1079,9 +1114,9 @@ export default function App() {
                     <td><strong>{item.title}</strong>{item.edition ? <small>{item.edition}</small> : null}{item.upc || item.barcode ? <small>UPC {item.upc || item.barcode}</small> : null}</td>
                     <td>{item.collectionId ? <span className="consoleTag">{collectionName(item.collectionId)}</span> : ''}</td>
                     <td>{item.storageLocation}</td>
-                    <td className="valueCell">{effectiveLow(item) || effectiveHigh(item) ? `$${effectiveLow(item)}-$${effectiveHigh(item)}` : ''}</td>
-                    <td><span className={badgeClass(item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
-                    <td><span className={badgeClass(String(item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
+                    <td className="valueCell">{item.status === 'Sold' && item.soldPrice !== undefined ? `$${item.soldPrice.toFixed(2)} sold` : effectiveLow(item) || effectiveHigh(item) ? `$${effectiveLow(item)}-$${effectiveHigh(item)}` : ''}</td>
+                    <td><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
+                    <td><span className={badgeClass(String(item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
                     <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
                   </tr>
@@ -1091,6 +1126,17 @@ export default function App() {
           </div>
         )}
       </section></> : activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
+
+      {bulkCostOpen ? (
+        <div className="modalBackdrop"><section className="modal bulkCostModal">
+          <header className="modalHeader"><div><h2>Bulk Edit Purchase Cost</h2><p>{selectedAssetIds.size} selected inventory item{selectedAssetIds.size === 1 ? '' : 's'}</p></div><button className="iconButton secondary" aria-label="Close bulk cost editor" onClick={() => setBulkCostOpen(false)}><X size={18}/></button></header>
+          <div className="bulkCostModes" role="group" aria-label="Purchase cost calculation"><button className={bulkCostMode === 'splitTotal' ? '' : 'secondary'} onClick={() => setBulkCostMode('splitTotal')}>Split Lot Total</button><button className={bulkCostMode === 'samePerItem' ? '' : 'secondary'} onClick={() => setBulkCostMode('samePerItem')}>Same Cost Per Item</button></div>
+          <label>{bulkCostMode === 'splitTotal' ? 'Total Paid for the Lot' : 'Cost Per Item'}<input autoFocus type="number" inputMode="decimal" min="0" step="0.01" value={bulkCostAmount} onChange={(event) => setBulkCostAmount(event.target.value)} placeholder="0.00"/></label>
+          {Number.isFinite(Number(bulkCostAmount)) && bulkCostAmount !== '' ? <div className="bulkCostPreview"><span>{bulkCostMode === 'splitTotal' ? 'Approximate cost per item' : 'Total assigned cost'}</span><strong>{bulkCostMode === 'splitTotal' ? `$${(Number(bulkCostAmount) / Math.max(1, selectedAssetIds.size)).toFixed(2)}` : `$${(Number(bulkCostAmount) * selectedAssetIds.size).toFixed(2)}`}</strong><small>Final allocation is rounded to cents without losing any remainder.</small></div> : null}
+          {bulkCostError ? <p className="setupNotice errorNotice">{bulkCostError}</p> : null}
+          <div className="actions right"><button className="secondary" disabled={bulkCostBusy} onClick={() => setBulkCostOpen(false)}>Cancel</button><button disabled={bulkCostBusy || bulkCostAmount === ''} onClick={saveBulkCost}><Save size={16}/>{bulkCostBusy ? 'Updating...' : 'Apply Cost'}</button></div>
+        </section></div>
+      ) : null}
 
       {scannerOpen ? (
         <div className="modalBackdrop">

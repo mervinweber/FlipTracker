@@ -59,6 +59,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 - Inventory supports confirmation-protected bulk deletion for up to 100 selected records. The mutation cleans up linked Draft/Pending listings, price history, research/value history, and stored photos, but refuses the entire batch when any selected record is tied to a sale, staged eBay offer, external listing, Active listing, or Sold listing.
 - Find Fair Value batches selected eBay draft pricing lookups into sequential groups of 25, matching the bounded Convex/eBay action while presenting one combined pricing review to the user.
 - Listings can be filtered by workflow queue type, and Select All in View targets only eligible Draft/Pending eBay rows currently visible under the active search and filters. Changing the view drops hidden selections so bulk pricing or staging cannot accidentally include them.
+- Selected inventory records can receive purchase cost in one atomic batch, either by splitting an entered lot total or assigning the same per-item cost. Split totals are calculated in cents and distribute any remainder across the first records so the assigned costs exactly match the amount paid.
+- Inventory is the physical-item source of truth, with marketplace listings and sales retained as linked lifecycle records. Sold takes precedence over external-listing/staged indicators in queue filters; recording or syncing a sale marks the asset Sold, stores the actual sold price, clears value-review state, and repeat eBay syncs repair stale asset lifecycle fields.
 - Dashboard cards use Convex report data.
 - Excel import writes to Convex through `assets.importMany`.
 - Excel export still works from current Convex query rows.

@@ -265,9 +265,10 @@ function priceEndingAt99(value: number) {
 }
 
 function queueStatus(listing: Listing) {
+  if (listing.status === 'Sold') return 'Sold';
+  if (!['Draft', 'Pending', 'Active'].includes(listing.status)) return listing.status;
   if (listing.externalListingId || listing.status === 'Active') return 'Published';
   if (listing.ebayOfferId || ['eBay Draft Created', 'eBay Offer Staged'].includes(listing.pricingStatus || '')) return 'Staged for eBay';
-  if (!['Draft', 'Pending'].includes(listing.status)) return listing.status;
   if ((listing.currentPrice ?? listing.listedPrice ?? 0) <= 0) return 'Ready for Pricing';
   const imageMode = listing.imageMode || (isNewCondition(listing.condition) ? 'eBay Catalog' : 'Actual Item Photo');
   const isBook = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book');

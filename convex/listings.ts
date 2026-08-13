@@ -217,6 +217,34 @@ export const create = mutation({
     }
     if (args.status === "Active") {
       await ctx.db.patch(args.assetId, { status: "Listed", updatedAt: now });
+    } else if (args.status === "Sold") {
+      const soldPrice = args.soldPrice ?? args.currentPrice ?? args.listedPrice ?? 0;
+      const soldDate = args.soldDate ?? new Date(now).toISOString().slice(0, 10);
+      await ctx.db.patch(args.assetId, {
+        status: "Sold",
+        soldPrice,
+        fees: args.fees,
+        shipping: args.shippingCost,
+        needsValueCheck: false,
+        valueSource: "Actual Sale",
+        updatedAt: now,
+      });
+      await ctx.db.insert("sales", {
+        assetId: args.assetId,
+        listingId,
+        platform: args.platform,
+        saleChannelDetail: args.saleChannelDetail,
+        soldDate,
+        soldPrice,
+        purchasePrice: asset.purchasePrice,
+        shippingCharged: args.shippingCharged,
+        fees: args.fees,
+        shipping: args.shippingCost,
+        buyer: args.buyer,
+        notes: args.notes,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
     return listingId;
   },
@@ -280,7 +308,16 @@ export const update = mutation({
         notes: patch.notes ?? existing.notes,
         updatedAt: now,
       };
-      await ctx.db.patch(existing.assetId, { status: "Sold", soldPrice, fees, shipping, ...(purchasePrice !== undefined ? { purchasePrice } : {}), updatedAt: now });
+      await ctx.db.patch(existing.assetId, {
+        status: "Sold",
+        soldPrice,
+        fees,
+        shipping,
+        needsValueCheck: false,
+        valueSource: "Actual Sale",
+        ...(purchasePrice !== undefined ? { purchasePrice } : {}),
+        updatedAt: now,
+      });
       const linkedSale = await ctx.db
         .query("sales")
         .withIndex("by_listingId", (q) => q.eq("listingId", id))

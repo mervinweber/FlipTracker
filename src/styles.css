@@ -83,6 +83,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .badge.hold { border-color:rgba(148,163,184,.45); color:#cbd5e1; }
 .badge.bundle { border-color:rgba(168,85,247,.45); color:#d8b4fe; background:rgba(168,85,247,.1); }
 .badge.sold { border-color:rgba(34,197,94,.55); color:#86efac; background:rgba(34,197,94,.1); }
+.badge.actual-sale, .badge.completed { border-color:rgba(34,197,94,.55); color:#bbf7d0; background:rgba(34,197,94,.1); }
 .badge.listed { border-color:rgba(47,111,237,.65); color:#bfdbfe; background:rgba(47,111,237,.12); }
 .badge.inventory { border-color:rgba(20,184,166,.5); color:#99f6e4; background:rgba(20,184,166,.08); }
 .flipfirst { color:#86efac; font-weight:800; }
@@ -231,6 +232,11 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .selectionCell input { width:18px; height:18px; margin:0; accent-color:var(--primary); cursor:pointer; }
 .inventoryBulkActions { align-items:center; }
 .bulkDeleteNotice { margin:0 18px 12px; padding:10px 12px; border:1px solid var(--border-strong); border-radius:var(--radius); font-size:13px; font-weight:700; }
+.bulkCostModal { max-width:560px; }
+.bulkCostModes { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.bulkCostPreview { display:grid; gap:5px; padding:14px; border:1px solid rgba(20,184,166,.45); border-radius:8px; background:rgba(20,184,166,.07); }
+.bulkCostPreview span, .bulkCostPreview small { color:var(--muted); }
+.bulkCostPreview strong { color:#99f6e4; font-size:24px; }
 .needsCheck td { background: rgba(245, 158, 11, 0.08); }
 .modalBackdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.72); display:flex; align-items:flex-start; justify-content:center; padding:16px; overflow-y:auto; }
 .modalBackdrop > .modal { margin:auto 0; }
@@ -363,6 +369,7 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 @media (max-width:1050px) { .ebaySettingsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:1050px) { .pricingReviewRow { grid-template-columns:minmax(220px, 1fr) minmax(180px, .8fr); } }
 @media (max-width:560px) { .viewTabs, .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } }
+@media (max-width:560px) { .bulkCostModes { grid-template-columns:1fr; } }
 @media (max-width:700px) { .ebayUnlockRow, .ebaySettingsGrid { grid-template-columns:1fr; } .ebaySetupActions { grid-column:auto; } .forgetDeviceButton { margin-left:0; } }
 @media (max-width:560px) { .sellerListingMeterHeader, .listingCountError { align-items:flex-start; flex-direction:column; } .sellerListingMeterStats { grid-template-columns:1fr; } }
 @media (max-width:700px) { .queueSummary { flex-direction:column; } .queueSteps { justify-content:flex-start; } .pricingReviewRow { grid-template-columns:1fr; } .pricingCompare { max-width:260px; } }

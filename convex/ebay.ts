@@ -768,6 +768,14 @@ export const reconcileSoldOrderLine = internalMutation({
       && listing.fees === args.fees;
     if (alreadyCurrent) {
       await ctx.db.patch(listing._id, { ebayLastSyncedAt: now, updatedAt: now });
+      await ctx.db.patch(listing.assetId, {
+        status: "Sold",
+        soldPrice: args.soldPrice,
+        fees: args.fees,
+        needsValueCheck: false,
+        valueSource: "Actual Sale",
+        updatedAt: now,
+      });
       return { matched: true, updated: false };
     }
 
@@ -789,6 +797,8 @@ export const reconcileSoldOrderLine = internalMutation({
       status: "Sold",
       soldPrice: args.soldPrice,
       fees: args.fees,
+      needsValueCheck: false,
+      valueSource: "Actual Sale",
       updatedAt: now,
     });
     const existingSale = await ctx.db.query("sales").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).unique();

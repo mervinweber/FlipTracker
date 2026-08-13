@@ -275,6 +275,43 @@ export const removeMany = mutation({
   },
 });
 
+export const updatePurchasePriceMany = mutation({
+  args: {
+    ids: v.array(v.id("assets")),
+    mode: v.union(v.literal("splitTotal"), v.literal("samePerItem")),
+    amount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const ids = [...new Set(args.ids)];
+    if (!ids.length) throw new Error("Select at least one inventory item.");
+    if (ids.length > 100) throw new Error("Bulk cost editing supports up to 100 inventory items at a time.");
+    if (!Number.isFinite(args.amount) || args.amount < 0) throw new Error("Enter a valid cost of zero or more.");
+
+    const records = [];
+    for (const id of ids) {
+      const asset = await ctx.db.get(id);
+      if (asset) records.push(asset);
+    }
+    if (!records.length) throw new Error("The selected inventory items were not found.");
+
+    const amountCents = Math.round(args.amount * 100);
+    const baseCents = args.mode === "splitTotal" ? Math.floor(amountCents / records.length) : amountCents;
+    const remainder = args.mode === "splitTotal" ? amountCents % records.length : 0;
+    const costs = records.map((_, index) => baseCents + (index < remainder ? 1 : 0));
+    const now = Date.now();
+    for (let index = 0; index < records.length; index += 1) {
+      await ctx.db.patch(records[index]._id, { purchasePrice: costs[index] / 100, updatedAt: now });
+    }
+
+    return {
+      updated: records.length,
+      total: costs.reduce((sum, cost) => sum + cost, 0) / 100,
+      minimumPerItem: Math.min(...costs) / 100,
+      maximumPerItem: Math.max(...costs) / 100,
+    };
+  },
+});
+
 export const importMany = mutation({
   args: { assets: v.array(v.object(assetInput)) },
   handler: async (ctx, args) => {
