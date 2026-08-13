@@ -161,6 +161,23 @@ function itemSpecificValue(itemSpecifics: string | undefined, name: string) {
   return undefined;
 }
 
+function setItemSpecificValue(itemSpecifics: string | undefined, name: string, value: string) {
+  const normalized = name.trim().toLowerCase();
+  const lines = (itemSpecifics || '').split('\n').filter((line) => line.trim());
+  const nextLine = value.trim() ? `${name}: ${value.trim()}` : '';
+  const existingIndex = lines.findIndex((line) => {
+    const separator = line.indexOf(':');
+    return separator > 0 && line.slice(0, separator).trim().toLowerCase() === normalized;
+  });
+  if (existingIndex >= 0) {
+    if (nextLine) lines[existingIndex] = nextLine;
+    else lines.splice(existingIndex, 1);
+  } else if (nextLine) {
+    lines.unshift(nextLine);
+  }
+  return lines.join('\n');
+}
+
 type EbaySettings = {
   marketplaceId: string;
   currency: string;
@@ -1400,6 +1417,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <EbayCategoryFinder query={[editing.title, editing.assetType, editing.mediaFormat].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => patchEditing({ category: suggestion.categoryPath, ebayCategoryId: suggestion.categoryId })}/>
             <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
             <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
+            <label className="span2">eBay Type<input list="ebay-type-suggestions" value={itemSpecificValue(editing.itemSpecifics, 'Type') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Type', event.target.value) })} placeholder="Textbook, Handbook, Novel, Movie, TV Series..."/><small>This is eBay's category-specific Type, separate from FlipTracker's inventory format. Use the value that best describes this edition.</small></label>
+            <datalist id="ebay-type-suggestions"><option value="Textbook"/><option value="Handbook"/><option value="Study Guide"/><option value="Reference"/><option value="Novel"/><option value="Movie"/><option value="TV Series"/><option value="Album"/><option value="Single"/><option value="Video Game"/></datalist>
             {isBookListing(editing) ? <label className="span2">Book Title<input maxLength={65} value={editing.bookTitle || ''} onChange={(event) => patchEditing({ bookTitle: event.target.value })}/><small>Required by eBay for book categories. Maximum 65 characters. {(editing.bookTitle || '').length}/65</small></label> : null}
             {isBookListing(editing) ? <label className="span2">Author<input value={editing.author || ''} onChange={(event) => patchEditing({ author: event.target.value })}/><small>Required by eBay for book categories. Confirm the credited author before staging.</small></label> : null}
             {isCardListing(editing) ? <div className="formSection span2"><h3>Card Details</h3><div className="sectionGrid">
@@ -1442,7 +1461,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               <label>Marketplace Fees<input type="number" step="0.01" value={editing.fees ?? ''} onChange={(event) => patchEditing({ fees: optionalNumber(event.target.value) })}/></label>
               <label>Buyer<input value={editing.buyer || ''} onChange={(event) => patchEditing({ buyer: event.target.value })}/></label>
             </div></div>
-            <label className="span2">Item Specifics<textarea value={editing.itemSpecifics || ''} onChange={(event) => patchEditing({ itemSpecifics: event.target.value })}/></label>
+            <label className="span2">Additional Item Specifics<textarea value={editing.itemSpecifics || ''} onChange={(event) => patchEditing({ itemSpecifics: event.target.value })}/><small>One per line in Name: Value format. The dedicated eBay Type field above is stored here automatically.</small></label>
             <div className="aiCopyToolbar span2"><div><strong>eBay Description</strong><small>Builds editable buyer-facing copy from the listing and relevant notes.</small></div><button type="button" className="secondary" disabled={descriptionBusy || !editing.title.trim()} onClick={generateAiDescription}><Sparkles size={16}/>{descriptionBusy ? 'Generating...' : 'Generate with AI'}</button></div>
             {descriptionError ? <p className="formError span2">{descriptionError}</p> : null}
             <label className="span2">Editable Description<textarea value={editing.description || ''} onChange={(event) => patchEditing({ description: event.target.value })}/></label>

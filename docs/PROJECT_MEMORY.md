@@ -61,6 +61,7 @@ The product should feel like a serious tool for making buying, listing, and coll
 - Listings can be filtered by workflow queue type, and Select All in View targets only eligible Draft/Pending eBay rows currently visible under the active search and filters. Changing the view drops hidden selections so bulk pricing or staging cannot accidentally include them.
 - Selected inventory records can receive purchase cost in one atomic batch, either by splitting an entered lot total or assigning the same per-item cost. Split totals are calculated in cents and distribute any remainder across the first records so the assigned costs exactly match the amount paid.
 - Inventory is the physical-item source of truth, with marketplace listings and sales retained as linked lifecycle records. Sold takes precedence over external-listing/staged indicators in queue filters; recording or syncing a sale marks the asset Sold, stores the actual sold price, clears value-review state, and repeat eBay syncs repair stale asset lifecycle fields.
+- eBay's category-specific `Type` aspect is edited through a dedicated listing field, remains visible in the raw additional item specifics, and is retained with Language/Book Title/Author during eBay's reduced catalog-validation retry. It is distinct from FlipTracker's inventory media type.
 - Dashboard cards use Convex report data.
 - Excel import writes to Convex through `assets.importMany`.
 - Excel export still works from current Convex query rows.

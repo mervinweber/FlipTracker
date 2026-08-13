@@ -13,6 +13,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add Listings queue-type filtering and select-all for the current filtered view
 - [x] Add bulk purchase-cost editing with exact lot-total allocation and same-cost-per-item modes
 - [x] Keep sold listing, inventory, sale values, and queue filters synchronized across the item lifecycle
+- [x] Expose eBay's category-specific Type item specific in listing edit and preserve it during catalog-safe retries
 - [x] Universal media model for games, DVDs, Blu-rays, CDs, books, and other media
 - [x] Add General Merchandise inventory/listing entry points for non-media odds and ends
 - [x] Add eBay Taxonomy category suggestions that save the selected leaf category ID on inventory and listing drafts
