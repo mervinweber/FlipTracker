@@ -1504,7 +1504,11 @@ export const createUnpublishedOffer = action({
         const packageWeightAndSize: Record<string, unknown> = {
           weight: { value: packageWeightOz, unit: "OUNCE" },
         };
-        packageWeightAndSize.packageType = listing.packageType || defaultPackage.packageType;
+        // eBay's US listing flow rejects the Inventory API MAILING_BOX value as
+        // the legacy ShippingPackage value MailingBoxes. Treat boxes as parcels.
+        packageWeightAndSize.packageType = listing.packageType === "MAILING_BOX"
+          ? "PARCEL_OR_PADDED_ENVELOPE"
+          : listing.packageType || defaultPackage.packageType;
         const dimensions = [listing.packageLengthIn, listing.packageWidthIn, listing.packageHeightIn];
         if (dimensions.some((value) => value !== undefined)) {
           if (dimensions.some((value) => value === undefined || !Number.isFinite(value) || value <= 0)) {

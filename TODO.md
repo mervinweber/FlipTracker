@@ -168,7 +168,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Link a sourcing analysis to an existing inventory item
 - [ ] Replace manual listing counts and sold observations with approved provider data when available
 - [ ] Add stale-analysis dates and refresh reminders
-- [ ] Add configurable category fee and shipping presets
+- [ ] Add configurable category fee and shipping presets (the current media presets normalize boxes to eBay's US-compatible parcel package type)
 
 ## Owner Checklist - Accounts And Security
 
