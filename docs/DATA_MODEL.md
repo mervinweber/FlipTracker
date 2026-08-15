@@ -48,9 +48,11 @@ One actual-item photo attached to an asset. It stores the Convex storage identif
 
 One marketplace listing attempt connected to an asset. It stores platform, optional custom sale-channel detail, lifecycle status, marketplace identifiers, listing content, language, original/current/sold prices, shipping and fee amounts, listed/sold dates, buyer, and notes. The linked asset supplies the acquisition cost used for net-profit reporting.
 
-An asset may have multiple marketplace listing records over time or across platforms. Listing status is deliberately separate from the asset's physical inventory status.
+An asset may have multiple marketplace listing records over time or across platforms. Listing status is deliberately separate from the asset's physical inventory status. `platform` and `externalListingId` preserve where the item was listed; `salePlatform` and `saleReference` separately preserve where and how it actually sold, so an eBay listing ended after a Facebook or local sale does not lose its eBay provenance.
 
 For eBay, `language` is a structured item specific and defaults new media drafts to English. `bookTitle` and `author` store eBay's required book aspects separately from the marketplace listing title. Book Title defaults to the asset title; Author is populated from book metadata when available and otherwise requires review. `pricingStatus`, `pricingSource`, and `pricingUpdatedAt` preserve the reviewed queue state. `fulfillmentPolicyId` can override the seller default for one listing. `shippingPreset`, `packageType`, `packageWeightOz`, and the package dimension fields preserve reviewed shipment data sent with the eBay inventory item. `imageMode` chooses an actual item photo or an eligible eBay catalog match; `ebayImageUrl`, `ebayImageFingerprint`, and `ebayImageSource` preserve the Picture Services result and avoid duplicate uploads. `ebayCategoryId`, `ebayInventorySku`, `ebayOfferId`, `ebayDraftStatus`, `ebayDraftCreatedAt`, and `ebayLastError` preserve staged-offer sync state. After confirmed publication, `externalListingId` and `listingUrl` identify the live listing and status becomes `Active`.
+
+`ebayOrderId` and `ebayOrderLineItemId` identify seller-order reconciliation results. Together they prevent duplicate generic records when a paid eBay order line did not originate in FlipTracker. An imported order line still creates the normal asset, marketplace listing, and sale records, so it participates in the same Sold lifecycle and reports as a native listing.
 
 ## ebayConnections
 

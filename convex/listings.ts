@@ -8,6 +8,8 @@ function midpoint(low?: number, high?: number) {
 
 const listingFields = {
   platform: v.string(),
+  salePlatform: v.optional(v.string()),
+  saleReference: v.optional(v.string()),
   saleChannelDetail: v.optional(v.string()),
   status: v.string(),
   sku: v.optional(v.string()),
@@ -53,6 +55,8 @@ const listingFields = {
 
 const listingPatch = {
   platform: v.optional(v.string()),
+  salePlatform: v.optional(v.string()),
+  saleReference: v.optional(v.string()),
   saleChannelDetail: v.optional(v.string()),
   status: v.optional(v.string()),
   sku: v.optional(v.string()),
@@ -232,7 +236,8 @@ export const create = mutation({
       await ctx.db.insert("sales", {
         assetId: args.assetId,
         listingId,
-        platform: args.platform,
+        platform: args.salePlatform ?? args.platform,
+        reference: args.saleReference,
         saleChannelDetail: args.saleChannelDetail,
         soldDate,
         soldPrice,
@@ -293,10 +298,12 @@ export const update = mutation({
       const soldDate = patch.soldDate ?? new Date(now).toISOString().slice(0, 10);
       const fees = patch.fees ?? existing.fees;
       const shipping = patch.shippingCost ?? existing.shippingCost;
+      const salePlatform = patch.salePlatform ?? existing.salePlatform ?? existing.platform;
       const saleRecord = {
         assetId: existing.assetId,
         listingId: id,
-        platform: patch.platform ?? existing.platform,
+        platform: salePlatform,
+        reference: patch.saleReference ?? existing.saleReference,
         saleChannelDetail: patch.saleChannelDetail ?? existing.saleChannelDetail,
         soldDate,
         soldPrice,
@@ -331,7 +338,7 @@ export const update = mutation({
           .collect();
         const legacyMatch = legacySales.find((sale) => !sale.listingId
           && sale.soldDate === soldDate
-          && (sale.platform ?? existing.platform) === (patch.platform ?? existing.platform));
+          && (sale.platform ?? existing.platform) === salePlatform);
         if (legacyMatch) {
           await ctx.db.patch(legacyMatch._id, saleRecord);
         } else {

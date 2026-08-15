@@ -169,6 +169,9 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Replace manual listing counts and sold observations with approved provider data when available
 - [ ] Add stale-analysis dates and refresh reminders
 - [ ] Add configurable category fee and shipping presets (the current media presets normalize boxes to eBay's US-compatible parcel package type)
+- [x] Add an end-live-eBay-listing action with sold-elsewhere closeout flow
+- [x] Import unmatched paid eBay order lines as idempotent generic sold records
+- [x] Collapse Seller Connection defaults to preserve listing workspace space
 
 ## Owner Checklist - Accounts And Security
 

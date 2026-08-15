@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -10,6 +10,8 @@ type Listing = {
   _id: Id<'marketplaceListings'>;
   assetId: Id<'assets'>;
   platform: string;
+  salePlatform?: string;
+  saleReference?: string;
   saleChannelDetail?: string;
   status: string;
   sku?: string;
@@ -361,9 +363,13 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
   const publishEbayOffer = useAction(api.ebay.publishOffer);
   const updateEbayPrice = useAction(api.ebay.updatePublishedPrice);
+  const endEbayListing = useAction(api.ebay.endPublishedListing);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [saleEditing, setSaleEditing] = useState<Listing | null>(null);
+  const [endListingPrompt, setEndListingPrompt] = useState<Listing | null>(null);
+  const [endListingBusy, setEndListingBusy] = useState(false);
+  const [endListingError, setEndListingError] = useState('');
   const [repricing, setRepricing] = useState<Listing | null>(null);
   const [repriceMode, setRepriceMode] = useState<RepriceMode>('percentage');
   const [repricePercent, setRepricePercent] = useState('10');
@@ -389,6 +395,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const autoLoadSellerSetup = useRef(Boolean(localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey')));
   const autoLoadAttempted = useRef(false);
   const [ebaySetup, setEbaySetup] = useState<EbaySetup | null>(null);
+  const [sellerSetupExpanded, setSellerSetupExpanded] = useState(false);
   const [ebaySettings, setEbaySettings] = useState<EbaySettings>(EMPTY_EBAY_SETTINGS);
   const [ebayBusy, setEbayBusy] = useState(false);
   const [sellerListingSummary, setSellerListingSummary] = useState<EbaySellerListingSummary | null>(null);
@@ -406,10 +413,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !saleEditing && !repricing && !pricingRows) return;
+    if (!editing && !saleEditing && !endListingPrompt && !repricing && !pricingRows) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [editing, pricingRows, repricing, saleEditing]);
+  }, [editing, endListingPrompt, pricingRows, repricing, saleEditing]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -628,12 +635,50 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSaleEditing({
       ...listing,
       status: 'Sold',
+      salePlatform: listing.salePlatform || listing.platform,
       soldDate: listing.soldDate || dateToday(),
       soldPrice: listing.soldPrice ?? listing.currentPrice ?? listing.listedPrice,
       shippingCharged: listing.shippingCharged ?? 0,
       shippingCost: listing.shippingCost ?? 0,
       fees: listing.fees ?? 0,
     });
+  }
+
+  function requestSaleEditor(listing: Listing) {
+    if (listing.platform.toLowerCase() === 'ebay' && listing.status === 'Active' && listing.externalListingId) {
+      setEndListingError('');
+      setEndListingPrompt(listing);
+      return;
+    }
+    openSaleEditor(listing);
+  }
+
+  async function finishEbayListing(recordSale: boolean) {
+    if (!endListingPrompt || !adminKey) return;
+    const listing = endListingPrompt;
+    setEndListingBusy(true);
+    setEndListingError('');
+    setEbayError('');
+    try {
+      await endEbayListing({ adminKey, listingId: listing._id });
+      setEndListingPrompt(null);
+      setEbayNotice(`Ended ${listing.title} on eBay.${recordSale ? ' Add the sale details below.' : ''}`);
+      void refreshSellerListingCount();
+      if (recordSale) {
+        openSaleEditor({
+          ...listing,
+          salePlatform: 'Other',
+          saleChannelDetail: '',
+          status: 'Cancelled',
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not end the eBay listing.';
+      setEndListingError(message);
+      setEbayError(message);
+    } finally {
+      setEndListingBusy(false);
+    }
   }
 
   function patchSale(patch: Partial<Listing>) {
@@ -644,8 +689,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     if (!saleEditing || saleEditing.soldPrice === undefined || saleEditing.soldPrice < 0) return;
     await updateListing({
       id: saleEditing._id,
-      platform: saleEditing.platform,
-      saleChannelDetail: saleEditing.platform === 'Other' ? saleEditing.saleChannelDetail?.trim() || undefined : undefined,
+      salePlatform: saleEditing.salePlatform || saleEditing.platform,
+      saleReference: saleEditing.saleReference?.trim() || undefined,
+      saleChannelDetail: (saleEditing.salePlatform || saleEditing.platform) === 'Other' ? saleEditing.saleChannelDetail?.trim() || undefined : undefined,
       status: 'Sold',
       soldPrice: saleEditing.soldPrice,
       soldDate: saleEditing.soldDate || dateToday(),
@@ -654,7 +700,6 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       shippingCost: saleEditing.shippingCost,
       fees: saleEditing.fees,
       buyer: saleEditing.buyer?.trim() || undefined,
-      externalListingId: saleEditing.externalListingId?.trim() || undefined,
       notes: saleEditing.notes?.trim() || undefined,
     });
     setSaleEditing(null);
@@ -754,7 +799,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setEbayNotice('');
     try {
       const result = await syncSoldOrders({ adminKey, days: 90 });
-      setEbayNotice(`eBay sales refreshed: ${result.updated} listing${result.updated === 1 ? '' : 's'} moved to Sold, ${result.matched} matched, and ${result.unmatched} order item${result.unmatched === 1 ? '' : 's'} did not match a FlipTracker listing.`);
+      setEbayNotice(`eBay sales refreshed: ${result.updated} listing${result.updated === 1 ? '' : 's'} moved to Sold, ${result.matched} matched, ${result.imported} new sale record${result.imported === 1 ? '' : 's'} imported, and ${result.unmatched} could not be imported.`);
       void refreshSellerListingCount();
     } catch (error) {
       setEbayError(error instanceof Error ? error.message : 'Could not refresh sold eBay orders.');
@@ -772,6 +817,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       const setup = await loadEbaySetup({ adminKey }) as EbaySetup;
       rememberSellerAccessKey();
       applyEbaySetup(setup);
+      setSellerSetupExpanded(!setup.connected || Boolean(setup.warning));
       void refreshSellerListingCount(adminKey);
       if (setup.warning) setEbayError(setup.warning);
     } catch (error) {
@@ -1216,8 +1262,11 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
       <section className="panel ebaySetupPanel">
         <div className="panelHeader">
-          <div><h2>eBay Seller Connection</h2><p>Authorize one seller account, choose its policies, then stage and publish offers from FlipTracker.</p></div>
-          {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Connected · {ebaySetup.environment}</span> : <span className="statusPill"><KeyRound size={14}/> Seller only</span>}
+          <div><h2>eBay Seller Connection</h2><p>{ebaySetup?.connected && !sellerSetupExpanded ? (sellerDefaultsReady ? 'Connected and ready. Expand to manage location, policies, categories, and account counts.' : 'Connected, but listing defaults need attention.') : 'Authorize one seller account, choose its policies, then stage and publish offers from FlipTracker.'}</p></div>
+          <div className="ebayConnectionHeaderActions">
+            {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Connected · {ebaySetup.environment}</span> : <span className="statusPill"><KeyRound size={14}/> Seller only</span>}
+            {ebaySetup?.connected ? <button className="iconButton secondary setupCollapseButton" aria-expanded={sellerSetupExpanded} aria-label={sellerSetupExpanded ? 'Collapse eBay seller settings' : 'Expand eBay seller settings'} title={sellerSetupExpanded ? 'Collapse seller settings' : 'Manage seller settings'} onClick={() => setSellerSetupExpanded((expanded) => !expanded)}><ChevronDown size={18}/></button> : null}
+          </div>
         </div>
         {!ebaySetup?.connected ? (
           <div className="ebayUnlockRow">
@@ -1229,7 +1278,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> Connect eBay</button>
           </div>
         ) : null}
-        {ebaySetup?.connected ? (
+        {ebaySetup?.connected && sellerSetupExpanded ? (
           <>
           <div className={`sellerListingMeter ${projectedEbayListings >= activeListingTarget ? 'atTarget' : ''}`}>
             <div className="sellerListingMeterHeader">
@@ -1262,7 +1311,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           </div>
           </>
         ) : null}
-        {ebaySetup?.connected && ebaySetup.environment === 'production' && !ebaySetup.locations.length ? (
+        {ebaySetup?.connected && sellerSetupExpanded && ebaySetup.environment === 'production' && !ebaySetup.locations.length ? (
           <div className="sandboxSetupPanel">
             <div><h3>Create Inventory Location</h3><p>Add the warehouse location eBay requires for Inventory API drafts. This does not change your business policies.</p></div>
             <div className="sandboxSetupGrid inventoryLocationSetupGrid">
@@ -1274,7 +1323,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             </div>
           </div>
         ) : null}
-        {ebaySetup?.connected && ebaySetup.environment === 'sandbox' && !sellerDefaultsReady ? (
+        {ebaySetup?.connected && sellerSetupExpanded && ebaySetup.environment === 'sandbox' && !sellerDefaultsReady ? (
           <div className="sandboxSetupPanel">
             <div><h3>Prepare Sandbox Seller</h3><p>Create the warehouse location and basic Media Mail, payment, and return policies needed by eBay drafts.</p></div>
             <p className="ebaySafetyNote">If eBay returns a system error, <a href="https://developer.ebay.com/support/api-status" target="_blank" rel="noreferrer">check eBay Sandbox API status</a>. Seller policies cannot be prepared while its Account API is unavailable.</p>
@@ -1289,7 +1338,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <p className="ebaySafetyNote">Reconnect eBay once after this update so the account connection includes policy-management permission.</p>
           </div>
         ) : null}
-        <p className="ebaySafetyNote">Staged Inventory API offers do not appear in Seller Hub Drafts. Review every field in FlipTracker, then use Publish to eBay to create the live listing.</p>
+        {!ebaySetup?.connected || sellerSetupExpanded ? <p className="ebaySafetyNote">Staged Inventory API offers do not appear in Seller Hub Drafts. Review every field in FlipTracker, then use Publish to eBay to create the live listing.</p> : null}
       </section>
 
       <section className="panel listingControls">
@@ -1320,7 +1369,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Stage ${listing.title} with eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : 'Stage offer with eBay'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="iconButton ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Publish ${listing.title} on eBay`} title="Review and publish live on eBay" onClick={() => publishToEbay(listing)}><Rocket size={16}/></button> : null}
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.ebayOfferId && listing.externalListingId) ? <button className="iconButton ebayRepriceButton" disabled={repriceBusy} aria-label={`Update live eBay price for ${listing.title}`} title="Update live eBay price" onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={16}/></button> : null}
-                    <button className="iconButton saleCloseButton" aria-label={`${listing.status === 'Sold' ? 'Edit sale for' : 'Record sale for'} ${listing.title}`} title={listing.status === 'Sold' ? 'Edit sale details' : 'Record sale'} onClick={() => openSaleEditor(listing)}><DollarSign size={15}/></button>
+                    {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.externalListingId) ? <button className="iconButton ebayEndButton" disabled={endListingBusy || !adminKey} aria-label={`End ${listing.title} on eBay`} title="End live eBay listing" onClick={() => { setEndListingError(''); setEndListingPrompt(listing); }}><CircleStop size={16}/></button> : null}
+                    <button className="iconButton saleCloseButton" aria-label={`${listing.status === 'Sold' ? 'Edit sale for' : 'Record sale for'} ${listing.title}`} title={listing.status === 'Sold' ? 'Edit sale details' : 'Record sale'} onClick={() => requestSaleEditor(listing)}><DollarSign size={15}/></button>
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
@@ -1382,13 +1432,25 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         </section></div>
       ) : null}
 
+      {endListingPrompt ? (
+        <div className="modalBackdrop"><section className="modal endListingModal">
+          <header className="modalHeader"><div><h2>End eBay Listing</h2><span className="statusPill">{endListingPrompt.title}</span></div><button className="iconButton secondary" disabled={endListingBusy} aria-label="Close end listing confirmation" onClick={() => setEndListingPrompt(null)}><X size={18}/></button></header>
+          <div className="endListingQuestion">
+            <CircleStop size={24}/>
+            <div><h3>Did this item sell somewhere else?</h3><p>FlipTracker will first end the live eBay listing. Choose whether to return the item to inventory or continue into the sale form.</p></div>
+          </div>
+          {endListingError ? <p className="formError">{endListingError}</p> : null}
+          <div className="actions right"><button className="secondary" disabled={endListingBusy} onClick={() => setEndListingPrompt(null)}>Cancel</button><button className="secondary" disabled={endListingBusy} onClick={() => finishEbayListing(false)}>{endListingBusy ? 'Ending...' : 'No, End Only'}</button><button disabled={endListingBusy} onClick={() => finishEbayListing(true)}><DollarSign size={16}/> {endListingBusy ? 'Ending...' : 'Yes, Record Sale'}</button></div>
+        </section></div>
+      ) : null}
+
       {saleEditing ? (
         <div className="modalBackdrop"><section className="modal saleCloseoutModal">
           <header className="modalHeader"><div><h2>Record Sale</h2><span className="statusPill">{saleEditing.assetTitle}</span></div><button className="iconButton secondary" aria-label="Close sale details" onClick={() => setSaleEditing(null)}><X size={18}/></button></header>
           <div className="saleCloseoutGrid">
-            <label>Sold On<select value={saleEditing.platform} onChange={(event) => patchSale({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
-            <label>Order / Reference<input value={saleEditing.externalListingId || ''} onChange={(event) => patchSale({ externalListingId: event.target.value })} placeholder="Optional order or listing ID"/></label>
-            {saleEditing.platform === 'Other' ? <label className="span2">Sale Channel<input value={saleEditing.saleChannelDetail || ''} onChange={(event) => patchSale({ saleChannelDetail: event.target.value })} placeholder="Local shop, yard sale, convention..."/></label> : null}
+            <label>Sold On<select value={saleEditing.salePlatform || saleEditing.platform} onChange={(event) => patchSale({ salePlatform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label>Order / Reference<input value={saleEditing.saleReference || ''} onChange={(event) => patchSale({ saleReference: event.target.value })} placeholder="Optional order or sale reference"/></label>
+            {(saleEditing.salePlatform || saleEditing.platform) === 'Other' ? <label className="span2">Sale Channel<input value={saleEditing.saleChannelDetail || ''} onChange={(event) => patchSale({ saleChannelDetail: event.target.value })} placeholder="Local shop, yard sale, convention..."/></label> : null}
             <label>Sold Date<input type="date" value={saleEditing.soldDate || ''} onChange={(event) => patchSale({ soldDate: event.target.value })}/></label>
             <label>Sale Price<input required type="number" min="0" step="0.01" value={saleEditing.soldPrice ?? ''} onChange={(event) => patchSale({ soldPrice: optionalNumber(event.target.value) })}/></label>
             <label>What You Paid<input type="number" min="0" step="0.01" value={saleEditing.purchasePrice ?? ''} onChange={(event) => patchSale({ purchasePrice: optionalNumber(event.target.value) })}/></label>

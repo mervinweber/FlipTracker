@@ -33,6 +33,7 @@ type SellerListingSummary = {
 };
 type EbayAmount = { value?: string; currency?: string };
 type EbayOrderLineItem = {
+  lineItemId?: string;
   legacyItemId?: string;
   sku?: string;
   title?: string;
@@ -739,10 +740,36 @@ export const markDraftError = internalMutation({
   },
 });
 
+export const markOfferWithdrawn = internalMutation({
+  args: { listingId: v.id("marketplaceListings") },
+  handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
+    if (!listing) throw new Error("Listing not found.");
+    const now = Date.now();
+    await ctx.db.patch(listing._id, {
+      status: "Cancelled",
+      ebayDraftStatus: "Ended on eBay",
+      ebayLastError: undefined,
+      pricingStatus: "Ended",
+      updatedAt: now,
+    });
+    const relatedListings = await ctx.db
+      .query("marketplaceListings")
+      .withIndex("by_assetId", (q) => q.eq("assetId", listing.assetId))
+      .take(100);
+    if (!relatedListings.some((related) => related._id !== listing._id && related.status === "Active")) {
+      await ctx.db.patch(listing.assetId, { status: "Inventory", updatedAt: now });
+    }
+  },
+});
+
 export const reconcileSoldOrderLine = internalMutation({
   args: {
     externalListingId: v.optional(v.string()),
     sku: v.optional(v.string()),
+    title: v.optional(v.string()),
+    orderLineItemKey: v.string(),
+    quantity: v.optional(v.number()),
     orderId: v.string(),
     soldDate: v.string(),
     soldPrice: v.number(),
@@ -751,14 +778,84 @@ export const reconcileSoldOrderLine = internalMutation({
     buyer: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const previouslyImported = await ctx.db
+      .query("marketplaceListings")
+      .withIndex("by_ebayOrderId_and_ebayOrderLineItemId", (q) => q
+        .eq("ebayOrderId", args.orderId)
+        .eq("ebayOrderLineItemId", args.orderLineItemKey))
+      .unique();
+    if (previouslyImported) {
+      return { matched: true, updated: false, imported: false };
+    }
     const listingById = args.externalListingId
-      ? await ctx.db.query("marketplaceListings").withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId)).unique()
+      ? await ctx.db.query("marketplaceListings").withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId)).first()
       : null;
     const listingBySku = !listingById && args.sku
-      ? await ctx.db.query("marketplaceListings").withIndex("by_sku", (q) => q.eq("sku", args.sku)).filter((q) => q.eq(q.field("platform"), "eBay")).first()
+      ? await ctx.db.query("marketplaceListings").withIndex("by_platform_and_sku", (q) => q.eq("platform", "eBay").eq("sku", args.sku)).first()
       : null;
     const listing = listingById ?? listingBySku;
-    if (!listing || listing.platform.toLowerCase() !== "ebay") return { matched: false, updated: false };
+    if (!listing || listing.platform.toLowerCase() !== "ebay") {
+      const now = Date.now();
+      const quantity = Math.max(1, Math.round(args.quantity ?? 1));
+      const title = args.title?.trim() || `eBay item ${args.externalListingId || args.sku || args.orderLineItemKey}`;
+      const notes = `Imported from eBay order ${args.orderId}.${quantity > 1 ? ` Quantity: ${quantity}.` : ""}`;
+      const assetId = await ctx.db.insert("assets", {
+        type: "General Merchandise",
+        title,
+        metadataSource: "eBay order import",
+        status: "Sold",
+        soldPrice: args.soldPrice,
+        fees: args.fees,
+        valueSource: "Actual Sale",
+        needsValueCheck: false,
+        notes,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const listingId = await ctx.db.insert("marketplaceListings", {
+        assetId,
+        platform: "eBay",
+        salePlatform: "eBay",
+        saleReference: args.orderId,
+        status: "Sold",
+        sku: args.sku,
+        externalListingId: args.externalListingId,
+        listingUrl: args.externalListingId
+          ? `${environment() === "production" ? "https://www.ebay.com" : "https://www.sandbox.ebay.com"}/itm/${args.externalListingId}`
+          : undefined,
+        title,
+        currentPrice: args.soldPrice,
+        soldPrice: args.soldPrice,
+        soldDate: args.soldDate,
+        shippingCharged: args.shippingCharged,
+        fees: args.fees,
+        buyer: args.buyer,
+        ebayInventorySku: args.sku,
+        ebayOrderId: args.orderId,
+        ebayOrderLineItemId: args.orderLineItemKey,
+        ebayLastSyncedAt: now,
+        ebayDraftStatus: "Imported eBay sale",
+        pricingStatus: "Sold",
+        notes,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("sales", {
+        assetId,
+        listingId,
+        platform: "eBay",
+        reference: args.orderId,
+        soldDate: args.soldDate,
+        soldPrice: args.soldPrice,
+        shippingCharged: args.shippingCharged,
+        fees: args.fees,
+        buyer: args.buyer,
+        notes,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { matched: false, updated: false, imported: true };
+    }
 
     const now = Date.now();
     const alreadyCurrent = listing.status === "Sold"
@@ -767,7 +864,12 @@ export const reconcileSoldOrderLine = internalMutation({
       && listing.shippingCharged === args.shippingCharged
       && listing.fees === args.fees;
     if (alreadyCurrent) {
-      await ctx.db.patch(listing._id, { ebayLastSyncedAt: now, updatedAt: now });
+      await ctx.db.patch(listing._id, {
+        salePlatform: "eBay",
+        saleReference: args.orderId,
+        ebayLastSyncedAt: now,
+        updatedAt: now,
+      });
       await ctx.db.patch(listing.assetId, {
         status: "Sold",
         soldPrice: args.soldPrice,
@@ -776,7 +878,7 @@ export const reconcileSoldOrderLine = internalMutation({
         valueSource: "Actual Sale",
         updatedAt: now,
       });
-      return { matched: true, updated: false };
+      return { matched: true, updated: false, imported: false };
     }
 
     await ctx.db.patch(listing._id, {
@@ -786,6 +888,8 @@ export const reconcileSoldOrderLine = internalMutation({
       shippingCharged: args.shippingCharged,
       fees: args.fees,
       buyer: args.buyer,
+      salePlatform: "eBay",
+      saleReference: args.orderId,
       ebayOrderId: args.orderId,
       ebayLastSyncedAt: now,
       ebayDraftStatus: "Sold on eBay",
@@ -806,6 +910,7 @@ export const reconcileSoldOrderLine = internalMutation({
       assetId: listing.assetId,
       listingId: listing._id,
       platform: "eBay",
+      reference: args.orderId,
       soldDate: args.soldDate,
       soldPrice: args.soldPrice,
       purchasePrice: asset?.purchasePrice,
@@ -818,7 +923,7 @@ export const reconcileSoldOrderLine = internalMutation({
     };
     if (existingSale) await ctx.db.patch(existingSale._id, saleRecord);
     else await ctx.db.insert("sales", { ...saleRecord, createdAt: now });
-    return { matched: true, updated: true };
+    return { matched: true, updated: true, imported: false };
   },
 });
 
@@ -977,7 +1082,7 @@ export const getSellerListingSummary = action({
 
 export const syncSoldOrders = action({
   args: { adminKey: v.string(), days: v.optional(v.number()) },
-  handler: async (ctx, args): Promise<{ ordersChecked: number; lineItemsChecked: number; matched: number; updated: number; unmatched: number }> => {
+  handler: async (ctx, args): Promise<{ ordersChecked: number; lineItemsChecked: number; matched: number; updated: number; imported: number; unmatched: number }> => {
     requireAdminKey(args.adminKey);
     try {
       const accessToken = await refreshAccessToken(ctx);
@@ -990,6 +1095,7 @@ export const syncSoldOrders = action({
       let lineItemsChecked = 0;
       let matched = 0;
       let updated = 0;
+      let imported = 0;
       let unmatched = 0;
 
       while (offset < 1000) {
@@ -1006,14 +1112,17 @@ export const syncSoldOrders = action({
           const orderItemTotal = lineItems.reduce((sum, lineItem) => sum + Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0), 0);
           const shippingTotal = Number(order.pricingSummary?.deliveryCost?.value ?? 0);
           const feeTotal = Number(order.totalMarketplaceFee?.value ?? 0);
-          for (const lineItem of lineItems) {
+          for (const [lineItemIndex, lineItem] of lineItems.entries()) {
             lineItemsChecked += 1;
             const soldPrice = Math.round(Number(lineItem.discountedLineItemCost?.value ?? lineItem.lineItemCost?.value ?? 0) * 100) / 100;
             if (!Number.isFinite(soldPrice) || soldPrice <= 0) continue;
             const share = orderItemTotal > 0 ? soldPrice / orderItemTotal : 1 / Math.max(1, lineItems.length);
-            const result: { matched: boolean; updated: boolean } = await ctx.runMutation(internal.ebay.reconcileSoldOrderLine, {
+            const result: { matched: boolean; updated: boolean; imported: boolean } = await ctx.runMutation(internal.ebay.reconcileSoldOrderLine, {
               externalListingId: lineItem.legacyItemId,
               sku: lineItem.sku,
+              title: lineItem.title,
+              orderLineItemKey: lineItem.lineItemId || [lineItem.legacyItemId, lineItem.sku, lineItem.title, lineItemIndex].filter((value) => value !== undefined && value !== "").join(":") || `line-${lineItemIndex}`,
+              quantity: lineItem.quantity,
               orderId: order.orderId,
               soldDate: (order.creationDate ?? new Date().toISOString()).slice(0, 10),
               soldPrice,
@@ -1022,6 +1131,7 @@ export const syncSoldOrders = action({
               buyer: order.buyer?.username,
             });
             if (result.matched) matched += 1;
+            else if (result.imported) imported += 1;
             else unmatched += 1;
             if (result.updated) updated += 1;
           }
@@ -1029,7 +1139,7 @@ export const syncSoldOrders = action({
         offset += orders.length;
         if (!orders.length || offset >= (page.total ?? 0)) break;
       }
-      return { ordersChecked, lineItemsChecked, matched, updated, unmatched };
+      return { ordersChecked, lineItemsChecked, matched, updated, imported, unmatched };
     } catch (error) {
       if (error instanceof ConvexError) throw error;
       const message = error instanceof Error ? error.message : "Unknown eBay error.";
@@ -1037,6 +1147,43 @@ export const syncSoldOrders = action({
       throw new ConvexError(needsAuthorization
         ? "eBay has not authorized sold-order access. Reconnect eBay, approve access, then retry Sync eBay Sales."
         : `eBay sold-order sync failed: ${message}`);
+    }
+  },
+});
+
+export const endPublishedListing = action({
+  args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
+  handler: async (ctx, args): Promise<{ ended: true; externalListingId: string }> => {
+    requireAdminKey(args.adminKey);
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    if (!bundle) throw new ConvexError("Listing or inventory item not found.");
+    const { listing } = bundle;
+    if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId) {
+      throw new ConvexError("Only active eBay listings can be ended through this action.");
+    }
+
+    try {
+      const accessToken = await refreshAccessToken(ctx);
+      if (listing.ebayOfferId) {
+        await ebayFetch(
+          accessToken,
+          `/sell/inventory/v1/offer/${encodeURIComponent(listing.ebayOfferId)}/withdraw`,
+          { method: "POST" },
+        );
+      } else {
+        if (!/^\d+$/.test(listing.externalListingId)) throw new Error("The eBay item ID is not valid.");
+        await tradingApiFetch(accessToken, "EndFixedPriceItem", `<?xml version="1.0" encoding="utf-8"?>
+<EndFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ItemID>${listing.externalListingId}</ItemID>
+  <EndingReason>NotAvailable</EndingReason>
+</EndFixedPriceItemRequest>`);
+      }
+      await ctx.runMutation(internal.ebay.markOfferWithdrawn, { listingId: listing._id });
+      return { ended: true, externalListingId: listing.externalListingId };
+    } catch (error) {
+      const message = `eBay end-listing failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`;
+      await ctx.runMutation(internal.ebay.markDraftError, { listingId: listing._id, message });
+      throw new ConvexError(message);
     }
   },
 });

@@ -100,6 +100,7 @@ export default defineSchema({
     assetId: v.id("assets"),
     listingId: v.optional(v.id("marketplaceListings")),
     platform: v.optional(v.string()),
+    reference: v.optional(v.string()),
     saleChannelDetail: v.optional(v.string()),
     soldDate: v.optional(v.string()),
     soldPrice: v.number(),
@@ -118,6 +119,8 @@ export default defineSchema({
   marketplaceListings: defineTable({
     assetId: v.id("assets"),
     platform: v.string(),
+    salePlatform: v.optional(v.string()),
+    saleReference: v.optional(v.string()),
     saleChannelDetail: v.optional(v.string()),
     status: v.string(),
     sku: v.optional(v.string()),
@@ -166,6 +169,7 @@ export default defineSchema({
     ebayDraftCreatedAt: v.optional(v.number()),
     ebayLastError: v.optional(v.string()),
     ebayOrderId: v.optional(v.string()),
+    ebayOrderLineItemId: v.optional(v.string()),
     ebayLastSyncedAt: v.optional(v.number()),
     pricingStatus: v.optional(v.string()),
     pricingSource: v.optional(v.string()),
@@ -175,7 +179,9 @@ export default defineSchema({
   })
     .index("by_assetId", ["assetId"])
     .index("by_sku", ["sku"])
+    .index("by_platform_and_sku", ["platform", "sku"])
     .index("by_externalListingId", ["externalListingId"])
+    .index("by_ebayOrderId_and_ebayOrderLineItemId", ["ebayOrderId", "ebayOrderLineItemId"])
     .index("by_status", ["status"])
     .index("by_platform", ["platform"])
     .index("by_platform_and_status", ["platform", "status"])
