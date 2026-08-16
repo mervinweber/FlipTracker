@@ -233,9 +233,9 @@ const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One
 const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
 const CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ = 32;
 const SHIPPING_PRESETS = {
-  'Single Media Mailer': { packageType: 'PACKAGE_THICK_ENVELOPE', packageWeightOz: 8, packageLengthIn: 10, packageWidthIn: 7, packageHeightIn: 1 },
-  '2-4 Media Mailer': { packageType: 'PARCEL_OR_PADDED_ENVELOPE', packageWeightOz: 32, packageLengthIn: 10, packageWidthIn: 8, packageHeightIn: 3 },
-  'Media Box': { packageType: 'PARCEL_OR_PADDED_ENVELOPE', packageWeightOz: 64, packageLengthIn: 12, packageWidthIn: 10, packageHeightIn: 6 },
+  'Single Media Mailer': { packageType: undefined, packageWeightOz: 8, packageLengthIn: 10, packageWidthIn: 7, packageHeightIn: 1 },
+  '2-4 Media Mailer': { packageType: undefined, packageWeightOz: 32, packageLengthIn: 10, packageWidthIn: 8, packageHeightIn: 3 },
+  'Media Box': { packageType: undefined, packageWeightOz: 64, packageLengthIn: 12, packageWidthIn: 10, packageHeightIn: 6 },
 } as const;
 
 type SalesTrackerImportItem = {
@@ -533,9 +533,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       bookTitle: (listing.bookTitle || itemSpecificValue(listing.itemSpecifics, 'Book Title') || (isBookListing(listing) ? listing.assetTitle : undefined))?.slice(0, 65),
       author: listing.author || itemSpecificValue(listing.itemSpecifics, 'Author') || listing.assetAuthor,
       imageMode,
-      packageType: listing.packageType === 'MAILING_BOX'
-        ? 'PARCEL_OR_PADDED_ENVELOPE'
-        : listing.packageType || 'PACKAGE_THICK_ENVELOPE',
+      packageType: undefined,
       packageWeightOz: listing.packageWeightOz ?? CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ,
     });
   }
@@ -1503,8 +1501,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               </select><small>The fulfillment policy controls services, handling time, and buyer shipping charges.</small></label>
               {isBookListing(editing) || /dvd|blu|cd|music/i.test(`${editing.assetType || ''} ${editing.mediaFormat || ''}`) ? <div className="shippingPolicyHelper"><button type="button" className="secondary" disabled={ebayBusy} onClick={() => createMediaMailPolicy(true)}><Truck size={16}/> Use Media Mail</button><small>Creates or selects a USPS Media Mail policy. Save this listing afterward. Video games are not Media Mail eligible.</small></div> : null}
               <label>Package Preset<select value={editing.shippingPreset || 'Custom'} onChange={(event) => selectShippingPreset(event.target.value)}><option value="">No package data</option>{Object.keys(SHIPPING_PRESETS).map((name) => <option key={name}>{name}</option>)}<option>Custom</option></select></label>
-              <label>Package Type<select value={editing.packageType || ''} onChange={(event) => patchEditing({ packageType: event.target.value || undefined, shippingPreset: 'Custom' })}><option value="">Not specified</option><option value="PACKAGE_THICK_ENVELOPE">Thick envelope</option><option value="PARCEL_OR_PADDED_ENVELOPE">Parcel, box, or padded envelope</option></select></label>
-              <label>Weight (oz)<input type="number" min="0.1" step="0.1" value={editing.packageWeightOz ?? ''} onChange={(event) => patchEditing({ packageWeightOz: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
+              <label>Weight (oz)<input type="number" min="0.1" step="0.1" value={editing.packageWeightOz ?? ''} onChange={(event) => patchEditing({ packageWeightOz: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/><small>eBay uses the weight and dimensions with your shipping policy; package type is automatic.</small></label>
               <label>Length (in)<input type="number" min="0.1" step="0.1" value={editing.packageLengthIn ?? ''} onChange={(event) => patchEditing({ packageLengthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
               <label>Width (in)<input type="number" min="0.1" step="0.1" value={editing.packageWidthIn ?? ''} onChange={(event) => patchEditing({ packageWidthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
               <label>Height (in)<input type="number" min="0.1" step="0.1" value={editing.packageHeightIn ?? ''} onChange={(event) => patchEditing({ packageHeightIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>

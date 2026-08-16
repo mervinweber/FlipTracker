@@ -474,12 +474,12 @@ function conditionForEbay(condition?: string) {
 function defaultPackageForAsset(asset: { type?: string; mediaFormat?: string }) {
   const format = `${asset.type ?? ""} ${asset.mediaFormat ?? ""}`.toLowerCase();
   if (format.includes("cd") || format.includes("music")) {
-    return { packageType: "PACKAGE_THICK_ENVELOPE", weightOz: 6 };
+    return { weightOz: 6 };
   }
   if (format.includes("dvd") || format.includes("blu") || format.includes("game")) {
-    return { packageType: "PACKAGE_THICK_ENVELOPE", weightOz: 8 };
+    return { weightOz: 8 };
   }
-  return { packageType: "PACKAGE_THICK_ENVELOPE", weightOz: 16 };
+  return { weightOz: 16 };
 }
 
 function categoryForAsset(
@@ -1651,11 +1651,8 @@ export const createUnpublishedOffer = action({
         const packageWeightAndSize: Record<string, unknown> = {
           weight: { value: packageWeightOz, unit: "OUNCE" },
         };
-        // eBay's US listing flow rejects the Inventory API MAILING_BOX value as
-        // the legacy ShippingPackage value MailingBoxes. Treat boxes as parcels.
-        packageWeightAndSize.packageType = listing.packageType === "MAILING_BOX"
-          ? "PARCEL_OR_PADDED_ENVELOPE"
-          : listing.packageType || defaultPackage.packageType;
+        // Package type support varies by marketplace and shipping policy. eBay
+        // accepts weight and dimensions without this optional classification.
         const dimensions = [listing.packageLengthIn, listing.packageWidthIn, listing.packageHeightIn];
         if (dimensions.some((value) => value !== undefined)) {
           if (dimensions.some((value) => value === undefined || !Number.isFinite(value) || value <= 0)) {
