@@ -217,6 +217,12 @@ async function lookupUpcItemDb(barcode: string): Promise<LookupResult | null> {
   const title = String(item.title).trim();
   const text = [title, item.description, item.category].filter(Boolean).join(" ");
   const inferred = isLikelyBook(barcode) ? { type: "Book", mediaFormat: "Book" } : inferFormat(text);
+  const bookAuthor = isLikelyBook(barcode)
+    ? title.match(/\bby\s+(.+?)(?:\s*\((?:paperback|hardcover|mass market|book)\)|$)/i)?.[1]?.trim()
+    : undefined;
+  const bookFormat = isLikelyBook(barcode)
+    ? title.match(/\((paperback|hardcover|mass market paperback)\)/i)?.[1]
+    : undefined;
   const image = Array.isArray(item.images)
     ? item.images.map((candidate: unknown) => isLikelyBook(barcode) ? isbnImage(candidate, barcode) : httpsImage(candidate)).find(Boolean)
     : undefined;
@@ -225,10 +231,11 @@ async function lookupUpcItemDb(barcode: string): Promise<LookupResult | null> {
     barcodeType: barcodeType(barcode),
     title,
     type: inferred.type,
-    mediaFormat: inferred.mediaFormat,
+    mediaFormat: bookFormat || inferred.mediaFormat,
     releaseYear: yearFromDate(String(item.release_date || item.description || "")),
     releaseDate: item.release_date ? String(item.release_date) : undefined,
     studio: item.brand ? String(item.brand) : undefined,
+    author: bookAuthor,
     coverImageUrl: image,
     source: "UPCItemDB Trial",
     confidence: inferred.mediaFormat === "Unknown" ? "Medium" : "High",
