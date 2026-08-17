@@ -279,6 +279,16 @@ function optionalNumber(value: string) {
   return value === '' ? undefined : Number(value);
 }
 
+function readableActionError(error: unknown, fallback: string) {
+  const data = error && typeof error === 'object' && 'data' in error
+    ? (error as { data?: unknown }).data
+    : undefined;
+  if (typeof data === 'string' && data.trim()) return data;
+  const raw = error instanceof Error ? error.message : fallback;
+  const convexMessage = raw.match(/Uncaught ConvexError:\s*([^\n]+?)(?:\s+at handler|\s+Called by client|$)/)?.[1];
+  return convexMessage || raw;
+}
+
 function priceEndingAt99(value: number) {
   return Math.max(0.99, Math.ceil(value) - 0.01);
 }
@@ -671,7 +681,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not end the eBay listing.';
+      const message = readableActionError(error, 'Could not end the eBay listing.');
       setEndListingError(message);
       setEbayError(message);
     } finally {

@@ -1165,11 +1165,24 @@ export const endPublishedListing = action({
     try {
       const accessToken = await refreshAccessToken(ctx);
       if (listing.ebayOfferId) {
-        await ebayFetch(
-          accessToken,
-          `/sell/inventory/v1/offer/${encodeURIComponent(listing.ebayOfferId)}/withdraw`,
-          { method: "POST" },
-        );
+        const withdrawPath = `/sell/inventory/v1/offer/${encodeURIComponent(listing.ebayOfferId)}/withdraw`;
+        try {
+          await ebayFetch(accessToken, withdrawPath, { method: "POST" });
+        } catch (error) {
+          if (!isEbayError(error, 25002)) throw error;
+          await delay(1_000);
+          try {
+            await ebayFetch(accessToken, withdrawPath, { method: "POST" });
+          } catch (retryError) {
+            if (!isEbayError(retryError, 25002)) throw retryError;
+            if (!/^\d+$/.test(listing.externalListingId)) throw retryError;
+            await tradingApiFetch(accessToken, "EndFixedPriceItem", `<?xml version="1.0" encoding="utf-8"?>
+<EndFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ItemID>${listing.externalListingId}</ItemID>
+  <EndingReason>NotAvailable</EndingReason>
+</EndFixedPriceItemRequest>`);
+          }
+        }
       } else {
         if (!/^\d+$/.test(listing.externalListingId)) throw new Error("The eBay item ID is not valid.");
         await tradingApiFetch(accessToken, "EndFixedPriceItem", `<?xml version="1.0" encoding="utf-8"?>
