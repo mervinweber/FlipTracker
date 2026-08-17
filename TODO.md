@@ -20,6 +20,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add an aggregate Cards inventory filter plus Pokemon, sports, and Yu-Gi-Oh! card types
 - [x] Show card-only sale format, game/sport, set, number, player, and team fields and automatically route eBay card categories
 - [x] Mobile UPC/EAN/ISBN camera scanning with manual fallback
+- [x] Layered ISBN-10/ISBN-13 book lookup with verified Open Library covers, optional Google Books fallback, and in-place metadata refresh
 - [x] Ignore normal camera decode misses instead of displaying a scanner error
 - [x] USB scanner bulk intake with serial lookup queue, duplicate-copy support, unique SKUs, and automatic internal eBay drafts
 - [x] Metadata review and correction screen

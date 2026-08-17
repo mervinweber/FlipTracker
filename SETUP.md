@@ -67,7 +67,16 @@ The inventory table, dashboard cards, add/edit/delete actions, and Excel import 
 
 The media scanner uses the phone camera through the browser. Camera access requires HTTPS in production or `localhost` for local testing. If camera permissions fail, use the manual UPC/EAN/ISBN entry field.
 
-Metadata lookup is handled by Convex actions. ISBN/book lookup uses Open Library. UPC/EAN lookup uses UPCItemDB trial lookup in this first phase and should be replaced or supplemented with a production provider before public release.
+Metadata lookup is handled by Convex actions. ISBN/book lookup uses Open Library with ISBN-10/ISBN-13 alias and search fallbacks. An optional Google Books fallback can fill missing book metadata and cover images. UPC/EAN lookup uses UPCItemDB trial lookup in this first phase and should be replaced or supplemented with a production provider before public release.
+
+To enable the Google Books fallback, enable the Books API for a Google Cloud project, create a restricted API key, and store it only in Convex:
+
+```bash
+npx convex env set GOOGLE_BOOKS_API_KEY "YOUR_GOOGLE_BOOKS_API_KEY"
+npx convex env set --prod GOOGLE_BOOKS_API_KEY "YOUR_GOOGLE_BOOKS_API_KEY"
+```
+
+Restrict the key to the Google Books API. Do not put this key in Vercel or a `VITE_` environment variable. The app continues using Open Library when the optional key is absent.
 
 ## eBay Seller Connection And Unpublished Offers
 

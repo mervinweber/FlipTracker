@@ -17,7 +17,7 @@ Excel import/export stays as a backup and data portability layer. Import parses 
 Phone camera / manual UPC -> React scanner -> Convex mediaLookup action -> review form -> Convex assets
 ```
 
-The PWA uses `@zxing/browser` for camera barcode scanning and keeps a manual barcode fallback. Metadata lookup currently runs through a Convex action: Open Library for ISBN/book metadata and UPCItemDB trial lookup for UPC/EAN media metadata when available.
+The PWA uses `@zxing/browser` for camera barcode scanning and keeps a manual barcode fallback. Metadata lookup runs through a Convex action: Open Library for ISBN/book metadata, an optional Google Books fallback for missing book metadata or covers, and UPCItemDB trial lookup for UPC/EAN media metadata when available. Book lookup checks equivalent ISBN-10 and ISBN-13 values and never treats Open Library's blank default-cover response as a valid image.
 
 The app saves scanned items to inventory first. Generated eBay listing fields are stored on the asset and copied into an internal marketplace draft.
 

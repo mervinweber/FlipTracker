@@ -411,6 +411,7 @@ export default function App() {
   const [scanError, setScanError] = useState('');
   const [scannerAttempt, setScannerAttempt] = useState(0);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [metadataNotice, setMetadataNotice] = useState('');
   const [createDraftAfterSave, setCreateDraftAfterSave] = useState(false);
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionError, setDescriptionError] = useState('');
@@ -680,6 +681,44 @@ export default function App() {
       setEditing(draft);
     } catch (error) {
       setScanError(error instanceof Error ? error.message : 'Lookup failed. Enter details manually.');
+    } finally {
+      setIsLookingUp(false);
+    }
+  }
+
+  async function refreshEditingMetadata() {
+    const barcode = (editing?.upc || editing?.barcode || '').trim();
+    if (!editing || !barcode) return;
+    setIsLookingUp(true);
+    setMetadataNotice('');
+    try {
+      const result = await lookupByBarcode({ barcode }) as LookupResult;
+      if (result.source === 'Manual Review') {
+        setMetadataNotice('No catalog metadata matched this ISBN. Add at least one item photo before sending it to eBay.');
+        return;
+      }
+      setEditing((current) => current ? {
+        ...current,
+        title: !current.title || /^Unknown item\b/i.test(current.title) ? result.title : current.title,
+        type: !current.type || ['Other Media', 'Misc'].includes(current.type) ? result.type : current.type,
+        mediaFormat: !current.mediaFormat || current.mediaFormat === 'Unknown' ? result.mediaFormat : current.mediaFormat,
+        edition: current.edition || result.edition,
+        releaseYear: current.releaseYear || result.releaseYear,
+        releaseDate: current.releaseDate || result.releaseDate,
+        studio: current.studio || result.studio,
+        author: current.author || result.author,
+        rating: current.rating || result.rating,
+        coverImageUrl: result.coverImageUrl || current.coverImageUrl,
+        barcodeType: result.barcodeType || current.barcodeType,
+        metadataSource: result.source,
+        metadataConfidence: result.confidence,
+        metadataCheckedAt: Date.now(),
+      } : current);
+      setMetadataNotice(result.coverImageUrl
+        ? `Catalog cover found through ${result.source}. Save the item to keep it.`
+        : `Metadata matched through ${result.source}, but no catalog cover is available. Add an item photo for eBay.`);
+    } catch (error) {
+      setMetadataNotice(error instanceof Error ? error.message : 'ISBN metadata refresh failed.');
     } finally {
       setIsLookingUp(false);
     }
@@ -1118,7 +1157,7 @@ export default function App() {
                     <td><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td><span className={badgeClass(String(item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
+                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1176,6 +1215,8 @@ export default function App() {
                     {pendingPhotos.length ? <div className="photoGrid scanPhotoGrid">{pendingPhotos.map((photo, index) => <article key={photo.previewUrl} className={`photoTile ${index === 0 ? 'primary' : ''}`}><img src={photo.previewUrl} alt={`${editing.title || 'Item'} photo ${index + 1}`}/><div className="photoTileBar"><span>{index === 0 ? <><Star size={12}/> Primary</> : `Photo ${index + 1}`}</span><div><button type="button" className="iconButton secondary" title="Rotate clockwise" aria-label={`Rotate photo ${index + 1} clockwise`} disabled={photoBusy} onClick={() => rotatePendingPhoto(index)}><RotateCw size={14}/></button>{index !== 0 ? <button type="button" className="iconButton secondary" title="Make primary" aria-label={`Make photo ${index + 1} primary`} disabled={photoBusy} onClick={() => makePendingPhotoPrimary(index)}><Star size={14}/></button> : null}<button type="button" className="iconButton danger" title="Remove photo" aria-label={`Remove photo ${index + 1}`} disabled={photoBusy} onClick={() => removePendingPhoto(index)}><Trash2 size={14}/></button></div></div></article>)}</div> : <p className="compactText">Take the front cover first, then add the back, disc, spine, and any flaws.</p>}
                   </div>}
                 {editing.metadataSource ? <p className="lookupMeta">{editing.metadataSource} - {editing.metadataConfidence || 'Review'}</p> : null}
+                {`${editing.type || ''} ${editing.mediaFormat || ''}`.toLowerCase().includes('book') && (editing.upc || editing.barcode) ? <button type="button" className="secondary" disabled={isLookingUp} onClick={refreshEditingMetadata}><Search size={16}/>{isLookingUp ? 'Refreshing...' : 'Refresh ISBN Metadata'}</button> : null}
+                {metadataNotice ? <p className={editing.coverImageUrl ? 'lookupMeta' : 'warningText'}>{metadataNotice}</p> : null}
               </aside>
               <div className="formGrid">
                 <label className="span2">Title<input value={editing.title || ''} onChange={e => updateEditing({ title:e.target.value, needsValueCheck: '_id' in editing })}/></label>
