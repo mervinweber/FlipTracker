@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { ArrowRight, Barcode, Camera, CheckCircle2, ImagePlus, Images, MapPin, RotateCw, Search, Star, Trash2, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
@@ -23,6 +23,7 @@ type PhotoTarget = {
 
 export default function PhotoQueuePanel() {
   const queue = useQuery(api.photos.queue) as PhotoTarget[] | undefined;
+  const legacyPhotoCount = useQuery(api.photos.legacyPhotoAssets, { limit: 250 })?.length ?? 0;
   const [target, setTarget] = useState<PhotoTarget | null>(null);
   const [entryCode, setEntryCode] = useState('');
   const [lookupCode, setLookupCode] = useState('');
@@ -33,6 +34,7 @@ export default function PhotoQueuePanel() {
   const removePhoto = useMutation(api.photos.remove);
   const replacePhoto = useMutation(api.photos.replace);
   const makePrimary = useMutation(api.photos.makePrimary);
+  const migrateLegacyPhotos = useAction(api.photos.migrateLegacyPhotos);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -154,7 +156,7 @@ export default function PhotoQueuePanel() {
     <section className="photoQueuePage">
       <header className="guideHeader photoQueueHeader">
         <div><p className="eyebrow">Mobile listing prep</p><h2>Photo Queue</h2><p>Match an existing physical copy, capture its eBay photos, then move to the next draft.</p></div>
-        <div className="photoQueueCount"><Images size={20}/><strong>{queue?.length ?? 0}</strong><span>need photos</span></div>
+        <div className="photoQueueHeaderActions"><div className="photoQueueCount"><Images size={20}/><strong>{queue?.length ?? 0}</strong><span>need photos</span></div>{legacyPhotoCount > 0 ? <button className="secondary" onClick={async () => { await migrateLegacyPhotos({ limit: legacyPhotoCount }); }}><Camera size={16}/> Migrate Legacy Photos ({legacyPhotoCount})</button> : null}</div>
       </header>
 
       <section className="photoLookupBand">

@@ -115,6 +115,7 @@ function AnalysisDetails({ id, onClose }: { id: Id<'sourcingAnalyses'>; onClose:
 export default function SourcingPanel() {
   const analyses = useQuery(api.sourcing.list);
   const create = useMutation(api.sourcing.create);
+  const convertToInventory = useMutation(api.sourcing.convertToInventory);
   const remove = useMutation(api.sourcing.remove);
   const seedExamples = useMutation(api.sourcing.seedExamples);
   const [draft, setDraft] = useState<Draft>(blankDraft);
@@ -207,7 +208,7 @@ export default function SourcingPanel() {
           <td><strong>Rarity {row.rarityScore}</strong><small>Liquidity {row.liquidityScore}</small><small>{row.confidence} confidence</small></td>
           <td><strong className={row.expectedProfit >= 0 ? 'profitValue' : 'lossValue'}>{money(row.expectedProfit)} profit</strong><small>{row.roiPercent >= 999 ? '999%+' : `${row.roiPercent.toFixed(0)}%`} ROI</small><small>{money(row.purchaseCost)} buy cost</small></td>
           <td><span className={recommendationClass(row.recommendation)}>{row.recommendation}</span></td>
-          <td className="rowActions"><button onClick={() => setSelectedId(row._id)}><Search size={14}/> Details</button><button className="danger iconButton" aria-label={`Delete ${row.title}`} onClick={() => deleteAnalysis(row)}><Trash2 size={14}/></button></td>
+          <td className="rowActions"><button onClick={() => setSelectedId(row._id)}><Search size={14}/> Details</button><button className="secondary" onClick={async () => { await convertToInventory({ id: row._id }); }}><Plus size={14}/> Inventory</button><button className="danger iconButton" aria-label={`Delete ${row.title}`} onClick={() => deleteAnalysis(row)}><Trash2 size={14}/></button></td>
         </tr>)}</tbody></table></div>}
       </section>
 

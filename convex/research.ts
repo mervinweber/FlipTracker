@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { currentOwnerId } from "./ownership";
 
 export const addValueCheck = mutation({
   args: {
@@ -15,11 +16,14 @@ export const addValueCheck = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const ownerId = await currentOwnerId(ctx);
     await ctx.db.insert("valueHistory", {
+      ownerId,
       assetId: args.assetId, source: args.source, low: args.low, high: args.high,
       observedPrice: args.observedPrice, url: args.url, notes: args.notes, checkedAt: now,
     });
     await ctx.db.insert("researchChecks", {
+      ownerId,
       assetId: args.assetId, method: args.source, confidence: args.confidence,
       recommendation: args.recommendation, notes: args.notes, createdAt: now,
     });

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { currentOwnerId } from "./ownership";
 
 export const list = query({
   args: {},
@@ -17,7 +18,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    return await ctx.db.insert("collections", { ...args, createdAt: now, updatedAt: now });
+    return await ctx.db.insert("collections", { ...args, ownerId: await currentOwnerId(ctx), createdAt: now, updatedAt: now });
   },
 });
 

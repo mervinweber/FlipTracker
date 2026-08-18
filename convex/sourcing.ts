@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { currentOwnerId } from "./ownership";
 
 type CompInput = { price: number; shipping?: number };
 
@@ -129,8 +130,10 @@ async function insertAnalysis(
     throw new Error("Counts, costs, and percentages cannot be negative.");
   }
   const now = Date.now();
+  const ownerId = await currentOwnerId(ctx);
   const metrics = calculateAnalysis(input);
   const analysisId = await ctx.db.insert("sourcingAnalyses", {
+    ownerId,
     assetId: input.assetId,
     demoKey: input.demoKey,
     isDemo: input.isDemo,
@@ -157,6 +160,7 @@ async function insertAnalysis(
     const itemPrice = round(Math.max(0, comp.price));
     const shipping = round(Math.max(0, comp.shipping ?? 0));
     await ctx.db.insert("sourcingComps", {
+      ownerId,
       analysisId,
       source: input.sourceLabel,
       itemPrice,
@@ -171,14 +175,20 @@ async function insertAnalysis(
 
 export const list = query({
   args: {},
-  handler: async (ctx) => await ctx.db.query("sourcingAnalyses").withIndex("by_analyzedAt").order("desc").take(250),
+  handler: async (ctx) => {
+    const ownerId = await currentOwnerId(ctx);
+    const rows = await ctx.db.query("sourcingAnalyses").withIndex("by_analyzedAt").order("desc").take(250);
+    return rows.filter((row) => !ownerId || row.ownerId === ownerId);
+  },
 });
 
 export const details = query({
   args: { id: v.id("sourcingAnalyses") },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const analysis = await ctx.db.get(args.id);
     if (!analysis) return null;
+    if (ownerId && analysis.ownerId && analysis.ownerId !== ownerId) return null;
     const comps = await ctx.db.query("sourcingComps").withIndex("by_analysisId", (q) => q.eq("analysisId", args.id)).take(100);
     return { analysis, comps };
   },
@@ -187,6 +197,55 @@ export const details = query({
 export const create = mutation({
   args: analysisArgs,
   handler: async (ctx, args) => await insertAnalysis(ctx, { ...args, isDemo: false, sourceLabel: "Manual eBay Sold Sample" }),
+});
+
+function assetTypeFromFormat(format?: string) {
+  const normalized = (format ?? "").trim().toLowerCase();
+  if (!normalized) return "Other Media";
+  if (normalized.includes("game")) return "Video Game";
+  if (normalized.includes("blu")) return "Blu-ray";
+  if (normalized.includes("dvd")) return "DVD";
+  if (normalized.includes("book")) return "Book";
+  if (normalized.includes("cd") || normalized.includes("album") || normalized.includes("music")) return "CD";
+  return "Other Media";
+}
+
+export const convertToInventory = mutation({
+  args: { id: v.id("sourcingAnalyses") },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const analysis = await ctx.db.get(args.id);
+    if (!analysis) throw new Error("Analysis not found.");
+    const now = Date.now();
+    const assetId = analysis.assetId ?? await ctx.db.insert("assets", {
+      ownerId,
+      type: assetTypeFromFormat(analysis.format),
+      console: analysis.format,
+      title: analysis.title,
+      edition: analysis.edition,
+      mediaFormat: analysis.format,
+      upc: analysis.upc,
+      condition: analysis.condition,
+      completeness: analysis.completeness,
+      purchasePrice: analysis.purchaseCost,
+      estimatedLow: analysis.expectedSalePrice,
+      estimatedHigh: analysis.expectedSalePrice,
+      userLow: analysis.expectedSalePrice,
+      userHigh: analysis.expectedSalePrice,
+      valueSource: "Estimated",
+      needsValueCheck: false,
+      priority: analysis.recommendation,
+      strategy: analysis.recommendation,
+      listingRecommendation: analysis.recommendation === "Buy" ? "Sell Individually" : analysis.recommendation === "Maybe" ? "Bundle" : "Skip",
+      status: "Inventory",
+      notes: analysis.notes,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch(args.id, { assetId, updatedAt: now });
+    return { ok: true, assetId };
+  },
 });
 
 export const remove = mutation({

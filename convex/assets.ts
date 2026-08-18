@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { currentOwnerId } from "./ownership";
 
 const assetInput = {
   type: v.string(),
@@ -141,6 +142,7 @@ export const list = query({
     unassignedOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     if (args.search?.trim()) {
       const searched = await ctx.db
         .query("assets")
@@ -152,6 +154,7 @@ export const list = query({
         })
         .take(250);
       return searched
+        .filter((r) => !ownerId || r.ownerId === ownerId)
         .filter((r) => matchesMediaType(r.type, args.mediaType))
         .filter((r) => !args.collectionId || r.collectionId === args.collectionId)
         .filter((r) => !args.unassignedOnly || !r.collectionId);
@@ -160,6 +163,7 @@ export const list = query({
     if (args.collectionId) {
       const rows = await ctx.db.query("assets").withIndex("by_collection", (q) => q.eq("collectionId", args.collectionId)).take(250);
       return rows
+        .filter((r) => !ownerId || r.ownerId === ownerId)
         .filter((r) => matchesMediaType(r.type, args.mediaType))
         .filter((r) => !args.console || args.console === "All" || r.console === args.console)
         .filter((r) => !args.status || args.status === "All" || r.status === args.status)
@@ -168,6 +172,7 @@ export const list = query({
 
     const rows = await ctx.db.query("assets").take(250);
     return rows
+      .filter((r) => !ownerId || r.ownerId === ownerId)
       .filter((r) => matchesMediaType(r.type, args.mediaType))
       .filter((r) => !args.console || args.console === "All" || r.console === args.console)
       .filter((r) => !args.status || args.status === "All" || r.status === args.status)
@@ -180,15 +185,17 @@ export const create = mutation({
   args: assetInput,
   handler: async (ctx, args) => {
     const now = Date.now();
-    return await ctx.db.insert("assets", { ...args, needsValueCheck: args.needsValueCheck ?? false, createdAt: now, updatedAt: now });
+    return await ctx.db.insert("assets", { ...args, ownerId: await currentOwnerId(ctx), needsValueCheck: args.needsValueCheck ?? false, createdAt: now, updatedAt: now });
   },
 });
 
 export const update = mutation({
   args: { id: v.id("assets"), ...assetPatch },
   handler: async (ctx, { id, ...patch }) => {
+    const ownerId = await currentOwnerId(ctx);
     const existing = await ctx.db.get(id);
     if (!existing) throw new Error("Asset not found");
+    if (ownerId && existing.ownerId && existing.ownerId !== ownerId) throw new Error("Asset not found");
 
     const valueInputsChanged =
       (patch.title !== undefined && patch.title !== existing.title) ||
@@ -213,6 +220,10 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("assets") },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing) return;
+    if (ownerId && existing.ownerId && existing.ownerId !== ownerId) throw new Error("Asset not found");
     const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", args.id)).collect();
     for (const photo of photos) {
       await ctx.storage.delete(photo.storageId);
@@ -225,6 +236,7 @@ export const remove = mutation({
 export const removeMany = mutation({
   args: { ids: v.array(v.id("assets")) },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const ids = [...new Set(args.ids)];
     if (!ids.length) return { deleted: 0, deletedListings: 0, blocked: undefined };
     if (ids.length > 100) throw new Error("Bulk delete supports up to 100 inventory items at a time.");
@@ -321,6 +333,7 @@ export const importMany = mutation({
     for (const asset of args.assets) {
       ids.push(await ctx.db.insert("assets", {
         ...asset,
+        ownerId: await currentOwnerId(ctx),
         needsValueCheck: asset.needsValueCheck ?? false,
         createdAt: now,
         updatedAt: now,

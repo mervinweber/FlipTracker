@@ -11,6 +11,8 @@
 import type * as aiDescriptions from "../aiDescriptions.js";
 import type * as assets from "../assets.js";
 import type * as collections from "../collections.js";
+import type * as crossListings from "../crossListings.js";
+import type * as linkedAccounts from "../linkedAccounts.js";
 import type * as ebay from "../ebay.js";
 import type * as http from "../http.js";
 import type * as intake from "../intake.js";
@@ -31,6 +33,8 @@ declare const fullApi: ApiFromModules<{
   aiDescriptions: typeof aiDescriptions;
   assets: typeof assets;
   collections: typeof collections;
+  crossListings: typeof crossListings;
+  linkedAccounts: typeof linkedAccounts;
   ebay: typeof ebay;
   http: typeof http;
   intake: typeof intake;

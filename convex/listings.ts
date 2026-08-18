@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { currentOwnerId } from "./ownership";
 
 function midpoint(low?: number, high?: number) {
   if (low !== undefined && high !== undefined) return Math.round(((low + high) / 2) * 100) / 100;
@@ -200,7 +201,9 @@ export const create = mutation({
     if (!asset) throw new Error("Inventory item not found");
 
     const now = Date.now();
+    const ownerId = await currentOwnerId(ctx);
     const listingId = await ctx.db.insert("marketplaceListings", {
+      ownerId,
       ...args,
       currentPrice: args.currentPrice ?? args.listedPrice,
       pricingStatus: args.pricingStatus ?? (args.currentPrice !== undefined || args.listedPrice !== undefined ? "Ready for eBay" : "Ready for Pricing"),
@@ -211,6 +214,7 @@ export const create = mutation({
     const initialPrice = args.currentPrice ?? args.listedPrice;
     if (initialPrice !== undefined) {
       await ctx.db.insert("listingPriceHistory", {
+        ownerId,
         listingId,
         assetId: args.assetId,
         date: now,
@@ -234,6 +238,7 @@ export const create = mutation({
         updatedAt: now,
       });
       await ctx.db.insert("sales", {
+        ownerId,
         assetId: args.assetId,
         listingId,
         platform: args.salePlatform ?? args.platform,
@@ -433,9 +438,11 @@ export const importSalesTracker = mutation({
   handler: async (ctx, args) => {
     if (args.items.length > 200) throw new Error("Import up to 200 Sales Tracker records at a time.");
     const now = Date.now();
+    const ownerId = await currentOwnerId(ctx);
     let listingCount = 0;
     for (const item of args.items) {
       const assetId = await ctx.db.insert("assets", {
+        ownerId,
         type: "Misc",
         title: item.title,
         coverImageUrl: item.imageUrl,
@@ -457,6 +464,7 @@ export const importSalesTracker = mutation({
 
       for (const platform of item.platforms.length ? item.platforms : ["Other"]) {
         const listingId = await ctx.db.insert("marketplaceListings", {
+          ownerId,
           assetId,
           platform,
           status: item.status,
@@ -479,6 +487,7 @@ export const importSalesTracker = mutation({
         for (const entry of history.slice(0, 100)) {
           const parsedDate = Date.parse(entry.date);
           await ctx.db.insert("listingPriceHistory", {
+            ownerId,
             listingId,
             assetId,
             date: Number.isNaN(parsedDate) ? now : parsedDate,

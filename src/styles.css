@@ -25,6 +25,7 @@ body.modalOpen { overflow:hidden; }
 h1 { margin:0; font-size:38px; letter-spacing:0; line-height:1; }
 h2 { margin:0; font-size:20px; }
 p { color:var(--muted); }
+.prototypeNote { margin:10px 0 0; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-3); color:#cbd5e1; font-size:13px; line-height:1.45; }
 .brandBlock { display:flex; align-items:flex-start; gap:14px; }
 .brandMark { width:46px; height:46px; display:grid; place-items:center; border-radius:12px; color:white; background:linear-gradient(135deg, var(--primary), var(--accent)); box-shadow:0 12px 32px rgba(20,184,166,.18); }
 .eyebrow { margin:0 0 6px; color:#7dd3fc; font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
@@ -74,6 +75,20 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .consoleTag { display:inline-flex; align-items:center; min-height:24px; border:1px solid var(--border); border-radius:999px; padding:2px 8px; color:#cbd5e1; background:#020617; font-size:12px; font-weight:800; white-space:nowrap; }
 .valueCell { color:#f8fafc; font-weight:900; white-space:nowrap; }
 .notesCell { max-width:260px; color:#cbd5e1; }
+.inventoryTable td:nth-child(3),
+.inventoryTable td:nth-child(3) strong,
+.inventoryTable td:nth-child(3) small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.inventoryTable td:nth-child(3) strong {
+  display: block;
+  line-height: 1.25;
+}
+.inventoryTable td:nth-child(3) small {
+  line-height: 1.2;
+}
 .badge { display:inline-flex; align-items:center; min-height:24px; width:max-content; max-width:150px; border:1px solid var(--border); border-radius:999px; padding:2px 9px; color:#cbd5e1; background:#020617; font-size:12px; font-weight:900; white-space:nowrap; }
 .badge.needs-check { border-color:rgba(245,158,11,.65); color:#fbbf24; background:rgba(245,158,11,.12); }
 .badge.user-override { border-color:rgba(20,184,166,.6); color:#5eead4; background:rgba(20,184,166,.1); }
@@ -93,6 +108,48 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .viewTabs { display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:10px; }
 .viewTabs button { border:1px solid transparent; }
 .viewTabs button.active { background:var(--primary-strong); border-color:#60a5fa; }
+.crossListingsPage { display:grid; gap:18px; }
+.crossListingsHeader { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+.crossListingsControls { display:grid; grid-template-columns:minmax(220px, 1fr) 160px 160px minmax(220px, 1fr); gap:12px; margin-bottom:0; }
+.panelHint { display:flex; align-items:center; gap:8px; min-height:42px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-3); color:var(--muted); font-size:13px; font-weight:700; }
+.panelHint svg { flex:0 0 auto; color:#7dd3fc; }
+.linkedAccountsPanel { display:grid; gap:16px; }
+.prototypeLegend { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+.prototypePill { border-color:rgba(148,163,184,.45); color:#cbd5e1; background:rgba(148,163,184,.08); }
+.linkedAccountGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+.linkedAccountCard { display:grid; gap:12px; padding:14px; border:1px solid var(--border); border-radius:12px; background:var(--surface-3); }
+.linkedAccountCard.functional { border-color:rgba(34,197,94,.45); }
+.linkedAccountCard.prototype { border-style:dashed; }
+.linkedAccountTitle { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+.linkedAccountTitle h3 { margin:2px 0 0; font-size:18px; }
+.linkedAccountTitle p { margin:0; }
+.linkedAccountTitle .eyebrow { margin-bottom:4px; }
+.linkedAccountCard p { margin:0; line-height:1.45; }
+.linkedAccountActions { display:flex; flex-wrap:wrap; gap:8px; }
+.linkedAccountsNote { margin:0; color:var(--muted); font-size:12px; line-height:1.45; }
+.crossListingsTable { min-width:1120px; table-layout:fixed; }
+.crossListingsTable th:nth-child(1) { width:11%; }
+.crossListingsTable th:nth-child(2) { width:28%; }
+.crossListingsTable th:nth-child(3) { width:9%; }
+.crossListingsTable th:nth-child(4) { width:9%; }
+.crossListingsTable th:nth-child(5) { width:10%; }
+.crossListingsTable th:nth-child(6) { width:20%; }
+.crossListingsTable th:nth-child(7) { width:13%; }
+.crossListingsTable td:nth-child(2) strong,
+.crossListingsTable td:nth-child(2) small { display:block; min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+.crossListingsTable td:nth-child(2) small { line-height:1.2; }
+.crossListingsTable td:nth-child(3) small { display:block; margin-top:4px; color:var(--muted); line-height:1.25; }
+.crossListingsModal { width:min(980px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); }
+.linkedAccountNotice { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border:1px solid rgba(20,184,166,.45); border-radius:8px; background:rgba(20,184,166,.08); color:#d1fae5; }
+.linkedAccountNotice strong, .linkedAccountNotice small { display:block; }
+.linkedAccountNotice small { margin-top:4px; color:var(--muted); line-height:1.35; }
+.accountLinks { display:flex; flex-wrap:wrap; gap:8px; }
+.soldListingModal { width:min(720px, calc(100vw - 32px)); }
+.categorySuggestionRow { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; padding:12px 14px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-3); }
+.categorySuggestionRow strong, .categorySuggestionRow small { display:block; }
+.categorySuggestionRow small { margin-top:4px; color:var(--muted); line-height:1.35; }
+.categorySuggestionRow button { flex:0 0 auto; white-space:nowrap; }
+.statusPill.success { border-color:rgba(34,197,94,.55); color:#bbf7d0; background:rgba(34,197,94,.1); }
 .listingCards { grid-template-columns:repeat(7, minmax(0, 1fr)); }
 .listingControls { display:grid; grid-template-columns:minmax(220px, 1fr) 130px 145px 180px 150px auto; gap:12px; margin-bottom:18px; }
 .listingTools { flex-wrap:wrap; justify-content:flex-end; }
@@ -127,6 +184,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .listingCountError { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .listingCountError .formError { color:#fca5a5; }
 .ebayUnlockRow { display:grid; grid-template-columns:minmax(260px, 1fr) auto auto; gap:12px; align-items:end; }
+.accountLinkRow { padding:14px; border:1px solid var(--border); border-radius:var(--radius-panel); background:var(--surface-3); }
 .sellerKeyField { display:grid; gap:7px; }
 .rememberSellerKey { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; }
 .rememberSellerKey input { width:16px; height:16px; margin:0; accent-color:var(--primary); }
@@ -292,7 +350,9 @@ textarea { min-height:92px; resize:vertical; }
 .secondary { background:#475569; }
 .right { justify-content:flex-end; }
 @media (max-width:800px) { .formGrid, .sectionGrid, .checkGroup, .collectionGrid { grid-template-columns:1fr; } .span2 { grid-column:auto; } .collectionCard { grid-template-columns:1fr; } .collectionStats { text-align:left; } }
+@media (max-width:800px) { .linkedAccountGrid { grid-template-columns:1fr; } .prototypeLegend { justify-content:flex-start; } }
 @media (max-width:560px) { .aiCopyToolbar, .categoryFinderToolbar { align-items:stretch; flex-direction:column; } .aiCopyToolbar button, .categoryFinderToolbar button { width:100%; justify-content:center; } .categorySuggestionList > button { align-items:flex-start; flex-direction:column; } }
+@media (max-width:560px) { .categorySuggestionRow { align-items:stretch; flex-direction:column; } .categorySuggestionRow button { width:100%; justify-content:center; } }
 
 .wideModal { width:min(1080px, 96vw); }
 .scannerModal { width:min(920px, 96vw); }

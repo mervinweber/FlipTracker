@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 export default defineSchema({
   collections: defineTable({
+    ownerId: v.optional(v.string()),
     name: v.string(),
     source: v.optional(v.string()),
     purchaseDate: v.optional(v.string()),
@@ -14,6 +15,7 @@ export default defineSchema({
   }).index("by_purchaseDate", ["purchaseDate"]),
 
   assets: defineTable({
+    ownerId: v.optional(v.string()),
     type: v.string(),
     console: v.optional(v.string()),
     title: v.string(),
@@ -86,6 +88,7 @@ export default defineSchema({
     .searchIndex("search_title", { searchField: "title", filterFields: ["type", "console", "status"] }),
 
   assetPhotos: defineTable({
+    ownerId: v.optional(v.string()),
     assetId: v.id("assets"),
     storageId: v.id("_storage"),
     filename: v.optional(v.string()),
@@ -97,6 +100,7 @@ export default defineSchema({
   }).index("by_assetId", ["assetId"]),
 
   sales: defineTable({
+    ownerId: v.optional(v.string()),
     assetId: v.id("assets"),
     listingId: v.optional(v.id("marketplaceListings")),
     platform: v.optional(v.string()),
@@ -116,7 +120,53 @@ export default defineSchema({
     .index("by_asset", ["assetId"])
     .index("by_listingId", ["listingId"]),
 
+  linkedAccounts: defineTable({
+    ownerId: v.optional(v.string()),
+    platform: v.string(),
+    accountName: v.string(),
+    username: v.optional(v.string()),
+    loginUrl: v.optional(v.string()),
+    profileUrl: v.optional(v.string()),
+    status: v.string(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_status", ["status"]),
+
+  crossListings: defineTable({
+    ownerId: v.optional(v.string()),
+    assetId: v.id("assets"),
+    linkedAccountId: v.optional(v.id("linkedAccounts")),
+    platform: v.string(),
+    status: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    listingUrl: v.optional(v.string()),
+    externalListingId: v.optional(v.string()),
+    sku: v.optional(v.string()),
+    category: v.optional(v.string()),
+    platformCategory: v.optional(v.string()),
+    condition: v.optional(v.string()),
+    price: v.optional(v.number()),
+    shippingPrice: v.optional(v.number()),
+    fees: v.optional(v.number()),
+    soldPrice: v.optional(v.number()),
+    listedAt: v.optional(v.number()),
+    soldAt: v.optional(v.number()),
+    saleChannelDetail: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_assetId", ["assetId"])
+    .index("by_platform", ["platform"])
+    .index("by_status", ["status"])
+    .index("by_platform_and_status", ["platform", "status"]),
+
   marketplaceListings: defineTable({
+    ownerId: v.optional(v.string()),
     assetId: v.id("assets"),
     platform: v.string(),
     salePlatform: v.optional(v.string()),
@@ -231,6 +281,7 @@ export default defineSchema({
   }).index("by_singletonKey", ["singletonKey"]),
 
   listingPriceHistory: defineTable({
+    ownerId: v.optional(v.string()),
     listingId: v.id("marketplaceListings"),
     assetId: v.id("assets"),
     date: v.number(),
@@ -242,6 +293,7 @@ export default defineSchema({
     .index("by_assetId", ["assetId"]),
 
   sourcingAnalyses: defineTable({
+    ownerId: v.optional(v.string()),
     assetId: v.optional(v.id("assets")),
     demoKey: v.optional(v.string()),
     isDemo: v.boolean(),
@@ -284,6 +336,7 @@ export default defineSchema({
     .index("by_analyzedAt", ["analyzedAt"]),
 
   sourcingComps: defineTable({
+    ownerId: v.optional(v.string()),
     analysisId: v.id("sourcingAnalyses"),
     source: v.string(),
     itemPrice: v.number(),
@@ -294,6 +347,7 @@ export default defineSchema({
   }).index("by_analysisId", ["analysisId"]),
 
   valueHistory: defineTable({
+    ownerId: v.optional(v.string()),
     assetId: v.id("assets"),
     source: v.string(),
     low: v.optional(v.number()),
@@ -305,6 +359,7 @@ export default defineSchema({
   }).index("by_asset", ["assetId"]),
 
   researchChecks: defineTable({
+    ownerId: v.optional(v.string()),
     assetId: v.id("assets"),
     method: v.string(),
     confidence: v.string(),

@@ -11,6 +11,11 @@ A resale inventory and profit tracker for games, cards, DVDs, Blu-rays, toys, an
 ## This Build
 Convex-backed inventory UI with schema, backend functions, docs, Excel import/export, and value-review workflow.
 
+## Prototype Status
+- Functional today: inventory management, eBay seller linking, draft staging, sold sync, and photo capture.
+- Prototype surfaces today: Cross Listings for Poshmark, Mercari, and Depop.
+- Still pending: real user authentication, per-user account ownership, and live marketplace APIs for the non-eBay channels.
+
 ## Project Docs
 - `docs/PROJECT_MEMORY.md` is the project memory and restart point for future work.
 - `docs/PRODUCT_IDENTITY.md` tracks brand, design language, and UI direction.

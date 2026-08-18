@@ -3,10 +3,12 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, Link, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, ShoppingBag, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
+import CrossListingsPanel from './components/CrossListingsPanel';
+import LinkedAccountsPanel from './components/LinkedAccountsPanel';
 import QuickGuide from './components/QuickGuide';
 import BulkIntakePanel from './components/BulkIntakePanel';
 import SourcingPanel from './components/SourcingPanel';
@@ -15,10 +17,12 @@ import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
 import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
 
-type AppView = 'Inventory' | 'Listings' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
+type AppView = 'Inventory' | 'Listings' | 'Cross' | 'Accounts' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
 
 function viewFromHash(): AppView {
   if (window.location.hash.toLowerCase() === '#guide') return 'Guide';
+  if (window.location.hash.toLowerCase() === '#cross') return 'Cross';
+  if (window.location.hash.toLowerCase() === '#accounts') return 'Accounts';
   if (window.location.hash.toLowerCase() === '#sourcing') return 'Sourcing';
   if (window.location.hash.toLowerCase() === '#photos') return 'Photos';
   if (window.location.hash.toLowerCase() === '#bulk') return 'Bulk';
@@ -413,6 +417,7 @@ export default function App() {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [metadataNotice, setMetadataNotice] = useState('');
   const [createDraftAfterSave, setCreateDraftAfterSave] = useState(false);
+  const [crossListingSeed, setCrossListingSeed] = useState<Id<'assets'> | null>(null);
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionError, setDescriptionError] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
@@ -975,6 +980,11 @@ export default function App() {
     changeView('Listings');
   }
 
+  function openCrossListing(asset: Asset) {
+    setCrossListingSeed(asset._id);
+    changeView('Cross');
+  }
+
   async function deleteCollection(id: Id<'collections'>) {
     if (!confirm('Remove this collection? Items will stay in inventory and become unassigned.')) return;
     await removeCollection({ id });
@@ -1078,10 +1088,11 @@ export default function App() {
       <header className="hero">
         <div className="brandBlock">
           <div className="brandMark" aria-hidden="true"><Tags size={24}/></div>
-          <div>
+        <div>
             <p className="eyebrow">Collector resale command center</p>
             <h1>FlipTracker</h1>
             <p>Track games, DVDs, Blu-rays, books, CDs, and resale media from scan to listing plan.</p>
+            <p className="prototypeNote">Functional today: eBay linking, inventory, drafts, sold sync, and photo capture. Prototype today: cross-listing surfaces for Poshmark, Mercari, and Depop.</p>
           </div>
         </div>
         <div className="actions">
@@ -1098,6 +1109,8 @@ export default function App() {
       <nav className="viewTabs" aria-label="Primary views">
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
+        <button className={activeView === 'Cross' ? 'active' : 'secondary'} onClick={() => changeView('Cross')}><ShoppingBag size={17}/> Cross Listings</button>
+        <button className={activeView === 'Accounts' ? 'active' : 'secondary'} onClick={() => changeView('Accounts')}><Link size={17}/> Accounts</button>
         <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
         <button className={activeView === 'Photos' ? 'active' : 'secondary'} onClick={() => changeView('Photos')}><Camera size={17}/> Photos</button>
         <button className={activeView === 'Sourcing' ? 'active' : 'secondary'} onClick={() => changeView('Sourcing')}><Gauge size={17}/> Sourcing</button>
@@ -1157,14 +1170,14 @@ export default function App() {
                     <td><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td><span className={badgeClass(String(item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
+                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Create a cross listing for Poshmark, Mercari, or Depop" onClick={() => openCrossListing(item)}><ShoppingBag size={14}/> Cross List</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </section></> : activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
+      </section></> : activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }} onOpenCrossListing={(assetId) => { setCrossListingSeed(assetId); changeView('Cross'); }}/> : activeView === 'Cross' ? <CrossListingsPanel initialAssetId={crossListingSeed} onSeedConsumed={() => setCrossListingSeed(null)}/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
 
       {bulkCostOpen ? (
         <div className="modalBackdrop"><section className="modal bulkCostModal">

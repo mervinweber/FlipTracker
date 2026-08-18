@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { api, internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, mutation, query } from "./_generated/server";
+import { currentOwnerId } from "./ownership";
 
 const MAX_PHOTOS = 12;
 
@@ -36,6 +38,7 @@ export const attach = mutation({
     if (photos.length >= MAX_PHOTOS) throw new Error(`An item can have up to ${MAX_PHOTOS} photos.`);
     return await ctx.db.insert("assetPhotos", {
       ...args,
+      ownerId: asset.ownerId,
       filename: args.filename?.slice(0, 120),
       contentType: args.contentType?.slice(0, 80),
       position: photos.length,
@@ -124,6 +127,74 @@ async function targetForAsset(ctx: QueryCtx, assetId: Id<"assets">) {
     hasDraft: Boolean(listing),
   };
 }
+
+function dataUrlToBlob(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error("Could not read the legacy photo data.");
+  const contentType = match[1];
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return { blob: new Blob([bytes], { type: contentType }), contentType };
+}
+
+export const legacyPhotoAssets = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const rows = await ctx.db.query("assets").take(Math.min(Math.max(args.limit ?? 50, 1), 250));
+    return rows.filter((asset) => Boolean(asset.photoDataUrl) && (!ownerId || asset.ownerId === ownerId));
+  },
+});
+
+export const migrateLegacyPhotoAsset = internalMutation({
+  args: {
+    assetId: v.id("assets"),
+    storageId: v.id("_storage"),
+    contentType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get(args.assetId);
+    if (!asset || !asset.photoDataUrl) return { migrated: false };
+    const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", args.assetId)).collect();
+    const ordered = photos.sort((a, b) => a.position - b.position);
+    for (const photo of ordered) await ctx.db.patch(photo._id, { position: photo.position + 1 });
+    await ctx.db.insert("assetPhotos", {
+      ownerId: asset.ownerId,
+      assetId: args.assetId,
+      storageId: args.storageId,
+      contentType: args.contentType?.slice(0, 80),
+      filename: "legacy-photo",
+      position: 0,
+      createdAt: Date.now(),
+    });
+    await ctx.db.patch(args.assetId, { photoDataUrl: undefined, updatedAt: Date.now() });
+    return { migrated: true };
+  },
+});
+
+export const migrateLegacyPhotos = action({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const legacy: Array<{ _id: Id<"assets">; photoDataUrl?: string }> = await ctx.runQuery(api.photos.legacyPhotoAssets, { limit: args.limit ?? 50 });
+    let migrated = 0;
+    for (const asset of legacy) {
+      if (!asset.photoDataUrl) continue;
+      const { blob, contentType } = dataUrlToBlob(asset.photoDataUrl);
+      const uploadUrl = await ctx.storage.generateUploadUrl();
+      const response = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": contentType }, body: blob });
+      if (!response.ok) throw new Error("Legacy photo migration upload failed.");
+      const result = await response.json() as { storageId: Id<"_storage"> };
+      const outcome: { migrated: boolean } = await ctx.runMutation(internal.photos.migrateLegacyPhotoAsset, {
+        assetId: asset._id,
+        storageId: result.storageId,
+        contentType,
+      });
+      if (outcome.migrated) migrated += 1;
+    }
+    return { migrated };
+  },
+});
 
 export const queue = query({
   args: {},

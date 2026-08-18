@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -354,7 +354,7 @@ function PriceHistory({ listingId }: { listingId: Id<'marketplaceListings'> }) {
   );
 }
 
-export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () => void }) {
+export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { onAddOtherItem: () => void; onOpenCrossListing: (assetId: Id<'assets'>) => void }) {
   const listings = useQuery(api.listings.list) as Listing[] | undefined;
   const stats = useQuery(api.listings.stats);
   const updateListing = useMutation(api.listings.update);
@@ -1020,6 +1020,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSelectedIds(allSelected ? new Set() : new Set(queueIds));
   }
 
+  function openCrossListingsView() {
+    window.location.hash = '#cross';
+  }
+
   async function openPricingReview() {
     const baseRows = selectedListings
       .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) !== 'eBay Draft Created')
@@ -1268,22 +1272,90 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
       </section>
 
+      <section className="panel linkedAccountsPanel">
+        <div className="panelHeader">
+          <div>
+            <h2>Linked Accounts</h2>
+            <p>eBay is functional today. Poshmark, Mercari, and Depop are prototype surfaces for the cross-listing workflow.</p>
+          </div>
+          <div className="prototypeLegend">
+            <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Functional</span>
+            <span className="statusPill prototypePill"><Settings size={14}/> Prototype</span>
+          </div>
+        </div>
+        <div className="linkedAccountGrid">
+          <article className={`linkedAccountCard ${ebaySetup?.connected ? 'functional' : 'prototype'}`}>
+            <div className="linkedAccountTitle">
+              <div>
+                <p className="eyebrow">Connected marketplace</p>
+                <h3>eBay</h3>
+              </div>
+              <span className={`statusPill ${ebaySetup?.connected ? 'ebayConnected' : 'prototypePill'}`}>{ebaySetup?.connected ? 'Linked' : 'Not linked'}</span>
+            </div>
+            <p>{ebaySetup?.connected ? 'Seller key, inventory location, policies, and account counts are live on this device.' : 'Load the seller setup below to link the account, then choose location and policies before staging offers.'}</p>
+            <div className="linkedAccountActions">
+              <button className="secondary" onClick={() => ebaySetup?.connected ? setSellerSetupExpanded(true) : unlockEbaySetup()}>{ebaySetup?.connected ? 'Manage eBay' : 'Load eBay Setup'}</button>
+            </div>
+          </article>
+          <article className="linkedAccountCard prototype">
+            <div className="linkedAccountTitle">
+              <div>
+                <p className="eyebrow">Cross-list target</p>
+                <h3>Poshmark</h3>
+              </div>
+              <span className="statusPill prototypePill">Prototype</span>
+            </div>
+            <p>Prepare title, price, photos, size, and notes in the Cross Listings tab. Manual publish is still the morning-ready path.</p>
+            <div className="linkedAccountActions">
+              <button className="secondary" onClick={openCrossListingsView}>Open Cross Listings</button>
+            </div>
+          </article>
+          <article className="linkedAccountCard prototype">
+            <div className="linkedAccountTitle">
+              <div>
+                <p className="eyebrow">Cross-list target</p>
+                <h3>Mercari</h3>
+              </div>
+              <span className="statusPill prototypePill">Prototype</span>
+            </div>
+            <p>Reuse the same inventory record, then carry over the title, price, photos, and category into the cross-list queue.</p>
+            <div className="linkedAccountActions">
+              <button className="secondary" onClick={openCrossListingsView}>Open Cross Listings</button>
+            </div>
+          </article>
+          <article className="linkedAccountCard prototype">
+            <div className="linkedAccountTitle">
+              <div>
+                <p className="eyebrow">Cross-list target</p>
+                <h3>Depop</h3>
+              </div>
+              <span className="statusPill prototypePill">Prototype</span>
+            </div>
+            <p>Keep the record linked to the same inventory item, then review the manual publish flow before anything goes live.</p>
+            <div className="linkedAccountActions">
+              <button className="secondary" onClick={openCrossListingsView}>Open Cross Listings</button>
+            </div>
+          </article>
+        </div>
+        <p className="linkedAccountsNote">Functional today: eBay link, draft staging, sold sync, and account counts. Placeholder today: one-click marketplace pushes for Poshmark, Mercari, and Depop.</p>
+      </section>
+
       <section className="panel ebaySetupPanel">
         <div className="panelHeader">
-          <div><h2>eBay Seller Connection</h2><p>{ebaySetup?.connected && !sellerSetupExpanded ? (sellerDefaultsReady ? 'Connected and ready. Expand to manage location, policies, categories, and account counts.' : 'Connected, but listing defaults need attention.') : 'Authorize one seller account, choose its policies, then stage and publish offers from FlipTracker.'}</p></div>
+          <div><h2>Link Your eBay Account</h2><p>{ebaySetup?.connected && !sellerSetupExpanded ? (sellerDefaultsReady ? 'Connected and ready. Expand to manage location, policies, categories, and account counts.' : 'Connected, but listing defaults need attention.') : 'Link the seller account, then choose its policies and inventory location before staging offers from FlipTracker.'}</p></div>
           <div className="ebayConnectionHeaderActions">
             {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Connected · {ebaySetup.environment}</span> : <span className="statusPill"><KeyRound size={14}/> Seller only</span>}
             {ebaySetup?.connected ? <button className="iconButton secondary setupCollapseButton" aria-expanded={sellerSetupExpanded} aria-label={sellerSetupExpanded ? 'Collapse eBay seller settings' : 'Expand eBay seller settings'} title={sellerSetupExpanded ? 'Collapse seller settings' : 'Manage seller settings'} onClick={() => setSellerSetupExpanded((expanded) => !expanded)}><ChevronDown size={18}/></button> : null}
           </div>
         </div>
         {!ebaySetup?.connected ? (
-          <div className="ebayUnlockRow">
+          <div className="ebayUnlockRow accountLinkRow">
             <div className="sellerKeyField">
-              <label>Seller Access Key<input type="password" autoComplete="off" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} placeholder="Enter the private beta seller key"/></label>
-              <label className="rememberSellerKey" title="Stores the beta seller key in this browser only"><input type="checkbox" checked={rememberSellerKey} onChange={(event) => changeRememberSellerKey(event.target.checked)}/> Remember on this device</label>
+              <label>Private Access Key<input type="password" autoComplete="off" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} placeholder="Enter the private beta seller key"/></label>
+              <label className="rememberSellerKey" title="Stores the beta seller key in this browser only"><input type="checkbox" checked={rememberSellerKey} onChange={(event) => changeRememberSellerKey(event.target.checked)}/> Remember this account on this device</label>
             </div>
-            <button className="secondary" disabled={!adminKey || ebayBusy} onClick={unlockEbaySetup}><Settings size={16}/> {ebayBusy ? 'Loading...' : 'Load Setup'}</button>
-            <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> Connect eBay</button>
+            <button className="secondary" disabled={!adminKey || ebayBusy} onClick={unlockEbaySetup}><Settings size={16}/> {ebayBusy ? 'Loading...' : 'Load Account Setup'}</button>
+            <button disabled={!adminKey || ebayBusy} onClick={connectEbay}><Link size={16}/> Link eBay Account</button>
           </div>
         ) : null}
         {ebaySetup?.connected && sellerSetupExpanded ? (
@@ -1374,6 +1446,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions">
+                    <button className="secondary" title="Send this item to the Cross Listings workflow" onClick={() => onOpenCrossListing(listing.assetId)}><ArrowRightLeft size={14}/> Cross List</button>
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Stage ${listing.title} with eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : 'Stage offer with eBay'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="iconButton ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Publish ${listing.title} on eBay`} title="Review and publish live on eBay" onClick={() => publishToEbay(listing)}><Rocket size={16}/></button> : null}
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.ebayOfferId && listing.externalListingId) ? <button className="iconButton ebayRepriceButton" disabled={repriceBusy} aria-label={`Update live eBay price for ${listing.title}`} title="Update live eBay price" onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={16}/></button> : null}

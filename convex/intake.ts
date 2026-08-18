@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { currentOwnerId } from "./ownership";
 
 const optionalText = v.optional(v.string());
 
@@ -43,8 +44,10 @@ export const createScannedItem = mutation({
     if (args.ebayPrice !== undefined && args.ebayPrice < 0) throw new Error("Listing price cannot be negative.");
 
     const now = Date.now();
+    const ownerId = await currentOwnerId(ctx);
     const existingCopies = await ctx.db.query("assets").withIndex("by_upc", (q) => q.eq("upc", upc)).take(100);
     const assetId = await ctx.db.insert("assets", {
+      ownerId,
       type: args.type,
       title,
       edition: args.edition,
@@ -92,6 +95,7 @@ export const createScannedItem = mutation({
     const isBookWithCover = mediaIdentity.includes("book") && Boolean(args.coverImageUrl);
 
     const listingId = await ctx.db.insert("marketplaceListings", {
+      ownerId,
       assetId,
       platform: "eBay",
       status: "Draft",
@@ -127,6 +131,7 @@ export const createScannedItem = mutation({
 
     if (args.ebayPrice !== undefined) {
       await ctx.db.insert("listingPriceHistory", {
+        ownerId,
         listingId,
         assetId,
         date: now,

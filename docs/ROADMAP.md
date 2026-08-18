@@ -62,7 +62,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Save lookup provider, confidence, and timestamp
 - [x] Save-to-inventory review workflow
 - [ ] Add sourcing mode for quick buy/skip decisions while shopping
-- [ ] Convert a saved sourcing analysis into an inventory item
+- [x] Convert a saved sourcing analysis into an inventory item
 - [x] Mark low-confidence scans and changed value inputs as needing value check
 - [x] Manual fallback when lookup fails
 - [x] Add serial USB scanner queue with per-stack defaults and automatic internal eBay drafts
@@ -148,7 +148,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Backfill existing records to the first owner
 - [x] Store new multi-photo captures in Convex file storage
 - [x] Add a mobile SKU/UPC photo queue for desktop-scanned inventory
-- [ ] Migrate legacy inline asset photos to Convex file storage
+- [x] Migrate legacy inline asset photos to Convex file storage
 - [ ] Add mutation/import error states and duplicate protection
 - [ ] Add listing lifecycle tests
 - [ ] Code-split the scanner and listing editor
@@ -180,7 +180,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Add bounded active-listing fair-value lookup with explicit approval
 - [x] Store new source photos in Convex storage with ordering and a primary image
 - [x] Upload the complete stored photo set to eBay and cache uploaded URLs
-- [ ] Migrate legacy inline source photos to Convex storage
+- [x] Migrate legacy inline source photos to Convex storage
 - [ ] Add an eBay offer validation/fee preview screen
 - [x] Add bounded bulk offer creation with per-item failure handling
 - [ ] Add a separately confirmed publish action only after auth and photo validation

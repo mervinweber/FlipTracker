@@ -2,6 +2,12 @@
 
 This file is the working checklist for the combined FlipTracker inventory, research, listing, and sales app.
 
+Prototype snapshot:
+
+- Functional today: inventory, eBay seller linking, draft staging, sold sync, photo capture, and the Cross Listings queue shell.
+- Prototype surfaces today: Poshmark, Mercari, and Depop cross-list records.
+- Still pending: real user auth, per-user ownership, and direct marketplace APIs for the non-eBay channels.
+
 ## Completed Product Foundation
 
 - [x] React, TypeScript, and Vite application scaffold
@@ -29,6 +35,8 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Condition, completeness, storage bin, photo, and eBay preparation fields
 - [x] Collections/purchase-lot foundation
 - [x] Saved research/value-check workflow
+- [x] Convert a saved sourcing analysis into an inventory item
+- [x] Migrate legacy inline source photos to Convex file storage
 
 ## Completed Sales Tracker Merge
 
@@ -85,7 +93,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 
 These must be completed in code before the beta URL is shared with other users.
 
-- [ ] Add authentication provider integration
+- [ ] Add authentication provider integration and account-linking UI
 - [ ] Add `convex/auth.config.ts` for the selected JWT provider
 - [ ] Replace `ConvexProvider` with `ConvexProviderWithAuth`
 - [ ] Add an owner/user identity field to user-owned tables
@@ -93,9 +101,8 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Backfill the current inventory, collection, research, listing, history, and sales records to the first owner
 - [ ] Add indexes needed for owner-scoped queries
 - [ ] Reject unauthenticated reads and writes server-side
-- [ ] Add a sign-in, sign-out, loading, and access-denied UI
+- [ ] Add a sign-in, sign-out, loading, and access-denied UI that makes linked accounts obvious
 - [ ] Test two accounts and confirm neither can access the other's records
-- [ ] Migrate legacy inline captured photos to Convex file storage
 - [ ] Add friendly UI error handling for failed mutations/imports
 - [ ] Add duplicate protection for repeated inventory/listing imports
 - [ ] Add automated tests for listing price history and sold transitions
@@ -177,6 +184,7 @@ These must be completed in code before the beta URL is shared with other users.
 ## Owner Checklist - Accounts And Security
 
 - [ ] Choose the beta authentication provider; Clerk is the current recommended default for a React/Vite + Convex beta
+- [ ] Design the account-linking login experience so users can connect their marketplace and identity accounts cleanly
 - [ ] Create the production auth application after the provider is selected
 - [ ] Add local and production callback/origin URLs in the auth provider dashboard
 - [ ] Rotate the Convex deploy key previously pasted into chat/terminal history
