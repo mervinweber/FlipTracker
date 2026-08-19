@@ -18,6 +18,12 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
+- FlipTracker is now explicitly eBay-first. The primary navigation emphasizes Inventory, Listings, Bulk Intake, Photos, Sourcing, and Guide; the earlier cross-listing prototype remains in the codebase but is no longer promoted in the core listing path.
+- Listings uses a four-step eBay Listing Factory: Item, Category, Shipping & Photos, then Price & Description. A readiness strip keeps title, category, shipping, image, and price blockers visible without displaying every field at once.
+- Books, DVDs/Blu-rays, CDs, video games, and cards receive deterministic eBay category routing from item type and product identifiers. Clothing and general merchandise intentionally require a leaf-category choice through the eBay category finder.
+- Shipping now starts with item-aware profiles for single media, multi-item media, trading cards, lightweight clothing, boxed clothing, and custom packages. Weight and dimensions remain available as advanced overrides, and explicit listing values remain authoritative in the backend.
+- Clothing is a first-class inventory type with structured eBay specifics for Brand, Department, Size, Color, Material, and Style.
+
 - Inventory and Listings can add `General Merchandise` records for non-media odds and ends. Both routes use the normal asset review form, while the Listings route also queues an internal marketplace draft.
 - Inventory and listing editors include an eBay Taxonomy category finder. It searches Production eBay by item keywords, displays ranked leaf-category breadcrumbs, and saves the chosen numeric category ID through inventory, draft creation, and Excel export.
 - Inventory items separate pasted AI listing copy, buyer-facing item disclosures, and private internal notes. AI copy and disclosures compose into the eBay description; internal notes never do.

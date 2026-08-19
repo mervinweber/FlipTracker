@@ -471,15 +471,37 @@ function conditionForEbay(condition?: string) {
   return "USED_GOOD";
 }
 
+type PackageDefaults = {
+  weightOz: number;
+  lengthIn: number;
+  widthIn: number;
+  heightIn: number;
+};
+
+const DEFAULT_MEDIA_CATEGORY_IDS = {
+  dvd: "617",
+  bluray: "617",
+  book: "261186",
+  cd: "176984",
+  game: "139973",
+} as const;
+
 function defaultPackageForAsset(asset: { type?: string; mediaFormat?: string }) {
-  const format = `${asset.type ?? ""} ${asset.mediaFormat ?? ""}`.toLowerCase();
-  if (format.includes("cd") || format.includes("music")) {
-    return { weightOz: 6 };
+  const identity = `${asset.type ?? ""} ${asset.mediaFormat ?? ""}`.trim().toLowerCase();
+  const isCard = /\b(tcg|ccg|card|cards)\b|pokemon|pokémon|yu-gi-oh|yugioh/.test(identity);
+  const isClothing = /\b(clothing|clothes|apparel|shirt|jeans|pants|dress|jacket|sweater|hoodie|coat)\b/.test(identity);
+
+  if (isCard) return { weightOz: 3, lengthIn: 7, widthIn: 5, heightIn: 0.25 } satisfies PackageDefaults;
+  if (identity.includes("book")) return { weightOz: 16, lengthIn: 10, widthIn: 8, heightIn: 2 } satisfies PackageDefaults;
+  if (identity.includes("dvd") || identity.includes("blu")) {
+    return { weightOz: 8, lengthIn: 10, widthIn: 7, heightIn: 1 } satisfies PackageDefaults;
   }
-  if (format.includes("dvd") || format.includes("blu") || format.includes("game")) {
-    return { weightOz: 8 };
+  if (/\bcd\b|compact disc|music/.test(identity)) {
+    return { weightOz: 6, lengthIn: 7, widthIn: 6, heightIn: 1 } satisfies PackageDefaults;
   }
-  return { weightOz: 16 };
+  if (identity.includes("game")) return { weightOz: 8, lengthIn: 8, widthIn: 6, heightIn: 1 } satisfies PackageDefaults;
+  if (isClothing) return { weightOz: 16, lengthIn: 12, widthIn: 10, heightIn: 3 } satisfies PackageDefaults;
+  return { weightOz: 32, lengthIn: 12, widthIn: 10, heightIn: 6 } satisfies PackageDefaults;
 }
 
 function categoryForAsset(
@@ -514,11 +536,11 @@ function categoryForAsset(
     if (cardProductType.includes("sealed box")) return "261044";
     return "183454";
   }
-  if (format.includes("blu")) return settings?.blurayCategoryId;
-  if (format.includes("dvd")) return settings?.dvdCategoryId;
-  if (format.includes("book")) return settings?.bookCategoryId;
-  if (format.includes("cd") || format.includes("music")) return settings?.cdCategoryId;
-  if (format.includes("game")) return settings?.gameCategoryId;
+  if (format.includes("blu")) return settings?.blurayCategoryId?.trim() || DEFAULT_MEDIA_CATEGORY_IDS.bluray;
+  if (format.includes("dvd")) return settings?.dvdCategoryId?.trim() || DEFAULT_MEDIA_CATEGORY_IDS.dvd;
+  if (format.includes("book")) return settings?.bookCategoryId?.trim() || DEFAULT_MEDIA_CATEGORY_IDS.book;
+  if (format.includes("cd") || format.includes("music")) return settings?.cdCategoryId?.trim() || DEFAULT_MEDIA_CATEGORY_IDS.cd;
+  if (format.includes("game")) return settings?.gameCategoryId?.trim() || DEFAULT_MEDIA_CATEGORY_IDS.game;
   return settings?.otherCategoryId;
 }
 
@@ -1661,23 +1683,23 @@ export const createUnpublishedOffer = action({
       const packageWeightOz = listing.packageWeightOz ?? defaultPackage.weightOz;
       if (!Number.isFinite(packageWeightOz) || packageWeightOz <= 0) throw new Error("Package weight must be above zero.");
       {
+        const packageLengthIn = listing.packageLengthIn ?? defaultPackage.lengthIn;
+        const packageWidthIn = listing.packageWidthIn ?? defaultPackage.widthIn;
+        const packageHeightIn = listing.packageHeightIn ?? defaultPackage.heightIn;
+        if (![packageLengthIn, packageWidthIn, packageHeightIn].every((value) => Number.isFinite(value) && value > 0)) {
+          throw new Error("Package length, width, and height must all be above zero.");
+        }
         const packageWeightAndSize: Record<string, unknown> = {
           weight: { value: packageWeightOz, unit: "OUNCE" },
+          dimensions: {
+            length: packageLengthIn,
+            width: packageWidthIn,
+            height: packageHeightIn,
+            unit: "INCH",
+          },
         };
         // Package type support varies by marketplace and shipping policy. eBay
         // accepts weight and dimensions without this optional classification.
-        const dimensions = [listing.packageLengthIn, listing.packageWidthIn, listing.packageHeightIn];
-        if (dimensions.some((value) => value !== undefined)) {
-          if (dimensions.some((value) => value === undefined || !Number.isFinite(value) || value <= 0)) {
-            throw new Error("Enter package length, width, and height together, all above zero.");
-          }
-          packageWeightAndSize.dimensions = {
-            length: listing.packageLengthIn,
-            width: listing.packageWidthIn,
-            height: listing.packageHeightIn,
-            unit: "INCH",
-          };
-        }
         inventoryItem.packageWeightAndSize = packageWeightAndSize;
       }
 

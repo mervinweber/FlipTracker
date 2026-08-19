@@ -158,6 +158,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 
 - [x] Add eBay authorization-code OAuth callback through Convex HTTP actions
 - [x] Store and refresh seller tokens only in Convex
+
 - [x] Add temporary private seller-key gate before full user authentication
 - [x] Load eBay payment, fulfillment, return, and inventory-location choices
 - [x] Store media category defaults and listing-level category overrides
@@ -184,3 +185,17 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Add an eBay offer validation/fee preview screen
 - [x] Add bounded bulk offer creation with per-item failure handling
 - [ ] Add a separately confirmed publish action only after auth and photo validation
+
+## v0.5.6 eBay Listing Factory
+
+- [x] Make eBay the primary listing workflow and de-emphasize prototype cross-listing controls
+- [x] Add guided Item, Category, Shipping/Photos, and Price/Description steps
+- [x] Route known media/card categories automatically without exposing numeric category setup fields
+- [x] Add exception-only category search for clothing and general merchandise
+- [x] Add shipping profiles with policy hints and advanced package overrides
+- [x] Add Clothing intake and structured listing specifics
+- [x] Preserve old drafts and explicit package/category overrides
+- [ ] Validate required category aspects before staging instead of waiting for an eBay error
+- [ ] Fetch category-specific aspects and allowed values for clothing
+- [ ] Add a high-throughput exception queue and keyboard shortcuts
+- [ ] Add saved per-user listing presets after authentication is complete

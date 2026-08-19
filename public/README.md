@@ -1,6 +1,6 @@
 # FlipTracker Quick Start
 
-FlipTracker tracks games, DVDs, Blu-rays, CDs, books, and other resale media from intake through sale.
+FlipTracker tracks books, games, DVDs, Blu-rays, CDs, cards, clothing, and other resale merchandise from intake through an eBay sale.
 
 ## Scan an item
 
@@ -19,7 +19,7 @@ FlipTracker tracks games, DVDs, Blu-rays, CDs, books, and other resale media fro
 4. Keep scanning while the queue works. Each physical copy receives a separate inventory record and unique SKU.
 5. Review amber rows, then open **Listings** to select the queue, approve prices, and create unpublished eBay offers.
 
-Direct eBay publishing is not enabled. FlipTracker can connect a seller account and prepare unpublished eBay offers, but a scan cannot make a listing live.
+A scan saves to inventory first. Staging and publishing are separate actions, and publishing requires a connected seller account plus an explicit confirmation.
 
 ## Add photos from a phone
 
@@ -56,15 +56,15 @@ Changing the title, UPC, edition, condition, or completeness marks the item for 
 1. Select **Draft** on the inventory item.
 2. Open **Listings** and review the prepared title, description, category, condition, item specifics, price, and shipping plan.
 3. In **eBay Seller Connection**, enter the private seller key and connect the eBay seller account.
-4. Select the seller's inventory location, payment/shipping/return policies, and numeric category defaults, then save.
+4. Select the seller's inventory location and payment, shipping, and return policies, then save.
 5. Select the drafts you want to process, then choose **Update Pricing**. Verify sold comps, enter each approved price, and apply the updates. Blank rows stay in **Ready for Pricing**.
-6. Edit a draft to choose its eBay shipping policy and package preset. The policy controls the service and buyer charge; the package fields carry weight and dimensions.
-7. For eligible new/sealed media and books, choose **eBay Catalog** and verify the barcode and artwork. Used discs and games require actual item photos.
-8. Choose **Send to eBay Drafts**. FlipTracker uploads the ordered actual-photo set to eBay Picture Services, then creates or refreshes unpublished offers for selected **Ready for eBay** rows. Individual failures do not stop the rest of the batch.
-9. Review the offer in Seller Hub, then finish and publish manually. Add the live eBay item ID and URL to FlipTracker.
-10. Change the listing status to **Active** and confirm its listed date and current price.
+6. Edit a draft and move through Item, Category, Shipping & Photos, and Price & Description. Books, games, movies, CDs, and cards route automatically; clothing and general merchandise use the category finder for a precise leaf category.
+7. Choose the human-readable shipping policy and package profile. FlipTracker supplies practical weight and dimensions that can be changed under Advanced package details.
+8. For eligible new/sealed media and books, choose **eBay Catalog** and verify the barcode and artwork. Used discs and games require actual item photos.
+9. Choose **Stage with eBay**. FlipTracker uploads the ordered photo set and creates or refreshes unpublished offers for selected **Ready for eBay** rows.
+10. Review each staged row, then select its rocket button and confirm **Publish**. Verify the resulting public eBay listing, especially shipping and photo order.
 
-FlipTracker does not call eBay's publish endpoint. Unpublished offer creation and live publication remain separate actions by design.
+Unpublished offer creation and live publication remain separate actions by design so a scan cannot accidentally create a purchasable listing.
 
 ## Record a sale
 

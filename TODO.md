@@ -8,6 +8,22 @@ Prototype snapshot:
 - Prototype surfaces today: Poshmark, Mercari, and Depop cross-list records.
 - Still pending: real user auth, per-user ownership, and direct marketplace APIs for the non-eBay channels.
 
+## eBay Listing Factory
+
+- [x] Recenter the primary workflow on eBay inventory, intake, photos, pricing, staging, publishing, and sold sync
+- [x] Add Clothing as a first-class intake and listing type alongside books, games, movies, CDs, and cards
+- [x] Replace exposed category-code boxes with automatic UPC/ISBN/type routing and an exception-only category finder
+- [x] Add a four-step listing editor for item details, category specifics, shipping/photos, and price/description
+- [x] Replace raw package fields with item-aware shipping profiles while retaining an advanced weight/dimension override
+- [x] Suggest a matching seller fulfillment policy from the selected package profile
+- [x] Add structured clothing Brand, Department, Size, Color, Material, and Style item specifics
+- [x] Add deterministic backend package and media-category fallbacks for older drafts
+- [ ] Add a listing-readiness validator that explains every blocking eBay aspect before staging
+- [ ] Add category-specific aspect discovery from the eBay Taxonomy API, beginning with clothing leaf categories
+- [ ] Add saved shipping-profile defaults per item family after authentication/settings are user-owned
+- [ ] Add a one-screen keyboard-first exception queue for drafts blocked by photos, price, category, or required specifics
+- [ ] Code-split the listing factory and scanner to reduce the current large JavaScript bundle
+
 ## Completed Product Foundation
 
 - [x] React, TypeScript, and Vite application scaffold

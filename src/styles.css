@@ -189,6 +189,12 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .rememberSellerKey { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; }
 .rememberSellerKey input { width:16px; height:16px; margin:0; accent-color:var(--primary); }
 .ebaySettingsGrid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+.ebayCoreSettingsGrid { grid-template-columns:repeat(4, minmax(0, 1fr)); }
+.ebayCoreSettingsGrid label small { color:var(--muted); font-weight:600; line-height:1.35; }
+.categoryRoutingSummary { grid-column:1 / -1; display:grid; grid-template-columns:auto minmax(0, 1fr); gap:12px; align-items:start; padding:12px 14px; border:1px solid rgba(20,184,166,.4); border-radius:8px; background:rgba(20,184,166,.07); }
+.categoryRoutingSummary > svg { color:#5eead4; }
+.categoryRoutingSummary strong, .categoryRoutingSummary small { display:block; }
+.categoryRoutingSummary small { margin-top:3px; color:var(--muted); line-height:1.4; }
 .ebaySetupActions { grid-column:1 / -1; justify-content:flex-start; margin-top:2px; }
 .forgetDeviceButton { margin-left:auto; }
 .ebayConnected { border-color:rgba(34,197,94,.55); color:#86efac; background:rgba(34,197,94,.1); gap:6px; }
@@ -284,12 +290,50 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .repricePreview span { color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase; }
 .repricePreview strong { margin-top:6px; font-size:22px; }
 .repricePreview small { margin-top:5px; color:var(--muted); line-height:1.35; }
+.listingFactoryModal { display:grid; grid-template-rows:auto auto auto minmax(0, 1fr) auto; width:min(1040px, calc(100vw - 32px)); max-height:calc(100dvh - 24px); padding:0; overflow:hidden; }
+.listingFactoryModal .modalHeader { margin:0; padding:20px 22px 16px; border-bottom:1px solid var(--border); }
+.listingFactoryModal .modalHeader h2 { max-width:760px; font-size:20px; line-height:1.25; overflow-wrap:anywhere; }
+.listingEditorSteps { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px; padding:0 22px; border-bottom:1px solid var(--border); background:var(--border); }
+.listingEditorSteps button { min-height:48px; justify-content:center; border:0; border-radius:0; background:var(--surface-3); color:var(--muted); }
+.listingEditorSteps button span { display:grid; width:22px; height:22px; place-items:center; border:1px solid currentColor; border-radius:50%; font-size:11px; }
+.listingEditorSteps button.active { background:#10234a; color:#bfdbfe; box-shadow:inset 0 -3px 0 var(--primary); }
+.listingReadinessBar { display:flex; flex-wrap:wrap; gap:7px; padding:12px 22px; border-bottom:1px solid var(--border); background:#09111f; }
+.listingReadinessBar span { padding:5px 8px; border:1px solid var(--border); border-radius:6px; font-size:11px; font-weight:800; }
+.listingReadinessBar .ready { border-color:rgba(34,197,94,.45); color:#bbf7d0; background:rgba(34,197,94,.08); }
+.listingReadinessBar .missing { border-color:rgba(245,158,11,.5); color:#fde68a; background:rgba(245,158,11,.08); }
+.listingFactoryForm { min-height:0; padding:20px 22px; overflow-y:auto; align-content:start; }
+.listingFactoryFooter { display:flex; justify-content:space-between; gap:12px; padding:14px 22px; border-top:1px solid var(--border); background:var(--surface-2); }
+.categoryAutoRoute { display:grid; grid-template-columns:auto minmax(0, 1fr); gap:12px; align-items:start; padding:14px; border:1px solid rgba(47,111,237,.5); border-radius:8px; background:rgba(47,111,237,.08); }
+.categoryAutoRoute > svg { color:#93c5fd; }
+.categoryAutoRoute strong, .categoryAutoRoute span, .categoryAutoRoute small { display:block; }
+.categoryAutoRoute span { margin-top:2px; color:#dbeafe; font-weight:800; }
+.categoryAutoRoute small { margin-top:4px; color:var(--muted); line-height:1.35; }
+.advancedListingOptions { border:1px solid var(--border); border-radius:8px; background:#07101e; }
+.advancedListingOptions summary { padding:11px 13px; color:#cbd5e1; font-size:13px; font-weight:800; cursor:pointer; }
+.advancedListingBody { padding:0 13px 13px; }
+.advancedPackageGrid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; padding:0 13px 13px; }
+.packageSummary { min-height:74px; display:flex; align-items:center; gap:11px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); }
+.packageSummary strong, .packageSummary span { display:block; }
+.packageSummary span { margin-top:3px; color:var(--muted); font-size:12px; }
 @media (max-width:1050px) { .sandboxSetupGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards, .collectionGrid { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
 @media (max-width:700px) { .sandboxSetupGrid { grid-template-columns:1fr; } }
 @media (max-width:700px) { .listingPhotoGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:600px) { .saleCloseoutGrid { grid-template-columns:1fr; } .saleCloseoutGrid .span2 { grid-column:auto; } }
 @media (max-width:600px) { .repriceModes, .repriceProfitGrid, .repricePreview, .repriceInputBand { grid-template-columns:1fr; } .repriceModes button { min-height:44px; } }
+@media (max-width:760px) {
+  .listingFactoryModal { box-sizing:border-box; width:100%; height:calc(100dvh - 32px); min-height:0; max-height:calc(100dvh - 32px); border-radius:8px; }
+  .listingFactoryModal .modalHeader { padding:14px 16px; }
+  .listingEditorSteps { padding:0; }
+  .listingEditorSteps button { min-width:0; padding:9px 4px; font-size:11px; }
+  .listingEditorSteps button span { display:none; }
+  .listingReadinessBar { flex-wrap:nowrap; padding:9px 12px; overflow-x:auto; }
+  .listingReadinessBar span { flex:0 0 auto; }
+  .listingFactoryForm { grid-template-columns:1fr; padding:14px 16px; }
+  .listingFactoryForm .span2 { grid-column:auto; }
+  .listingFactoryFooter { padding:12px 16px; }
+  .advancedPackageGrid, .ebayCoreSettingsGrid { grid-template-columns:1fr; }
+}
 
 .rowActions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .rowActions button { padding:7px 9px; }

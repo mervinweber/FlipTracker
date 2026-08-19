@@ -1,10 +1,21 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, ArrowRightLeft, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Trash2, Truck, Upload, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Tags, Trash2, Truck, Upload, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
 import EbayCategoryFinder from './EbayCategoryFinder';
+import {
+  EBAY_CATEGORY_CHOICES,
+  EBAY_SHIPPING_PROFILES,
+  categoryChoiceForKey,
+  findSuggestedShippingPolicy,
+  resolveEbayCategory,
+  resolveShippingProfile,
+  shippingProfileForKey,
+  type EbayCategoryKey,
+  type EbayShippingProfileKey,
+} from '../config/ebayListingDefaults';
 
 type Listing = {
   _id: Id<'marketplaceListings'>;
@@ -114,6 +125,14 @@ type ActivePricingResult = {
 };
 
 type RepriceMode = 'percentage' | 'exact' | 'profit';
+type ListingEditorStep = 'details' | 'category' | 'shipping' | 'price';
+
+const LISTING_EDITOR_STEPS: Array<{ id: ListingEditorStep; label: string }> = [
+  { id: 'details', label: 'Item' },
+  { id: 'category', label: 'Category' },
+  { id: 'shipping', label: 'Shipping & photos' },
+  { id: 'price', label: 'Price & description' },
+];
 
 type EbaySetup = {
   connected: boolean;
@@ -231,13 +250,6 @@ const STATUSES = ['Draft', 'Active', 'Pending', 'Sold', 'Expired', 'Relisted', '
 const CARD_PRODUCT_TYPES = ['Single Card', 'Card Lot', 'Complete Set', 'Sealed Pack', 'Sealed Box'];
 const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One Piece Card Game', 'Disney Lorcana', 'Other CCG'];
 const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
-const CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ = 32;
-const SHIPPING_PRESETS = {
-  'Single Media Mailer': { packageType: undefined, packageWeightOz: 8, packageLengthIn: 10, packageWidthIn: 7, packageHeightIn: 1 },
-  '2-4 Media Mailer': { packageType: undefined, packageWeightOz: 32, packageLengthIn: 10, packageWidthIn: 8, packageHeightIn: 3 },
-  'Media Box': { packageType: undefined, packageWeightOz: 64, packageLengthIn: 12, packageWidthIn: 10, packageHeightIn: 6 },
-} as const;
-
 type SalesTrackerImportItem = {
   title: string;
   description?: string;
@@ -319,10 +331,20 @@ function isCardListing(listing: Pick<Listing, 'assetType'>) {
   return Boolean(listing.assetType?.toLowerCase().includes('card'));
 }
 
+function isClothingListing(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
+  return /clothing|apparel|shirt|jeans|pants|dress|jacket|sweater|hoodie|coat|shoe/i.test(`${listing.assetType || ''} ${listing.mediaFormat || ''}`);
+}
+
 function defaultCardGame(type?: string) {
   if (type === 'Pokemon Card') return 'Pokemon TCG';
   if (type === 'Yu-Gi-Oh! Card') return 'Yu-Gi-Oh! TCG';
   return undefined;
+}
+
+function selectedCategoryRoute(listing: Pick<Listing, 'assetType' | 'assetBarcode' | 'cardProductType' | 'ebayCategoryId' | 'category'>) {
+  const automatic = resolveEbayCategory({ itemType: listing.assetType, barcode: listing.assetBarcode, cardSaleFormat: listing.cardProductType });
+  if ((!listing.ebayCategoryId || listing.ebayCategoryId === automatic.categoryId) && (!listing.category || listing.category === automatic.choice.categoryName)) return 'auto';
+  return EBAY_CATEGORY_CHOICES.find((choice) => ('categoryId' in choice && choice.categoryId === listing.ebayCategoryId) || choice.categoryName === listing.category)?.key || 'auto';
 }
 
 function canUseCatalogImage(listing: Pick<Listing, 'assetType' | 'mediaFormat' | 'photoUrl' | 'condition' | 'hasCatalogIdentifier'>) {
@@ -354,7 +376,7 @@ function PriceHistory({ listingId }: { listingId: Id<'marketplaceListings'> }) {
   );
 }
 
-export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { onAddOtherItem: () => void; onOpenCrossListing: (assetId: Id<'assets'>) => void }) {
+export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () => void }) {
   const listings = useQuery(api.listings.list) as Listing[] | undefined;
   const stats = useQuery(api.listings.stats);
   const updateListing = useMutation(api.listings.update);
@@ -376,6 +398,7 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
   const endEbayListing = useAction(api.ebay.endPublishedListing);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
+  const [editorStep, setEditorStep] = useState<ListingEditorStep>('details');
   const [saleEditing, setSaleEditing] = useState<Listing | null>(null);
   const [endListingPrompt, setEndListingPrompt] = useState<Listing | null>(null);
   const [endListingBusy, setEndListingBusy] = useState(false);
@@ -535,16 +558,28 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
     const condition = listing.condition?.trim().toLowerCase() || '';
     const isBookWithCover = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book') && Boolean(listing.photoUrl);
     const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
+    const categoryResolution = resolveEbayCategory({ itemType: listing.assetType, barcode: listing.assetBarcode, cardSaleFormat: listing.cardProductType });
+    const configuredProfile = EBAY_SHIPPING_PROFILES.find((profile) => profile.key === listing.shippingPreset || profile.label === listing.shippingPreset);
+    const shippingProfile = configuredProfile || resolveShippingProfile({ itemType: listing.assetType, mediaFormat: listing.mediaFormat, title: listing.title });
+    const suggestedPolicy = findSuggestedShippingPolicy(ebaySetup?.policies.fulfillment || [], shippingProfile);
     setSaleEditing(null);
     setDescriptionError('');
+    setEditorStep('details');
     setEditing({
       ...listing,
       language: listing.language || itemSpecificValue(listing.itemSpecifics, 'Language') || 'English',
       bookTitle: (listing.bookTitle || itemSpecificValue(listing.itemSpecifics, 'Book Title') || (isBookListing(listing) ? listing.assetTitle : undefined))?.slice(0, 65),
       author: listing.author || itemSpecificValue(listing.itemSpecifics, 'Author') || listing.assetAuthor,
       imageMode,
+      category: listing.category || categoryResolution.choice.categoryName,
+      ebayCategoryId: listing.ebayCategoryId || categoryResolution.categoryId,
+      fulfillmentPolicyId: listing.fulfillmentPolicyId || suggestedPolicy?.id,
+      shippingPreset: shippingProfile.key,
       packageType: undefined,
-      packageWeightOz: listing.packageWeightOz ?? CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ,
+      packageWeightOz: listing.packageWeightOz ?? shippingProfile.weight.value,
+      packageLengthIn: listing.packageLengthIn ?? shippingProfile.dimensions.length,
+      packageWidthIn: listing.packageWidthIn ?? shippingProfile.dimensions.width,
+      packageHeightIn: listing.packageHeightIn ?? shippingProfile.dimensions.height,
     });
   }
 
@@ -714,25 +749,28 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
   }
 
   function selectShippingPreset(value: string) {
-    if (value === 'Custom') {
-      patchEditing({
-        shippingPreset: value,
-        packageWeightOz: editing?.packageWeightOz ?? CUSTOM_DEFAULT_PACKAGE_WEIGHT_OZ,
-      });
+    const profile = shippingProfileForKey(value as EbayShippingProfileKey);
+    const suggestedPolicy = findSuggestedShippingPolicy(ebaySetup?.policies.fulfillment || [], profile);
+    patchEditing({
+      shippingPreset: profile.key,
+      packageType: undefined,
+      packageWeightOz: profile.weight.value,
+      packageLengthIn: profile.dimensions.length,
+      packageWidthIn: profile.dimensions.width,
+      packageHeightIn: profile.dimensions.height,
+      fulfillmentPolicyId: suggestedPolicy?.id || editing?.fulfillmentPolicyId,
+    });
+  }
+
+  function selectListingCategory(value: string) {
+    if (!editing) return;
+    if (value === 'auto') {
+      const resolution = resolveEbayCategory({ itemType: editing.assetType, barcode: editing.assetBarcode, cardSaleFormat: editing.cardProductType });
+      patchEditing({ category: resolution.choice.categoryName, ebayCategoryId: resolution.categoryId });
       return;
     }
-    if (!value) {
-      patchEditing({
-        shippingPreset: undefined,
-        packageType: undefined,
-        packageWeightOz: undefined,
-        packageLengthIn: undefined,
-        packageWidthIn: undefined,
-        packageHeightIn: undefined,
-      });
-      return;
-    }
-    patchEditing({ shippingPreset: value, ...SHIPPING_PRESETS[value as keyof typeof SHIPPING_PRESETS] });
+    const choice = categoryChoiceForKey(value as EbayCategoryKey);
+    patchEditing({ category: choice.categoryName, ebayCategoryId: choice.categoryId });
   }
 
   function optionalText(value: string) {
@@ -1020,10 +1058,6 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
     setSelectedIds(allSelected ? new Set() : new Set(queueIds));
   }
 
-  function openCrossListingsView() {
-    window.location.hash = '#cross';
-  }
-
   async function openPricingReview() {
     const baseRows = selectedListings
       .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) !== 'eBay Draft Created')
@@ -1272,74 +1306,6 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
       </section>
 
-      <section className="panel linkedAccountsPanel">
-        <div className="panelHeader">
-          <div>
-            <h2>Linked Accounts</h2>
-            <p>eBay is functional today. Poshmark, Mercari, and Depop are prototype surfaces for the cross-listing workflow.</p>
-          </div>
-          <div className="prototypeLegend">
-            <span className="statusPill ebayConnected"><ShieldCheck size={14}/> Functional</span>
-            <span className="statusPill prototypePill"><Settings size={14}/> Prototype</span>
-          </div>
-        </div>
-        <div className="linkedAccountGrid">
-          <article className={`linkedAccountCard ${ebaySetup?.connected ? 'functional' : 'prototype'}`}>
-            <div className="linkedAccountTitle">
-              <div>
-                <p className="eyebrow">Connected marketplace</p>
-                <h3>eBay</h3>
-              </div>
-              <span className={`statusPill ${ebaySetup?.connected ? 'ebayConnected' : 'prototypePill'}`}>{ebaySetup?.connected ? 'Linked' : 'Not linked'}</span>
-            </div>
-            <p>{ebaySetup?.connected ? 'Seller key, inventory location, policies, and account counts are live on this device.' : 'Load the seller setup below to link the account, then choose location and policies before staging offers.'}</p>
-            <div className="linkedAccountActions">
-              <button className="secondary" onClick={() => ebaySetup?.connected ? setSellerSetupExpanded(true) : unlockEbaySetup()}>{ebaySetup?.connected ? 'Manage eBay' : 'Load eBay Setup'}</button>
-            </div>
-          </article>
-          <article className="linkedAccountCard prototype">
-            <div className="linkedAccountTitle">
-              <div>
-                <p className="eyebrow">Cross-list target</p>
-                <h3>Poshmark</h3>
-              </div>
-              <span className="statusPill prototypePill">Prototype</span>
-            </div>
-            <p>Prepare title, price, photos, size, and notes in the Cross Listings tab. Manual publish is still the morning-ready path.</p>
-            <div className="linkedAccountActions">
-              <button className="secondary" onClick={openCrossListingsView}>Open Cross Listings</button>
-            </div>
-          </article>
-          <article className="linkedAccountCard prototype">
-            <div className="linkedAccountTitle">
-              <div>
-                <p className="eyebrow">Cross-list target</p>
-                <h3>Mercari</h3>
-              </div>
-              <span className="statusPill prototypePill">Prototype</span>
-            </div>
-            <p>Reuse the same inventory record, then carry over the title, price, photos, and category into the cross-list queue.</p>
-            <div className="linkedAccountActions">
-              <button className="secondary" onClick={openCrossListingsView}>Open Cross Listings</button>
-            </div>
-          </article>
-          <article className="linkedAccountCard prototype">
-            <div className="linkedAccountTitle">
-              <div>
-                <p className="eyebrow">Cross-list target</p>
-                <h3>Depop</h3>
-              </div>
-              <span className="statusPill prototypePill">Prototype</span>
-            </div>
-            <p>Keep the record linked to the same inventory item, then review the manual publish flow before anything goes live.</p>
-            <div className="linkedAccountActions">
-              <button className="secondary" onClick={openCrossListingsView}>Open Cross Listings</button>
-            </div>
-          </article>
-        </div>
-        <p className="linkedAccountsNote">Functional today: eBay link, draft staging, sold sync, and account counts. Placeholder today: one-click marketplace pushes for Poshmark, Mercari, and Depop.</p>
-      </section>
-
       <section className="panel ebaySetupPanel">
         <div className="panelHeader">
           <div><h2>Link Your eBay Account</h2><p>{ebaySetup?.connected && !sellerSetupExpanded ? (sellerDefaultsReady ? 'Connected and ready. Expand to manage location, policies, categories, and account counts.' : 'Connected, but listing defaults need attention.') : 'Link the seller account, then choose its policies and inventory location before staging offers from FlipTracker.'}</p></div>
@@ -1374,19 +1340,14 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
             <p>{sellerListingSummary ? `Checked ${new Date(sellerListingSummary.checkedAt).toLocaleString()}. ` : ''}This is eBay's account-wide active count, including listings created outside FlipTracker. It is a planning guardrail, not eBay's monthly zero-insertion-fee usage.</p>
             {sellerListingCountError ? <div className="listingCountError"><p className="formError">{sellerListingCountError}</p><button onClick={connectEbay}><Link size={16}/> Authorize Account Count</button></div> : null}
           </div>
-          <div className="ebaySettingsGrid">
+          <div className="ebaySettingsGrid ebayCoreSettingsGrid">
             <label>Inventory Location<select value={ebaySettings.merchantLocationKey} onChange={(event) => setEbaySettings((current) => ({ ...current, merchantLocationKey: event.target.value }))}><option value="">Choose location</option>{ebaySetup.locations.map((location) => <option key={location.key} value={location.key}>{location.name}</option>)}</select></label>
-            <label>Shipping Policy<select value={ebaySettings.fulfillmentPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, fulfillmentPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
+            <label>Default Shipping Policy<select value={ebaySettings.fulfillmentPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, fulfillmentPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select><small>Individual listings can choose a different policy.</small></label>
             <label>Payment Policy<select value={ebaySettings.paymentPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, paymentPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.payment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
             <label>Return Policy<select value={ebaySettings.returnPolicyId} onChange={(event) => setEbaySettings((current) => ({ ...current, returnPolicyId: event.target.value }))}><option value="">Choose policy</option>{ebaySetup.policies.returns.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
-            <label>DVD Category ID<input inputMode="numeric" value={ebaySettings.dvdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, dvdCategoryId: event.target.value }))}/></label>
-            <label>Blu-ray Category ID<input inputMode="numeric" value={ebaySettings.blurayCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, blurayCategoryId: event.target.value }))}/></label>
-            <label>Book Category ID<input inputMode="numeric" value={ebaySettings.bookCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, bookCategoryId: event.target.value }))}/></label>
-            <label>CD Category ID<input inputMode="numeric" value={ebaySettings.cdCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, cdCategoryId: event.target.value }))}/></label>
-            <label>Game Category ID<input inputMode="numeric" value={ebaySettings.gameCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, gameCategoryId: event.target.value }))}/></label>
-            <label>Other Media Category ID<input inputMode="numeric" value={ebaySettings.otherCategoryId} onChange={(event) => setEbaySettings((current) => ({ ...current, otherCategoryId: event.target.value }))}/></label>
             <label>Active Listing Target<input type="number" min="1" max="25000" step="1" value={ebaySettings.activeListingTarget} onChange={(event) => setEbaySettings((current) => ({ ...current, activeListingTarget: event.target.value }))}/></label>
             <label>Media Mail Buyer Charge<input type="number" min="0" step="0.01" value={sandboxSetup.mediaMailCost} onChange={(event) => setSandboxSetup((current) => ({ ...current, mediaMailCost: event.target.value }))}/></label>
+            <div className="categoryRoutingSummary"><Tags size={18}/><div><strong>Automatic category routing</strong><small>ISBNs, UPCs, and item type route books, movies, games, CDs, and cards automatically. Choose a different category only while editing an exception.</small></div></div>
             <div className="actions ebaySetupActions"><button className="secondary" disabled={ebayBusy} onClick={unlockEbaySetup}><RefreshCw size={16}/> Refresh eBay Data</button><button className="secondary" disabled={ebayBusy || Number(sandboxSetup.mediaMailCost) < 0} onClick={() => createMediaMailPolicy()}><Truck size={16}/> Create/Select Media Mail</button><button disabled={ebayBusy} onClick={saveSetup}><Save size={16}/> Save Draft Defaults</button><button className="secondary forgetDeviceButton" disabled={ebayBusy} onClick={forgetSellerDevice}><LogOut size={16}/> Forget Device</button></div>
           </div>
           </>
@@ -1446,7 +1407,6 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions">
-                    <button className="secondary" title="Send this item to the Cross Listings workflow" onClick={() => onOpenCrossListing(listing.assetId)}><ArrowRightLeft size={14}/> Cross List</button>
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="iconButton ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Stage ${listing.title} with eBay`} title={!sellerDefaultsReady ? 'Complete eBay Seller Connection first' : 'Stage offer with eBay'} onClick={() => sendToEbay(listing)}><CloudUpload size={16}/></button> : null}
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="iconButton ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} aria-label={`Publish ${listing.title} on eBay`} title="Review and publish live on eBay" onClick={() => publishToEbay(listing)}><Rocket size={16}/></button> : null}
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.ebayOfferId && listing.externalListingId) ? <button className="iconButton ebayRepriceButton" disabled={repriceBusy} aria-label={`Update live eBay price for ${listing.title}`} title="Update live eBay price" onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={16}/></button> : null}
@@ -1547,9 +1507,20 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
       ) : null}
 
       {editing ? (
-        <div className="modalBackdrop"><section className="modal wideModal">
-          <header className="modalHeader"><div><h2>Edit Marketplace Listing</h2><span className="statusPill">{editing.assetTitle}</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setEditing(null)}><X size={18}/></button></header>
-          <div className="formGrid">
+        <div className="modalBackdrop"><section className="modal wideModal listingFactoryModal">
+          <header className="modalHeader"><div><p className="eyebrow">eBay listing factory</p><h2>{editing.title || editing.assetTitle}</h2><span className="statusPill">{[editing.assetType, editing.assetBarcode].filter(Boolean).join(' · ') || 'Manual item'}</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setEditing(null)}><X size={18}/></button></header>
+          <nav className="listingEditorSteps" aria-label="Listing editor sections">
+            {LISTING_EDITOR_STEPS.map((step, index) => <button type="button" key={step.id} className={editorStep === step.id ? 'active' : 'secondary'} onClick={() => setEditorStep(step.id)}><span>{index + 1}</span>{step.label}</button>)}
+          </nav>
+          <div className="listingReadinessBar">
+            <span className={editing.title.trim() ? 'ready' : 'missing'}>{editing.title.trim() ? 'Title ready' : 'Title needed'}</span>
+            <span className={editing.ebayCategoryId ? 'ready' : 'missing'}>{editing.ebayCategoryId ? 'Category routed' : 'Check category'}</span>
+            <span className={editing.fulfillmentPolicyId || ebaySettings.fulfillmentPolicyId ? 'ready' : 'missing'}>{editing.fulfillmentPolicyId || ebaySettings.fulfillmentPolicyId ? 'Shipping set' : 'Shipping needed'}</span>
+            <span className={editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}>{editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'Image ready' : 'Image needed' : editing.hasActualPhoto ? 'Photos ready' : 'Photo needed'}</span>
+            <span className={(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'ready' : 'missing'}>{(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'Price ready' : 'Price needed'}</span>
+          </div>
+          <div className="formGrid listingFactoryForm">
+            {editorStep === 'details' ? <>
             <label>Platform<select value={editing.platform} onChange={(event) => patchEditing({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
             <label>Status<select value={editing.status} onChange={(event) => patchEditing({ status: event.target.value })}>{STATUSES.map((value) => <option key={value}>{value}</option>)}</select></label>
             {editing.platform === 'Other' ? <label className="span2">Sale Channel<input value={editing.saleChannelDetail || ''} onChange={(event) => patchEditing({ saleChannelDetail: event.target.value })} placeholder="Local shop, yard sale, convention..."/></label> : null}
@@ -1557,11 +1528,13 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
             <label>SKU<input value={editing.sku || ''} onChange={(event) => patchEditing({ sku: event.target.value })}/></label>
             <label>Marketplace Item ID<input value={editing.externalListingId || ''} onChange={(event) => patchEditing({ externalListingId: event.target.value })}/></label>
             <label className="span2">Listing URL<input type="url" value={editing.listingUrl || ''} onChange={(event) => patchEditing({ listingUrl: event.target.value })}/></label>
-            <label>Category<input value={editing.category || ''} onChange={(event) => patchEditing({ category: event.target.value })}/></label>
-            <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={(event) => patchEditing({ ebayCategoryId: event.target.value })}/></label>
-            <EbayCategoryFinder query={[editing.title, editing.assetType, editing.mediaFormat].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => patchEditing({ category: suggestion.categoryPath, ebayCategoryId: suggestion.categoryId })}/>
             <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
             <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
+            </> : null}
+            {editorStep === 'category' ? <>
+            <div className="categoryAutoRoute span2"><Tags size={20}/><div><strong>Automatic category</strong><span>{editing.category || editing.assetType || 'eBay will use the item type and product identifier'}</span><small>{editing.ebayCategoryId ? `Leaf category ${editing.ebayCategoryId}` : editing.assetBarcode ? `Routed from ${editing.assetBarcode}` : 'Confirm an exception below only when the automatic category is not right.'}</small></div></div>
+            <label className="span2">Category Route<select value={selectedCategoryRoute(editing)} onChange={(event) => selectListingCategory(event.target.value)}><option value="auto">Automatic for this item</option>{EBAY_CATEGORY_CHOICES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}{choice.requiresLeafSelection ? ' — choose leaf category next' : ''}</option>)}</select><small>Books, movies, games, CDs, and cards route automatically. Clothing and general merchandise need a more specific leaf category.</small></label>
+            <details className="advancedListingOptions span2"><summary>Choose a different eBay category</summary><div className="advancedListingBody"><EbayCategoryFinder query={[editing.title, editing.assetType, editing.mediaFormat].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => patchEditing({ category: suggestion.categoryPath, ebayCategoryId: suggestion.categoryId })}/></div></details>
             <label className="span2">eBay Type<input list="ebay-type-suggestions" value={itemSpecificValue(editing.itemSpecifics, 'Type') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Type', event.target.value) })} placeholder="Textbook, Handbook, Novel, Movie, TV Series..."/><small>This is eBay's category-specific Type, separate from FlipTracker's inventory format. Use the value that best describes this edition.</small></label>
             <datalist id="ebay-type-suggestions"><option value="Textbook"/><option value="Handbook"/><option value="Study Guide"/><option value="Reference"/><option value="Novel"/><option value="Movie"/><option value="TV Series"/><option value="Album"/><option value="Single"/><option value="Video Game"/></datalist>
             {isBookListing(editing) ? <label className="span2">Book Title<input maxLength={65} value={editing.bookTitle || ''} onChange={(event) => patchEditing({ bookTitle: event.target.value })}/><small>Required by eBay for book categories. Maximum 65 characters. {(editing.bookTitle || '').length}/65</small></label> : null}
@@ -1576,6 +1549,13 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
               {editing.assetType === 'Sports Card' ? <label>Player / Athlete<input value={editing.cardPlayer || ''} onChange={(event) => patchEditing({ cardPlayer: event.target.value })}/></label> : null}
               {editing.assetType === 'Sports Card' ? <label>Team<input value={editing.cardTeam || ''} onChange={(event) => patchEditing({ cardTeam: event.target.value })}/></label> : null}
             </div></div> : null}
+            {isClothingListing(editing) ? <div className="formSection span2"><h3>Clothing Details</h3><div className="sectionGrid">
+              {['Brand', 'Department', 'Size', 'Color', 'Material'].map((name) => <label key={name}>{name}<input value={itemSpecificValue(editing.itemSpecifics, name) || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, name, event.target.value) })}/></label>)}
+              <label>Style / Model<input value={itemSpecificValue(editing.itemSpecifics, 'Style') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Style', event.target.value) })}/></label>
+            </div></div> : null}
+            <label className="span2">Additional Item Specifics<textarea value={editing.itemSpecifics || ''} onChange={(event) => patchEditing({ itemSpecifics: event.target.value })}/><small>One per line in Name: Value format. Use this for details that are not already captured above.</small></label>
+            </> : null}
+            {editorStep === 'shipping' ? <>
             <div className="formSection span2 ebayDeliverySection"><h3><Package size={17}/> Shipping & Photos</h3><div className="sectionGrid">
               <label>eBay Shipping Policy<select value={editing.fulfillmentPolicyId || ''} onChange={(event) => patchEditing({ fulfillmentPolicyId: event.target.value || undefined })}>
                 <option value="">Use seller default</option>
@@ -1583,15 +1563,20 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
                 {ebaySetup?.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}
               </select><small>The fulfillment policy controls services, handling time, and buyer shipping charges.</small></label>
               {isBookListing(editing) || /dvd|blu|cd|music/i.test(`${editing.assetType || ''} ${editing.mediaFormat || ''}`) ? <div className="shippingPolicyHelper"><button type="button" className="secondary" disabled={ebayBusy} onClick={() => createMediaMailPolicy(true)}><Truck size={16}/> Use Media Mail</button><small>Creates or selects a USPS Media Mail policy. Save this listing afterward. Video games are not Media Mail eligible.</small></div> : null}
-              <label>Package Preset<select value={editing.shippingPreset || 'Custom'} onChange={(event) => selectShippingPreset(event.target.value)}><option value="">No package data</option>{Object.keys(SHIPPING_PRESETS).map((name) => <option key={name}>{name}</option>)}<option>Custom</option></select></label>
-              <label>Weight (oz)<input type="number" min="0.1" step="0.1" value={editing.packageWeightOz ?? ''} onChange={(event) => patchEditing({ packageWeightOz: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/><small>eBay uses the weight and dimensions with your shipping policy; package type is automatic.</small></label>
-              <label>Length (in)<input type="number" min="0.1" step="0.1" value={editing.packageLengthIn ?? ''} onChange={(event) => patchEditing({ packageLengthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
-              <label>Width (in)<input type="number" min="0.1" step="0.1" value={editing.packageWidthIn ?? ''} onChange={(event) => patchEditing({ packageWidthIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
-              <label>Height (in)<input type="number" min="0.1" step="0.1" value={editing.packageHeightIn ?? ''} onChange={(event) => patchEditing({ packageHeightIn: optionalNumber(event.target.value), shippingPreset: 'Custom' })}/></label>
+              <label>Package Profile<select value={editing.shippingPreset || resolveShippingProfile({ itemType: editing.assetType, mediaFormat: editing.mediaFormat, title: editing.title }).key} onChange={(event) => selectShippingPreset(event.target.value)}>{EBAY_SHIPPING_PROFILES.map((profile) => <option key={profile.key} value={profile.key}>{profile.label}</option>)}</select><small>{shippingProfileForKey((editing.shippingPreset || 'custom') as EbayShippingProfileKey).description}</small></label>
+              <div className="packageSummary"><Package size={18}/><div><strong>{editing.packageWeightOz ?? '—'} oz</strong><span>{[editing.packageLengthIn, editing.packageWidthIn, editing.packageHeightIn].every(Boolean) ? `${editing.packageLengthIn} × ${editing.packageWidthIn} × ${editing.packageHeightIn} in` : 'Dimensions not set'}</span></div></div>
+              <details className="advancedListingOptions span2"><summary>Adjust package weight or dimensions</summary><div className="advancedPackageGrid">
+                <label>Weight (oz)<input type="number" min="0.1" step="0.1" value={editing.packageWeightOz ?? ''} onChange={(event) => patchEditing({ packageWeightOz: optionalNumber(event.target.value), shippingPreset: 'custom' })}/></label>
+                <label>Length (in)<input type="number" min="0.1" step="0.1" value={editing.packageLengthIn ?? ''} onChange={(event) => patchEditing({ packageLengthIn: optionalNumber(event.target.value), shippingPreset: 'custom' })}/></label>
+                <label>Width (in)<input type="number" min="0.1" step="0.1" value={editing.packageWidthIn ?? ''} onChange={(event) => patchEditing({ packageWidthIn: optionalNumber(event.target.value), shippingPreset: 'custom' })}/></label>
+                <label>Height (in)<input type="number" min="0.1" step="0.1" value={editing.packageHeightIn ?? ''} onChange={(event) => patchEditing({ packageHeightIn: optionalNumber(event.target.value), shippingPreset: 'custom' })}/></label>
+              </div></details>
               <label>eBay Image Source<select value={editing.imageMode || 'Actual Item Photo'} onChange={(event) => patchEditing({ imageMode: event.target.value })}><option>Actual Item Photo</option><option disabled={!canUseCatalogImage(editing)}>eBay Catalog</option></select><small>{isBookListing(editing) && editing.photoUrl ? 'The metadata cover can be used as the stock image for this book.' : isNewCondition(editing.condition) ? 'Catalog matching uses the UPC/EAN/ISBN.' : 'Used discs remain flagged for an actual photo.'}</small></label>
               <div className={`photoReadiness ${editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}`}><Camera size={18}/><div><strong>{editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? isBookListing(editing) ? 'Stock book cover ready' : 'Catalog identifier ready' : 'Catalog image unavailable' : editing.hasActualPhoto ? 'Actual photo ready' : 'Actual photo required'}</strong><small>{editing.ebayImageSource ? `Last eBay image: ${editing.ebayImageSource}` : 'Photo selection comes from the linked inventory item.'}</small></div></div>
               <ListingPhotoManager assetId={editing.assetId} title={editing.title} onPhotoAttached={markEditingPhotoReady}/>
             </div></div>
+            </> : null}
+            {editorStep === 'price' ? <>
             <div className="formSection span2"><h3>Pricing & Dates</h3><div className="sectionGrid">
               <label>Original Price<input type="number" step="0.01" value={editing.listedPrice ?? ''} onChange={(event) => patchEditing({ listedPrice: optionalNumber(event.target.value) })}/></label>
               <label>Current Price<input type="number" step="0.01" value={editing.currentPrice ?? ''} onChange={(event) => patchEditing({ currentPrice: optionalNumber(event.target.value) })}/></label>
@@ -1605,14 +1590,14 @@ export default function ListingsPanel({ onAddOtherItem, onOpenCrossListing }: { 
               <label>Marketplace Fees<input type="number" step="0.01" value={editing.fees ?? ''} onChange={(event) => patchEditing({ fees: optionalNumber(event.target.value) })}/></label>
               <label>Buyer<input value={editing.buyer || ''} onChange={(event) => patchEditing({ buyer: event.target.value })}/></label>
             </div></div>
-            <label className="span2">Additional Item Specifics<textarea value={editing.itemSpecifics || ''} onChange={(event) => patchEditing({ itemSpecifics: event.target.value })}/><small>One per line in Name: Value format. The dedicated eBay Type field above is stored here automatically.</small></label>
             <div className="aiCopyToolbar span2"><div><strong>eBay Description</strong><small>Builds editable buyer-facing copy from the listing and relevant notes.</small></div><button type="button" className="secondary" disabled={descriptionBusy || !editing.title.trim()} onClick={generateAiDescription}><Sparkles size={16}/>{descriptionBusy ? 'Generating...' : 'Generate with AI'}</button></div>
             {descriptionError ? <p className="formError span2">{descriptionError}</p> : null}
             <label className="span2">Editable Description<textarea value={editing.description || ''} onChange={(event) => patchEditing({ description: event.target.value })}/></label>
             <label className="span2">Internal Listing Notes<textarea value={editing.notes || ''} onChange={(event) => patchEditing({ notes: event.target.value })}/></label>
             <div className="formSection span2"><h3>Price History</h3><PriceHistory listingId={editing._id}/></div>
+            </> : null}
           </div>
-          <div className="actions right"><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><button onClick={save}><Save size={16}/> Save Listing</button></div>
+          <div className="listingFactoryFooter"><button className="secondary" onClick={() => setEditing(null)}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'price' ? <button onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button onClick={save}><Save size={16}/> Save Listing</button>}</div></div>
         </section></div>
       ) : null}
     </>

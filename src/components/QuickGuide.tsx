@@ -13,7 +13,7 @@ export default function QuickGuide() {
   return (
     <section className="guidePage">
       <header className="guideHeader">
-        <div><p className="eyebrow">Quick start</p><h2>Using FlipTracker</h2><p>Move an item from barcode scan to inventory, eBay staging, cross-listing, and completed sale.</p></div>
+        <div><p className="eyebrow">Quick start</p><h2>Using FlipTracker</h2><p>Move books, games, movies, cards, and clothing from intake to a live eBay listing and completed sale.</p></div>
         <a className="button secondary" href="/README.md" target="_blank" rel="noreferrer"><FileText size={16}/> Open README</a>
       </header>
 
@@ -70,35 +70,30 @@ export default function QuickGuide() {
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
           <li>Open <strong>Listings</strong>, select the drafts you want to process, and choose <strong>Update Pricing</strong>.</li>
           <li>Check sold comps, enter each approved price, and apply the updates. Blank rows stay in Ready for Pricing.</li>
-          <li>In eBay Seller Connection, enter the private seller key, connect the seller account, and save its location, business policies, and media category defaults.</li>
-          <li>Edit the draft to choose a shipping policy and package preset. The policy controls the buyer charge; package measurements support calculated or weight-aware shipping.</li>
+          <li>In eBay Seller Connection, enter the private seller key, connect the seller account, and save its location and business policies.</li>
+          <li>Edit the draft and move through Item, Category, Shipping &amp; Photos, and Price &amp; Description. FlipTracker automatically routes books, games, DVDs, Blu-rays, CDs, and cards.</li>
+          <li>For clothing or general merchandise, use the category finder to select a precise eBay leaf category.</li>
+          <li>Choose the human-readable shipping policy and package profile. FlipTracker fills a practical package weight and size, which you can override under Advanced package details.</li>
           <li>Use eBay Catalog for eligible new/sealed media and books with usable metadata art. Used discs and games require actual item photos.</li>
-          <li>Choose <strong>Send to eBay Drafts</strong> to create or refresh unpublished offers for the selected Ready for eBay rows.</li>
+          <li>Choose <strong>Stage with eBay</strong> to create or refresh unpublished offers for the selected Ready for eBay rows.</li>
           <li>Add an SKU when useful; the storage location remains visible for fulfillment.</li>
         </ol><p className="guideNote"><ShoppingBag size={15}/> The eBay offer is not live. FlipTracker uploads the ordered photo set to eBay Picture Services, but every offer still needs a final Seller Hub review.</p></div></section>
 
-        <section><div className="guideNumber">7</div><div><h3>Cross-list to Poshmark, Mercari, or Depop</h3><ol>
-          <li>From Listings or Inventory, choose <strong>Cross List</strong> to seed the same inventory item into the Cross Listings workflow.</li>
-          <li>Review the marketplace, title, price, photos, size, category, and notes. Keep one inventory record and one outward listing record per platform.</li>
-          <li>Use <strong>Push</strong> to mark it listed, <strong>Sold</strong> to close it out, or <strong>Delete</strong> to restart the record.</li>
-          <li>These surfaces are the morning-ready prototype. They organize the work now, then can be wired to marketplace APIs later.</li>
-        </ol><p className="guideNote"><ShoppingBag size={15}/> Poshmark, Mercari, and Depop are the default cross-list targets. Vinted is intentionally left out of the default workflow.</p></div></section>
+        <section><div className="guideNumber">7</div><div><h3>Publish it to eBay</h3><ol>
+          <li>Open the staged row and review its title, category, condition, specifics, price, selected policy, package profile, and photos.</li>
+          <li>Select the rocket button to publish. FlipTracker asks for confirmation before making the listing live.</li>
+          <li>Open the resulting eBay link and check the public listing, especially the shipping charge and mobile photo order.</li>
+          <li>FlipTracker stores the eBay item ID and URL and moves the record into the Published queue.</li>
+        </ol><p className="guideNote"><ShoppingBag size={15}/> Staging is not publishing. The listing only becomes purchasable after the separate Publish confirmation.</p></div></section>
 
-        <section><div className="guideNumber">8</div><div><h3>Post it to eBay</h3><ol>
-          <li>Review the prepared title, description, category ID, condition, item specifics, price, policies, and actual item photos.</li>
-          <li>Until FlipTracker adds a validated publish step, finish and publish the listing manually through eBay Seller Hub.</li>
-          <li>Return to FlipTracker and enter the eBay item ID and listing URL.</li>
-          <li>Change the status to <strong>Active</strong> and confirm the listed date and current price.</li>
-        </ol><p className="guideNote"><ShoppingBag size={15}/> FlipTracker deliberately does not call eBay's publish endpoint yet. A scan cannot accidentally make a listing live.</p></div></section>
-
-        <section><div className="guideNumber">9</div><div><h3>Track price changes and the sale</h3><ol>
+        <section><div className="guideNumber">8</div><div><h3>Track price changes and the sale</h3><ol>
           <li>Edit Current Price whenever a listing is reduced and enter a reason. FlipTracker preserves the price history.</li>
           <li>When sold, change the listing status to <strong>Sold</strong>.</li>
           <li>Use the dollar button on a listing to record where it sold, sale price/date, what you paid, shipping income/cost, fees, buyer, order reference, and notes.</li>
           <li>Save the listing. FlipTracker updates inventory status, sales history, revenue, and net profit.</li>
         </ol></div></section>
 
-        <section><div className="guideNumber">10</div><div><h3>Back up and migrate data</h3><ol>
+        <section><div className="guideNumber">9</div><div><h3>Back up and migrate data</h3><ol>
           <li>Use <strong>Export Excel</strong> from Inventory for an inventory backup.</li>
           <li>Use <strong>Export CSV</strong> from Listings for listing and sales records.</li>
           <li>Use <strong>Import Old JSON</strong> only for a Sales Tracker JSON export. It creates new records and does not deduplicate.</li>

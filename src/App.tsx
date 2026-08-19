@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, Link, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, ShoppingBag, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingsPanel from './components/ListingsPanel';
@@ -16,6 +16,7 @@ import PhotoQueuePanel from './components/PhotoQueuePanel';
 import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
 import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
+import { EBAY_CATEGORY_CHOICES, categoryChoiceForKey, resolveEbayCategory, resolveShippingProfile, type EbayCategoryKey } from './config/ebayListingDefaults';
 
 type AppView = 'Inventory' | 'Listings' | 'Cross' | 'Accounts' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
 
@@ -137,7 +138,7 @@ type PendingPhoto = {
   previewUrl: string;
 };
 
-const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Other Media', 'Toy', 'General Merchandise', 'Misc'];
+const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Clothing', 'Other Media', 'Toy', 'General Merchandise', 'Misc'];
 const CARD_PRODUCT_TYPES = ['Single Card', 'Card Lot', 'Complete Set', 'Sealed Pack', 'Sealed Box'];
 const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One Piece Card Game', 'Disney Lorcana', 'Other CCG'];
 const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
@@ -204,15 +205,13 @@ function recommendationFromAsset(item: Partial<Asset>): ListingRecommendation {
 }
 
 function ebayCategoryFor(item: Partial<Asset>) {
-  if (item.type === 'Blu-ray') return 'Movies & TV > DVDs & Blu-ray Discs';
-  if (item.type === 'DVD') return 'Movies & TV > DVDs & Blu-ray Discs';
-  if (item.type === 'CD') return 'Music > CDs';
-  if (item.type === 'Book') return 'Books & Magazines > Books';
-  if (item.type === 'Video Game') return 'Video Games & Consoles > Video Games';
-  if (item.type === 'Sports Card') return 'Sports Mem, Cards & Fan Shop > Sports Trading Cards';
-  if (item.type === 'Pokemon Card') return 'Collectible Card Games > Pokemon Trading Card Game';
-  if (item.type === 'Yu-Gi-Oh! Card') return 'Collectible Card Games > Yu-Gi-Oh! Trading Card Game';
-  return 'Everything Else > Other';
+  return resolveEbayCategory({ itemType: item.type, barcode: item.upc || item.barcode, barcodeType: item.barcodeType, cardSaleFormat: item.cardProductType }).choice.categoryName;
+}
+
+function selectedInventoryCategoryRoute(item: Partial<Asset>) {
+  const automatic = resolveEbayCategory({ itemType: item.type, barcode: item.upc || item.barcode, barcodeType: item.barcodeType, cardSaleFormat: item.cardProductType });
+  if ((!item.ebayCategoryId || item.ebayCategoryId === automatic.categoryId) && (!item.ebayCategory || item.ebayCategory === automatic.choice.categoryName)) return 'auto';
+  return EBAY_CATEGORY_CHOICES.find(choice => ('categoryId' in choice && choice.categoryId === item.ebayCategoryId) || choice.categoryName === item.ebayCategory)?.key || 'auto';
 }
 
 function ebayConditionFor(item: Partial<Asset>) {
@@ -266,17 +265,17 @@ function listingSpecifics(item: Partial<Asset>) {
 
 function listingDeliveryDefaults(item: Partial<Asset>) {
   const format = `${item.mediaFormat || ''} ${item.type || ''}`.toLowerCase();
-  const isSingleMediaCase = format.includes('dvd') || format.includes('blu') || format.includes('cd');
+  const shippingProfile = resolveShippingProfile({ itemType: item.type, mediaFormat: item.mediaFormat, title: item.title });
   const isBookWithCover = format.includes('book') && Boolean(item.coverImageUrl);
   const isNew = ['new', 'brand new', 'sealed'].includes(item.condition?.trim().toLowerCase() || '') || item.completeness?.trim().toLowerCase() === 'sealed';
   return {
     imageMode: isNew || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo',
-    shippingPreset: isSingleMediaCase ? 'Single Media Mailer' : undefined,
-    packageType: isSingleMediaCase ? 'PACKAGE_THICK_ENVELOPE' : undefined,
-    packageWeightOz: isSingleMediaCase ? 8 : undefined,
-    packageLengthIn: isSingleMediaCase ? 10 : undefined,
-    packageWidthIn: isSingleMediaCase ? 7 : undefined,
-    packageHeightIn: isSingleMediaCase ? 1 : undefined,
+    shippingPreset: shippingProfile.key,
+    packageType: undefined,
+    packageWeightOz: shippingProfile.weight.value,
+    packageLengthIn: shippingProfile.dimensions.length,
+    packageWidthIn: shippingProfile.dimensions.width,
+    packageHeightIn: shippingProfile.dimensions.height,
   };
 }
 
@@ -288,6 +287,7 @@ function recalcAsset(item: Partial<Asset>): Partial<Asset> {
   next.ebayTitle = generateEbayTitle(next);
   next.ebayDescription = generateDescription(next);
   next.ebayCategory = next.ebayCategory || ebayCategoryFor(next);
+  next.ebayCategoryId = next.ebayCategoryId || resolveEbayCategory({ itemType: next.type, barcode: next.upc || next.barcode, barcodeType: next.barcodeType, cardSaleFormat: next.cardProductType }).categoryId;
   next.ebayCondition = ebayConditionFor(next);
   next.ebayItemSpecifics = listingSpecifics(next);
   next.ebayPrice = next.valueSource === 'User Override' ? next.userHigh || next.userLow : next.estimatedHigh || next.estimatedLow;
@@ -417,7 +417,6 @@ export default function App() {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [metadataNotice, setMetadataNotice] = useState('');
   const [createDraftAfterSave, setCreateDraftAfterSave] = useState(false);
-  const [crossListingSeed, setCrossListingSeed] = useState<Id<'assets'> | null>(null);
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionError, setDescriptionError] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
@@ -573,6 +572,17 @@ export default function App() {
       const next = { ...(current || {}), ...patch };
       return shouldRecalc ? recalcAsset(next) : next;
     });
+  }
+
+  function selectInventoryCategory(value: string) {
+    if (!editing) return;
+    if (value === 'auto') {
+      const resolution = resolveEbayCategory({ itemType: editing.type, barcode: editing.upc || editing.barcode, barcodeType: editing.barcodeType, cardSaleFormat: editing.cardProductType });
+      updateEditing({ ebayCategory: resolution.choice.categoryName, ebayCategoryId: resolution.categoryId }, false);
+      return;
+    }
+    const choice = categoryChoiceForKey(value as EbayCategoryKey);
+    updateEditing({ ebayCategory: choice.categoryName, ebayCategoryId: choice.categoryId }, false);
   }
 
   function clearPendingPhotos() {
@@ -980,11 +990,6 @@ export default function App() {
     changeView('Listings');
   }
 
-  function openCrossListing(asset: Asset) {
-    setCrossListingSeed(asset._id);
-    changeView('Cross');
-  }
-
   async function deleteCollection(id: Id<'collections'>) {
     if (!confirm('Remove this collection? Items will stay in inventory and become unassigned.')) return;
     await removeCollection({ id });
@@ -1091,8 +1096,7 @@ export default function App() {
         <div>
             <p className="eyebrow">Collector resale command center</p>
             <h1>FlipTracker</h1>
-            <p>Track games, DVDs, Blu-rays, books, CDs, and resale media from scan to listing plan.</p>
-            <p className="prototypeNote">Functional today: eBay linking, inventory, drafts, sold sync, and photo capture. Prototype today: cross-listing surfaces for Poshmark, Mercari, and Depop.</p>
+            <p>Scan, price, photograph, and publish books, games, movies, cards, and clothing to eBay.</p>
           </div>
         </div>
         <div className="actions">
@@ -1109,8 +1113,6 @@ export default function App() {
       <nav className="viewTabs" aria-label="Primary views">
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
-        <button className={activeView === 'Cross' ? 'active' : 'secondary'} onClick={() => changeView('Cross')}><ShoppingBag size={17}/> Cross Listings</button>
-        <button className={activeView === 'Accounts' ? 'active' : 'secondary'} onClick={() => changeView('Accounts')}><Link size={17}/> Accounts</button>
         <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
         <button className={activeView === 'Photos' ? 'active' : 'secondary'} onClick={() => changeView('Photos')}><Camera size={17}/> Photos</button>
         <button className={activeView === 'Sourcing' ? 'active' : 'secondary'} onClick={() => changeView('Sourcing')}><Gauge size={17}/> Sourcing</button>
@@ -1170,14 +1172,14 @@ export default function App() {
                     <td><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td><span className={badgeClass(String(item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Create a cross listing for Poshmark, Mercari, or Depop" onClick={() => openCrossListing(item)}><ShoppingBag size={14}/> Cross List</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
+                    <td className="tableActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </section></> : activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }} onOpenCrossListing={(assetId) => { setCrossListingSeed(assetId); changeView('Cross'); }}/> : activeView === 'Cross' ? <CrossListingsPanel initialAssetId={crossListingSeed} onSeedConsumed={() => setCrossListingSeed(null)}/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
+      </section></> : activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Cross' ? <CrossListingsPanel/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
 
       {bulkCostOpen ? (
         <div className="modalBackdrop"><section className="modal bulkCostModal">
@@ -1233,7 +1235,7 @@ export default function App() {
               </aside>
               <div className="formGrid">
                 <label className="span2">Title<input value={editing.title || ''} onChange={e => updateEditing({ title:e.target.value, needsValueCheck: '_id' in editing })}/></label>
-                <label>Type<select value={editing.type || 'Video Game'} onChange={e => updateEditing({ type:e.target.value, mediaFormat: e.target.value === 'General Merchandise' ? 'General Merchandise' : editing.mediaFormat, ebayCategory: '', ebayCategoryId: undefined, cardProductType: isCardType(e.target.value) ? editing.cardProductType || 'Single Card' : undefined, cardGame: isCardType(e.target.value) && e.target.value !== 'Sports Card' ? editing.cardGame || defaultCardGame(e.target.value) : undefined, cardSport: e.target.value === 'Sports Card' ? editing.cardSport : undefined })}>{MEDIA_TYPES.map(s => <option key={s}>{s}</option>)}</select></label>
+                <label>Type<select value={editing.type || 'Video Game'} onChange={e => updateEditing({ type:e.target.value, mediaFormat: ['General Merchandise', 'Clothing'].includes(e.target.value) ? e.target.value : editing.mediaFormat, ebayCategory: '', ebayCategoryId: undefined, cardProductType: isCardType(e.target.value) ? editing.cardProductType || 'Single Card' : undefined, cardGame: isCardType(e.target.value) && e.target.value !== 'Sports Card' ? editing.cardGame || defaultCardGame(e.target.value) : undefined, cardSport: e.target.value === 'Sports Card' ? editing.cardSport : undefined })}>{MEDIA_TYPES.map(s => <option key={s}>{s}</option>)}</select></label>
                 <label>Format<input value={editing.mediaFormat || ''} onChange={e => updateEditing({ mediaFormat:e.target.value })}/></label>
                 {isCardType(editing.type) ? <div className="formSection span2"><h3>Card Details</h3><div className="sectionGrid">
                   <label>Sale Format<select value={editing.cardProductType || 'Single Card'} onChange={e => updateEditing({ cardProductType:e.target.value })}>{CARD_PRODUCT_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>
@@ -1280,12 +1282,12 @@ export default function App() {
                   {descriptionError ? <p className="formError span2">{descriptionError}</p> : null}
                   <label className="span2">Editable AI Copy<textarea value={editing.aiDescription || ''} onChange={e => updateEditing({ aiDescription:e.target.value })} placeholder="Generate a draft or enter your own listing copy..."/></label>
                   <label className="span2">Item Disclosures<textarea value={editing.itemDisclosures || ''} onChange={e => updateEditing({ itemDisclosures:e.target.value })} placeholder="Library copy, missing DVD disc, case damage, writing, scratches..."/></label>
-                  <label>Category<input value={editing.ebayCategory || ''} onChange={e => updateEditing({ ebayCategory:e.target.value }, false)}/></label>
-                  <label>eBay Category ID<input inputMode="numeric" value={editing.ebayCategoryId || ''} onChange={e => updateEditing({ ebayCategoryId:e.target.value }, false)}/></label>
-                  <EbayCategoryFinder query={[editing.ebayTitle || editing.title, editing.edition, editing.mediaFormat, editing.type].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => updateEditing({ ebayCategory:suggestion.categoryPath, ebayCategoryId:suggestion.categoryId }, false)}/>
+                  <div className="categoryAutoRoute span2"><Tags size={20}/><div><strong>Automatic eBay category</strong><span>{editing.ebayCategory || ebayCategoryFor(editing)}</span><small>{editing.ebayCategoryId ? `Leaf category ${editing.ebayCategoryId}` : editing.upc || editing.barcode ? 'Routed from the product identifier and item type.' : 'Choose a leaf category before listing this item.'}</small></div></div>
+                  <label className="span2">Category Route<select value={selectedInventoryCategoryRoute(editing)} onChange={e => selectInventoryCategory(e.target.value)}><option value="auto">Automatic for this item</option>{EBAY_CATEGORY_CHOICES.map(choice => <option key={choice.key} value={choice.key}>{choice.label}{choice.requiresLeafSelection ? ' — choose leaf category next' : ''}</option>)}</select></label>
+                  <details className="advancedListingOptions span2"><summary>Choose a different eBay category</summary><div className="advancedListingBody"><EbayCategoryFinder query={[editing.ebayTitle || editing.title, editing.edition, editing.mediaFormat, editing.type].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => updateEditing({ ebayCategory:suggestion.categoryPath, ebayCategoryId:suggestion.categoryId }, false)}/></div></details>
                   <label>Condition<input value={editing.ebayCondition || ''} onChange={e => updateEditing({ ebayCondition:e.target.value }, false)}/></label>
                   <label>Price<input type="number" value={editing.ebayPrice || ''} onChange={e => updateEditing({ ebayPrice:toNumber(e.target.value) }, false)}/></label>
-                  <label>Shipping<input value={editing.ebayShipping || ''} onChange={e => updateEditing({ ebayShipping:e.target.value }, false)}/></label>
+                  <label>Shipping Plan<select value={editing.ebayShipping || 'Calculated shipping'} onChange={e => updateEditing({ ebayShipping:e.target.value }, false)}><option>USPS Media Mail, buyer paid</option><option>USPS Ground Advantage, buyer paid</option><option>eBay Standard Envelope</option><option>Calculated shipping</option><option>Free shipping</option></select></label>
                   <label className="span2">Item Specifics<textarea value={editing.ebayItemSpecifics || ''} onChange={e => updateEditing({ ebayItemSpecifics:e.target.value }, false)}/></label>
                   <label className="span2">eBay Description<textarea value={editing.ebayDescription || ''} onChange={e => updateEditing({ ebayDescription:e.target.value }, false)}/></label>
                 </div>{!('_id' in editing) ? <label className="checkRow reviewToggle"><input type="checkbox" checked={createDraftAfterSave} onChange={e => setCreateDraftAfterSave(e.target.checked)}/><span><strong>Add to eBay draft queue</strong><small>Generate the listing now, then find fair value and select it from Listings.</small></span></label> : null}</div>

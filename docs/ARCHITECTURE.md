@@ -31,6 +31,14 @@ Scan / Add -> Inventory Asset -> Internal Listing Draft -> Active Marketplace Li
 
 `assets` remains the source of truth for the physical item. `marketplaceListings` stores each marketplace attempt, while `listingPriceHistory` preserves price changes. A sold listing updates the asset's inventory status and writes a normalized `sales` record for future reporting.
 
+## eBay Listing Factory
+
+```text
+Scan / Add -> automatic item family -> category route -> shipping profile -> photos -> price/copy -> stage -> publish
+```
+
+Known media and card families use code-owned category defaults, with any saved per-listing category remaining authoritative. Clothing and general merchandise use eBay Taxonomy search to select a leaf category. Shipping profiles are frontend workflow defaults; Convex independently supplies deterministic package fallbacks for legacy records and preserves explicit listing measurements.
+
 The old Sales Tracker frontend is not merged mechanically. Its useful lifecycle, metrics, filters, CSV export, and JSON migration concepts are rebuilt in FlipTracker's React and Convex architecture.
 
 ## Sourcing Decision Workflow
