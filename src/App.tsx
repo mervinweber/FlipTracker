@@ -1,22 +1,22 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
+import type { IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
 import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
-import { exportInventory, importInventoryFile } from './utils/excel';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
-import ListingsPanel from './components/ListingsPanel';
-import CrossListingsPanel from './components/CrossListingsPanel';
-import LinkedAccountsPanel from './components/LinkedAccountsPanel';
-import QuickGuide from './components/QuickGuide';
-import BulkIntakePanel from './components/BulkIntakePanel';
-import SourcingPanel from './components/SourcingPanel';
-import PhotoQueuePanel from './components/PhotoQueuePanel';
 import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
 import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
 import { EBAY_CATEGORY_CHOICES, categoryChoiceForKey, resolveEbayCategory, resolveShippingProfile, type EbayCategoryKey } from './config/ebayListingDefaults';
+
+const ListingsPanel = lazy(() => import('./components/ListingsPanel'));
+const CrossListingsPanel = lazy(() => import('./components/CrossListingsPanel'));
+const LinkedAccountsPanel = lazy(() => import('./components/LinkedAccountsPanel'));
+const QuickGuide = lazy(() => import('./components/QuickGuide'));
+const BulkIntakePanel = lazy(() => import('./components/BulkIntakePanel'));
+const SourcingPanel = lazy(() => import('./components/SourcingPanel'));
+const PhotoQueuePanel = lazy(() => import('./components/PhotoQueuePanel'));
 
 type AppView = 'Inventory' | 'Listings' | 'Cross' | 'Accounts' | 'Bulk' | 'Photos' | 'Sourcing' | 'Guide';
 
@@ -497,7 +497,6 @@ export default function App() {
   useEffect(() => {
     if (!scannerOpen || !videoRef.current) return;
     let cancelled = false;
-    const reader = new BrowserMultiFormatReader();
     setScanError('');
 
     if (!window.isSecureContext) {
@@ -509,24 +508,28 @@ export default function App() {
       return;
     }
 
-    void reader.decodeFromConstraints({
-      audio: false,
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-    }, videoRef.current, (result, _error, controls) => {
-      if (result && !cancelled) {
-        const code = result.getText();
-        setManualBarcode(code);
-        controls.stop();
-        void lookupBarcode(code);
-      }
-    }).then((controls) => {
+    void (async () => {
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      if (cancelled || !videoRef.current) return;
+      const reader = new BrowserMultiFormatReader();
+      const controls = await reader.decodeFromConstraints({
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      }, videoRef.current, (result, _error, activeControls) => {
+        if (result && !cancelled) {
+          const code = result.getText();
+          setManualBarcode(code);
+          activeControls.stop();
+          void lookupBarcode(code);
+        }
+      });
       if (cancelled) controls.stop();
       else scannerControls.current = controls;
-    }).catch((error: unknown) => {
+    })().catch((error: unknown) => {
       if (cancelled) return;
       const name = error instanceof DOMException ? error.name : '';
       if (name === 'NotAllowedError' || name === 'SecurityError') {
@@ -997,6 +1000,7 @@ export default function App() {
 
   async function onImport(file?: File) {
     if (!file) return;
+    const { importInventoryFile } = await import('./utils/excel');
     const imported = await importInventoryFile(file);
     await importMany({
       assets: imported.map((item) => {
@@ -1106,7 +1110,7 @@ export default function App() {
           <button onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankAsset()); }}><Plus size={16}/> Add Item</button>
           <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Collection</button>
           <label className="button"><Upload size={16}/> Import Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => onImport(e.target.files?.[0])}/></label>
-          <button onClick={() => exportInventory(rows.map((item) => toInventoryForExport(item, collectionName(item.collectionId))))}><Download size={16}/> Export Excel</button>
+          <button onClick={async () => { const { exportInventory } = await import('./utils/excel'); exportInventory(rows.map((item) => toInventoryForExport(item, collectionName(item.collectionId)))); }}><Download size={16}/> Export Excel</button>
         </div>
       </header>
 
@@ -1179,7 +1183,7 @@ export default function App() {
             </table>
           </div>
         )}
-      </section></> : activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Cross' ? <CrossListingsPanel/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}
+      </section></> : <Suspense fallback={<section className="panel"><p className="panelMessage">Loading workspace...</p></section>}>{activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Cross' ? <CrossListingsPanel/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}</Suspense>}
 
       {bulkCostOpen ? (
         <div className="modalBackdrop"><section className="modal bulkCostModal">

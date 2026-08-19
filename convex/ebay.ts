@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { XMLParser } from "fast-xml-parser";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalMutation, internalQuery } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 const EBAY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope",
@@ -1573,6 +1573,7 @@ export const createUnpublishedOffer = action({
       if (!settings.returnPolicyId) throw new Error("Choose an eBay return policy in Seller Connection.");
       const sku = (listing.sku || `FT-${asset._id}`).slice(0, 50);
       const categoryId = validatedCategoryId(categoryForAsset(listing, asset, settings));
+      if (!categoryId) throw new Error("Choose a valid eBay leaf category before staging this listing.");
       const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
       const isCard = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("card");
       const aspects = removeCatalogIdentifiers(parseItemSpecifics(listing.itemSpecifics));
@@ -1596,6 +1597,17 @@ export const createUnpublishedOffer = action({
         setAspectDefault(aspects, "Card Number", listing.cardNumber || asset.cardNumber);
         setAspectDefault(aspects, "Player/Athlete", listing.cardPlayer || asset.cardPlayer);
         setAspectDefault(aspects, "Team", listing.cardTeam || asset.cardTeam);
+      }
+
+      const taxonomy: { aspects: Array<{ name: string; required: boolean }> } = await ctx.runAction(
+        api.ebayTaxonomy.getCategoryAspects,
+        { marketplaceId: settings.marketplaceId || "EBAY_US", categoryId },
+      );
+      const missingRequiredAspects = taxonomy.aspects
+        .filter((aspect) => aspect.required && !aspectKey(aspects, aspect.name))
+        .map((aspect) => aspect.name);
+      if (missingRequiredAspects.length) {
+        throw new Error(`Complete required eBay item specifics before staging: ${missingRequiredAspects.join(", ")}.`);
       }
 
       const product: Record<string, unknown> = {

@@ -24,6 +24,17 @@ Prototype snapshot:
 - [ ] Add a one-screen keyboard-first exception queue for drafts blocked by photos, price, category, or required specifics
 - [ ] Code-split the listing factory and scanner to reduce the current large JavaScript bundle
 
+## v0.6 Selling Readiness
+
+- [x] Task 1: validate every locally knowable eBay blocker before staging
+- [x] Task 2: fetch category-specific aspects and allowed values from eBay Taxonomy
+- [x] Task 3: add a keyboard-first exception queue with Save and Next
+- [x] Task 4: add shipping-policy eligibility and package-limit guardrails
+- [x] Task 5: add safe listing-editor keyboard shortcuts
+- [ ] Task 6: expand the new readiness regression suite with lifecycle and import-safety tests plus friendly errors
+- [x] Task 7: code-split heavy workflows and smoke test desktop/mobile listing correction; complete production selling-path smoke after deployment
+- [x] Task 8: document the release scope and release gate in `docs/V0.6_RELEASE_PLAN.md`
+
 ## Completed Product Foundation
 
 - [x] React, TypeScript, and Vite application scaffold

@@ -59,10 +59,11 @@ Changing the title, UPC, edition, condition, or completeness marks the item for 
 4. Select the seller's inventory location and payment, shipping, and return policies, then save.
 5. Select the drafts you want to process, then choose **Update Pricing**. Verify sold comps, enter each approved price, and apply the updates. Blank rows stay in **Ready for Pricing**.
 6. Edit a draft and move through Item, Category, Shipping & Photos, and Price & Description. Books, games, movies, CDs, and cards route automatically; clothing and general merchandise use the category finder for a precise leaf category.
-7. Choose the human-readable shipping policy and package profile. FlipTracker supplies practical weight and dimensions that can be changed under Advanced package details.
-8. For eligible new/sealed media and books, choose **eBay Catalog** and verify the barcode and artwork. Used discs and games require actual item photos.
-9. Choose **Stage with eBay**. FlipTracker uploads the ordered photo set and creates or refreshes unpublished offers for selected **Ready for eBay** rows.
-10. Review each staged row, then select its rocket button and confirm **Publish**. Verify the resulting public eBay listing, especially shipping and photo order.
+7. Review **Selling Readiness** and complete the required category fields loaded from eBay. Use **Save & Next** to move through blocked drafts quickly.
+8. Choose the human-readable shipping policy and package profile. FlipTracker supplies practical weight and dimensions that can be changed under Advanced package details.
+9. For eligible new/sealed media and books, choose **eBay Catalog** and verify the barcode and artwork. Used discs and games require actual item photos.
+10. Choose **Stage with eBay**. FlipTracker uploads the ordered photo set and creates or refreshes unpublished offers for selected **Ready for eBay** rows.
+11. Review each staged row, then select its rocket button and confirm **Publish**. Verify the resulting public eBay listing, especially shipping and photo order.
 
 Unpublished offer creation and live publication remain separate actions by design so a scan cannot accidentally create a purchasable listing.
 

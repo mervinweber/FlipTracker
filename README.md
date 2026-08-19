@@ -13,7 +13,7 @@ Convex-backed inventory UI with schema, backend functions, docs, Excel import/ex
 
 ## Prototype Status
 - Functional today: inventory management, eBay seller linking, draft staging, sold sync, and photo capture.
-- Listing factory today: automatic media category routing, category-specific item details, package profiles, photo capture, pricing, eBay staging, publishing, and sold sync.
+- Listing factory today: automatic media category routing, live eBay Taxonomy fields, readiness validation, an exception queue with Save & Next, package guardrails, photo capture, pricing, eBay staging, publishing, and sold sync.
 - Still pending: real user authentication, per-user account ownership, deeper eBay category-aspect discovery, and broader automated test coverage.
 
 ## Project Docs

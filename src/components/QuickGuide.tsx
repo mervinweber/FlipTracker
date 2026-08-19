@@ -72,7 +72,9 @@ export default function QuickGuide() {
           <li>Check sold comps, enter each approved price, and apply the updates. Blank rows stay in Ready for Pricing.</li>
           <li>In eBay Seller Connection, enter the private seller key, connect the seller account, and save its location and business policies.</li>
           <li>Edit the draft and move through Item, Category, Shipping &amp; Photos, and Price &amp; Description. FlipTracker automatically routes books, games, DVDs, Blu-rays, CDs, and cards.</li>
+          <li>Use <strong>Selling Readiness</strong> to review incomplete drafts. Correct the first blocker, then use <strong>Save &amp; Next</strong> to continue through the queue.</li>
           <li>For clothing or general merchandise, use the category finder to select a precise eBay leaf category.</li>
+          <li>Complete the required eBay category fields loaded from Taxonomy. FlipTracker checks them again before staging.</li>
           <li>Choose the human-readable shipping policy and package profile. FlipTracker fills a practical package weight and size, which you can override under Advanced package details.</li>
           <li>Use eBay Catalog for eligible new/sealed media and books with usable metadata art. Used discs and games require actual item photos.</li>
           <li>Choose <strong>Stage with eBay</strong> to create or refresh unpublished offers for the selected Ready for eBay rows.</li>

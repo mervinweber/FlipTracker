@@ -39,6 +39,10 @@ Scan / Add -> automatic item family -> category route -> shipping profile -> pho
 
 Known media and card families use code-owned category defaults, with any saved per-listing category remaining authoritative. Clothing and general merchandise use eBay Taxonomy search to select a leaf category. Shipping profiles are frontend workflow defaults; Convex independently supplies deterministic package fallbacks for legacy records and preserves explicit listing measurements.
 
+The listing editor also calls `ebayTaxonomy:getCategoryAspects` after a leaf category is known. The Convex action uses application OAuth, normalizes required flags, selection/cardinality rules, allowed values, and maximum lengths, and bounds unusually large value lists for transport. Structured fields already owned by FlipTracker remain authoritative; remaining required aspects are written into `itemSpecifics`. `createUnpublishedOffer` performs a fresh server-side required-aspect check before staging.
+
+`src/utils/listingReadiness.ts` is the framework-independent preflight ruleset. The Listings view uses it to summarize blockers, drive the exception queue, prevent individual and batch staging, and select the first correction step. Seller-wide policy/location gaps remain visible in Seller Connection, while item-specific gaps enter the Save & Next exception workflow.
+
 The old Sales Tracker frontend is not merged mechanically. Its useful lifecycle, metrics, filters, CSV export, and JSON migration concepts are rebuilt in FlipTracker's React and Convex architecture.
 
 ## Sourcing Decision Workflow

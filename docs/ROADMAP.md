@@ -199,3 +199,14 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Fetch category-specific aspects and allowed values for clothing
 - [ ] Add a high-throughput exception queue and keyboard shortcuts
 - [ ] Add saved per-user listing presets after authentication is complete
+
+## v0.6 Selling Readiness
+
+- [x] Validate title, category, price, photos, seller defaults, package data, and known required specifics before staging
+- [x] Load required category aspects and allowed values from eBay Taxonomy
+- [x] Add an exception queue grouped by category, photo, price, shipping, and specifics blockers
+- [x] Add shipping-policy eligibility and package-limit guardrails
+- [x] Add keyboard shortcuts plus Save and Next correction flow
+- [ ] Add readiness, lifecycle, and import-safety tests
+- [x] Code-split scanner, spreadsheet tools, and listing-heavy modules
+- [ ] Smoke test books, movies, games, cards, clothing, and general merchandise before release
