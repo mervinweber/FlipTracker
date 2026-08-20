@@ -213,6 +213,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .endListingQuestion h3 { margin:0 0 5px; font-size:17px; }
 .endListingQuestion p { margin:0; color:var(--muted); line-height:1.5; }
 .ebayDraftMeta { color:#5eead4; }
+.listingOrigin { color:#93c5fd; font-weight:700; }
 .ebayDraftError { max-width:220px; color:#fca5a5; line-height:1.35; }
 .listingQueueBar { display:grid; gap:16px; margin-bottom:18px; border-left:3px solid var(--accent); }
 .queueSummary { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }

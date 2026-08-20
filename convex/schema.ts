@@ -273,6 +273,7 @@ export default defineSchema({
     ebayImageFingerprint: v.optional(v.string()),
     ebayImageSource: v.optional(v.string()),
     ebayOfferId: v.optional(v.string()),
+    ebayListingOrigin: v.optional(v.string()),
     ebayInventorySku: v.optional(v.string()),
     ebayDraftStatus: v.optional(v.string()),
     ebayDraftCreatedAt: v.optional(v.number()),

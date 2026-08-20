@@ -126,6 +126,30 @@ function delay(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function asArray<T>(value: T | T[] | undefined): T[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function xmlValue(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function parsedAmount(value: unknown) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return Number(value);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Number(record["#text"] ?? record.value ?? 0);
+  }
+  return 0;
+}
+
 async function responseBody(response: Response) {
   const text = await response.text();
   if (!text) return undefined;
@@ -694,6 +718,7 @@ export const markDraftCreated = internalMutation({
       sku: args.sku,
       ebayInventorySku: args.sku,
       ebayOfferId: args.offerId,
+      ebayListingOrigin: "FlipTracker Inventory API",
       ebayCategoryId: args.categoryId,
       ebayImageUrl: args.imageUrl,
       ebayImageFingerprint: args.imageFingerprint,
@@ -853,6 +878,7 @@ export const reconcileSoldOrderLine = internalMutation({
         fees: args.fees,
         buyer: args.buyer,
         ebayInventorySku: args.sku,
+        ebayListingOrigin: "eBay app / Seller Hub",
         ebayOrderId: args.orderId,
         ebayOrderLineItemId: args.orderLineItemKey,
         ebayLastSyncedAt: now,
@@ -1063,6 +1089,79 @@ export const loadSetup = action({
   },
 });
 
+export const upsertActiveNativeListing = internalMutation({
+  args: {
+    externalListingId: v.string(),
+    title: v.string(),
+    sku: v.optional(v.string()),
+    currentPrice: v.optional(v.number()),
+    listingUrl: v.string(),
+    listedDate: v.optional(v.string()),
+    categoryId: v.optional(v.string()),
+    condition: v.optional(v.string()),
+    pictureUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db.query("marketplaceListings")
+      .withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId))
+      .first();
+    if (existing) {
+      const origin = existing.ebayOfferId ? "FlipTracker Inventory API" : existing.ebayListingOrigin || "eBay app / Seller Hub";
+      await ctx.db.patch(existing._id, {
+        status: existing.status === "Sold" ? "Sold" : "Active",
+        title: args.title,
+        sku: existing.sku || args.sku,
+        currentPrice: args.currentPrice,
+        listedPrice: existing.listedPrice ?? args.currentPrice,
+        listingUrl: args.listingUrl,
+        listedDate: existing.listedDate || args.listedDate,
+        ebayCategoryId: existing.ebayCategoryId || args.categoryId,
+        condition: existing.condition || args.condition,
+        ebayListingOrigin: origin,
+        ebayLastSyncedAt: now,
+        updatedAt: now,
+      });
+      if (existing.status !== "Sold") await ctx.db.patch(existing.assetId, { status: "Listed", updatedAt: now });
+      return { imported: false, updated: true, listingId: existing._id };
+    }
+    const assetId = await ctx.db.insert("assets", {
+      type: "General Merchandise",
+      title: args.title,
+      coverImageUrl: args.pictureUrl,
+      metadataSource: "eBay active listing import",
+      status: "Listed",
+      valueSource: "eBay listing price",
+      needsValueCheck: false,
+      ebayPrice: args.currentPrice,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const listingId = await ctx.db.insert("marketplaceListings", {
+      assetId,
+      platform: "eBay",
+      status: "Active",
+      sku: args.sku,
+      externalListingId: args.externalListingId,
+      listingUrl: args.listingUrl,
+      title: args.title,
+      condition: args.condition,
+      listedPrice: args.currentPrice,
+      currentPrice: args.currentPrice,
+      listedDate: args.listedDate,
+      ebayCategoryId: args.categoryId,
+      ebayListingOrigin: "eBay app / Seller Hub",
+      ebayDraftStatus: "Imported active eBay listing",
+      pricingStatus: "Published",
+      pricingSource: "eBay active listing import",
+      ebayLastSyncedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { imported: true, updated: false, listingId };
+  },
+});
+
 export const getSellerListingSummary = action({
   args: { adminKey: v.string() },
   handler: async (ctx, args): Promise<SellerListingSummary> => {
@@ -1098,6 +1197,66 @@ export const getSellerListingSummary = action({
       throw new ConvexError(needsAuthorization
         ? "Reconnect eBay once to authorize the account-wide listing count."
         : message);
+    }
+  },
+});
+
+export const syncActiveListings = action({
+  args: { adminKey: v.string() },
+  handler: async (ctx, args): Promise<{ checked: number; imported: number; updated: number }> => {
+    requireAdminKey(args.adminKey);
+    try {
+      const accessToken = await refreshAccessToken(ctx);
+      let pageNumber = 1;
+      let totalPages = 1;
+      let checked = 0;
+      let imported = 0;
+      let updated = 0;
+      do {
+        const response = await tradingApiFetch(accessToken, "GetMyeBaySelling", `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <DetailLevel>ReturnAll</DetailLevel>
+  <ActiveList>
+    <Include>true</Include>
+    <Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>${pageNumber}</PageNumber></Pagination>
+  </ActiveList>
+</GetMyeBaySellingRequest>`);
+        const active = (response as {
+          ActiveList?: {
+            ItemArray?: { Item?: unknown | unknown[] };
+            PaginationResult?: { TotalNumberOfPages?: number | string };
+          };
+        }).ActiveList;
+        totalPages = Math.max(1, Number(active?.PaginationResult?.TotalNumberOfPages ?? 1));
+        const items = asArray(active?.ItemArray?.Item) as Array<Record<string, any>>;
+        for (const item of items) {
+          const externalListingId = String(item.ItemID ?? "").trim();
+          const title = String(item.Title ?? "").trim();
+          if (!/^\d+$/.test(externalListingId) || !title) continue;
+          checked += 1;
+          const price = parsedAmount(item.SellingStatus?.CurrentPrice ?? item.StartPrice);
+          const listedDate = String(item.ListingDetails?.StartTime ?? "").slice(0, 10) || undefined;
+          const listingUrl = String(item.ListingDetails?.ViewItemURL ?? `${environment() === "production" ? "https://www.ebay.com" : "https://www.sandbox.ebay.com"}/itm/${externalListingId}`);
+          const result = await ctx.runMutation(internal.ebay.upsertActiveNativeListing, {
+            externalListingId,
+            title,
+            sku: item.SKU ? String(item.SKU) : undefined,
+            currentPrice: Number.isFinite(price) && price > 0 ? moneyRound(price) : undefined,
+            listingUrl,
+            listedDate,
+            categoryId: item.PrimaryCategory?.CategoryID ? String(item.PrimaryCategory.CategoryID) : undefined,
+            condition: item.ConditionDisplayName ? String(item.ConditionDisplayName) : undefined,
+            pictureUrl: item.PictureDetails?.GalleryURL ? String(item.PictureDetails.GalleryURL) : undefined,
+          });
+          if (result.imported) imported += 1;
+          if (result.updated) updated += 1;
+        }
+        pageNumber += 1;
+      } while (pageNumber <= totalPages && pageNumber <= 25);
+      return { checked, imported, updated };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown eBay error.";
+      throw new ConvexError(`eBay active-listing sync failed: ${message}`);
     }
   },
 });
@@ -1901,7 +2060,6 @@ export const updatePublishedPrice = action({
     if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId) {
       throw new ConvexError("Only active eBay listings can be repriced through this action.");
     }
-    if (!listing.ebayOfferId) throw new ConvexError("This listing is missing its eBay offer ID and cannot be repriced automatically.");
     if (!Number.isFinite(args.newPrice) || args.newPrice < 0.99) throw new ConvexError("The new eBay price must be at least $0.99.");
     const newPrice = moneyRound(args.newPrice);
     const oldPrice = moneyRound(listing.currentPrice ?? listing.listedPrice ?? 0);
@@ -1910,27 +2068,39 @@ export const updatePublishedPrice = action({
     try {
       const accessToken = await refreshAccessToken(ctx);
       const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
-      const response = await ebayFetch(accessToken, "/sell/inventory/v1/bulk_update_price_quantity", {
-        method: "POST",
-        body: JSON.stringify({
-          requests: [{
-            offers: [{
-              offerId: listing.ebayOfferId,
-              price: { value: newPrice.toFixed(2), currency: settings?.currency ?? "USD" },
+      if (listing.ebayOfferId) {
+        const response = await ebayFetch(accessToken, "/sell/inventory/v1/bulk_update_price_quantity", {
+          method: "POST",
+          body: JSON.stringify({
+            requests: [{
+              offers: [{
+                offerId: listing.ebayOfferId,
+                price: { value: newPrice.toFixed(2), currency: settings?.currency ?? "USD" },
+              }],
             }],
-          }],
-        }),
-      }) as {
-        responses?: Array<{
-          offerId?: string;
-          statusCode?: number;
-          errors?: Array<{ errorId?: number; message?: string; longMessage?: string; parameters?: Array<{ name?: string; value?: string }> }>;
-        }>;
-      } | undefined;
-      const updateResult = response?.responses?.find((entry) => entry.offerId === listing.ebayOfferId)
-        ?? response?.responses?.[0];
-      if (!updateResult || updateResult.statusCode !== 200 || updateResult.errors?.length) {
-        throw new Error(ebayError({ errors: updateResult?.errors }, updateResult?.statusCode ?? 500));
+          }),
+        }) as {
+          responses?: Array<{
+            offerId?: string;
+            statusCode?: number;
+            errors?: Array<{ errorId?: number; message?: string; longMessage?: string; parameters?: Array<{ name?: string; value?: string }> }>;
+          }>;
+        } | undefined;
+        const updateResult = response?.responses?.find((entry) => entry.offerId === listing.ebayOfferId)
+          ?? response?.responses?.[0];
+        if (!updateResult || updateResult.statusCode !== 200 || updateResult.errors?.length) {
+          throw new Error(ebayError({ errors: updateResult?.errors }, updateResult?.statusCode ?? 500));
+        }
+      } else {
+        if (!/^\d+$/.test(listing.externalListingId)) throw new Error("The eBay item ID is not valid.");
+        await tradingApiFetch(accessToken, "ReviseInventoryStatus", `<?xml version="1.0" encoding="utf-8"?>
+<ReviseInventoryStatusRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <InventoryStatus>
+    <ItemID>${xmlValue(listing.externalListingId)}</ItemID>
+    ${listing.sku ? `<SKU>${xmlValue(listing.sku)}</SKU>` : ""}
+    <StartPrice currencyID="${xmlValue(settings?.currency ?? "USD")}">${newPrice.toFixed(2)}</StartPrice>
+  </InventoryStatus>
+</ReviseInventoryStatusRequest>`);
       }
       await ctx.runMutation(internal.ebay.markPublishedPriceUpdated, {
         listingId: listing._id,

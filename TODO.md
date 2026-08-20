@@ -97,6 +97,9 @@ Prototype snapshot:
 - [x] Preserve listing price changes with a reason and timestamp
 - [x] Add confirmation-protected live eBay repricing by percentage, exact value, or calculated profit floor
 - [x] Revise active Inventory API listings from FlipTracker and explain that eBay's app/Seller Hub cannot edit those listings
+- [x] Show eBay listing origin and import/deduplicate active eBay app or Seller Hub listings
+- [x] Reprice native eBay fixed-price listings through Trading API while retaining Inventory API repricing for FlipTracker offers
+- [ ] Safely merge GetItem into ReviseFixedPriceItem before enabling title, description, category, condition, shipping, specifics, and photo updates for native eBay listings
 - [x] Add an account-wide eBay active/scheduled listing count with a configurable 200-listing planning target
 - [x] Add Inventory and Listings primary views
 - [x] Create an internal eBay draft from an inventory item
