@@ -18,11 +18,11 @@ Prototype snapshot:
 - [x] Suggest a matching seller fulfillment policy from the selected package profile
 - [x] Add structured clothing Brand, Department, Size, Color, Material, and Style item specifics
 - [x] Add deterministic backend package and media-category fallbacks for older drafts
-- [ ] Add a listing-readiness validator that explains every blocking eBay aspect before staging
-- [ ] Add category-specific aspect discovery from the eBay Taxonomy API, beginning with clothing leaf categories
+- [x] Add a listing-readiness validator that explains every blocking eBay aspect before staging
+- [x] Add category-specific aspect discovery from the eBay Taxonomy API, beginning with clothing leaf categories
 - [ ] Add saved shipping-profile defaults per item family after authentication/settings are user-owned
-- [ ] Add a one-screen keyboard-first exception queue for drafts blocked by photos, price, category, or required specifics
-- [ ] Code-split the listing factory and scanner to reduce the current large JavaScript bundle
+- [x] Add a one-screen keyboard-first exception queue for drafts blocked by photos, price, category, or required specifics
+- [x] Code-split the listing factory and scanner to reduce the current large JavaScript bundle
 
 ## v0.6 Selling Readiness
 
@@ -34,6 +34,29 @@ Prototype snapshot:
 - [ ] Task 6: expand the new readiness regression suite with lifecycle and import-safety tests plus friendly errors
 - [x] Task 7: code-split heavy workflows and smoke test desktop/mobile listing correction; complete production selling-path smoke after deployment
 - [x] Task 8: document the release scope and release gate in `docs/V0.6_RELEASE_PLAN.md`
+
+## v0.6.1 Release Hardening - Next
+
+- [ ] Add Draft -> Staged -> Published -> Sold/Ended lifecycle regression tests
+- [ ] Add import duplicate, partial-failure, and rollback tests
+- [ ] Normalize friendly retry guidance for eBay/Convex action failures
+- [ ] Verify offer staging and publishing remain idempotent after repeated clicks or interrupted requests
+- [ ] Run and record the production smoke matrix for book, movie, game, card, clothing, and general merchandise
+- [ ] Add a compact production health checklist for Convex, Vercel, eBay OAuth, policies, location, Taxonomy, publish, and sold sync
+
+## Queued After v0.6.1
+
+- [ ] v0.6.2: finish presets, exception retry/undo, completion summary, and throughput metrics (persisted batches and continuous scan mode are complete)
+- [ ] v0.6.3: finish listing-quality scoring, photo checks, fee/profit preview, and bulk validation (exact eBay payload preview is complete)
+- [ ] v0.6.4: saved comp snapshots, Product Research handoff, profit floors, and stale-price queue
+- [ ] v0.6.5: unmatched eBay operations inbox, reconciliation, safe bulk revise/end/relist, and lifecycle audit
+- [ ] v0.6.6: item-aware shipping recommendations, measured package presets, charge/cost preview, and fulfillment queue
+- [ ] v0.8: finish specialized books, movies/games, clothing, and general-merchandise workflows; the human-confirmed Pokemon/Yu-Gi-Oh! card scanner foundation is complete
+- [x] Add cached Pokemon TCG API and YGOPRODeck catalog adapters without making TCGplayer API access a launch dependency
+- [x] Add optional Gemini card-identifier extraction, exact-print candidate review, variant fields, and confirmed-card inventory/eBay-draft creation
+- [ ] Add card photo batches, reference-art rehosting, sports-card provider research, duplicate detection, and low-value lot rules
+- [ ] v0.9: authentication, owner-scoped data, onboarding, backups, telemetry, and private beta
+- [x] Document competitor workflow lessons in `docs/PRODUCT_BENCHMARKS.md`
 
 ## Completed Product Foundation
 

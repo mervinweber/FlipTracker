@@ -24,6 +24,14 @@ export type InventoryItem = {
   cardNumber?: string;
   cardPlayer?: string;
   cardTeam?: string;
+  cardProvider?: string;
+  cardProviderId?: string;
+  cardLanguage?: string;
+  cardRarity?: string;
+  cardFinish?: string;
+  cardEdition?: string;
+  cardIdentificationMethod?: string;
+  cardIdentificationConfidence?: number;
   coverImageUrl?: string;
   photoDataUrl?: string;
   metadataSource?: string;

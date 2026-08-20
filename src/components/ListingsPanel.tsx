@@ -7,6 +7,7 @@ import ListingPhotoManager from './ListingPhotoManager';
 import EbayCategoryFinder from './EbayCategoryFinder';
 import ListingReadinessPanel from './ListingReadinessPanel';
 import EbayCategoryAspects from './EbayCategoryAspects';
+import EbayPayloadPreview from './EbayPayloadPreview';
 import { validateListingReadiness, type ListingReadinessStep } from '../utils/listingReadiness';
 import {
   EBAY_CATEGORY_CHOICES,
@@ -128,13 +129,14 @@ type ActivePricingResult = {
 };
 
 type RepriceMode = 'percentage' | 'exact' | 'profit';
-type ListingEditorStep = ListingReadinessStep;
+type ListingEditorStep = ListingReadinessStep | 'preview';
 
 const LISTING_EDITOR_STEPS: Array<{ id: ListingEditorStep; label: string }> = [
   { id: 'details', label: 'Item' },
   { id: 'category', label: 'Category' },
   { id: 'shipping', label: 'Shipping & photos' },
   { id: 'price', label: 'Price & description' },
+  { id: 'preview', label: 'Preview' },
 ];
 
 type EbaySetup = {
@@ -1680,8 +1682,15 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <label className="span2">Internal Listing Notes<textarea value={editing.notes || ''} onChange={(event) => patchEditing({ notes: event.target.value })}/></label>
             <div className="formSection span2"><h3>Price History</h3><PriceHistory listingId={editing._id}/></div>
             </> : null}
+            {editorStep === 'preview' ? <div className="span2"><EbayPayloadPreview listing={{
+              ...editing,
+              paymentPolicyId: ebaySettings.paymentPolicyId,
+              returnPolicyId: ebaySettings.returnPolicyId,
+              inventoryLocationKey: ebaySettings.merchantLocationKey,
+              photoUrls: [editing.photoUrl, editing.ebayImageUrl].filter(Boolean),
+            }}/></div> : null}
           </div>
-          <div className="listingFactoryFooter"><button className="secondary" onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'price' ? <button onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button onClick={save}><Save size={16}/> {exceptionWorkflow ? 'Save & Next' : 'Save Listing'}</button>}</div></div>
+          <div className="listingFactoryFooter"><button className="secondary" onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'preview' ? <button onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button onClick={save}><Save size={16}/> {exceptionWorkflow ? 'Save & Next' : 'Save Listing'}</button>}</div></div>
         </section></div>
       ) : null}
     </>

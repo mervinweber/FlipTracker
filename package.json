@@ -2,7 +2,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build --configLoader runner",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "preview": "vite preview --host 0.0.0.0",
     "convex:dev": "convex dev",

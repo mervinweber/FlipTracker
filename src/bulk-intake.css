@@ -1,4 +1,12 @@
 .bulkIntakePage { display:grid; gap:18px; }
+.intakeBatchPanel { box-shadow:none; }
+.intakeBatchGrid { display:grid; grid-template-columns:minmax(190px, .8fr) minmax(220px, 1fr) minmax(220px, 1fr); gap:13px; align-items:end; }
+.intakeBatchActions { grid-column:1 / -1; }
+.speedCameraPanel { width:min(760px, 100%); margin:0 auto; box-shadow:none; }
+.speedCameraPanel > header { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+.speedCameraPanel > header strong, .speedCameraPanel > header small { display:block; }
+.speedCameraPanel > header small { margin-top:4px; color:var(--muted); }
+.speedCameraPanel .cameraFrame { margin-top:14px; aspect-ratio:4 / 3; min-height:280px; }
 .bulkScannerBand { display:grid; grid-template-columns:260px minmax(0, 1fr); align-items:center; gap:18px; padding:18px; border:1px solid rgba(20,184,166,.5); border-radius:var(--radius-panel); background:#0c1a25; box-shadow:0 12px 34px rgba(20,184,166,.09); }
 .scannerReady { display:flex; align-items:center; gap:12px; color:#99f6e4; }
 .scannerReady > svg { flex:0 0 auto; }
@@ -22,6 +30,6 @@
 .directPublishNotice { display:flex; align-items:flex-start; gap:8px; margin:0; padding:12px 14px; border-left:3px solid var(--warning); background:rgba(245,158,11,.07); color:#fde68a; font-size:13px; line-height:1.45; }
 .directPublishNotice svg { flex:0 0 auto; margin-top:1px; }
 @keyframes queueSpin { to { transform:rotate(360deg); } }
-@media (max-width:1000px) { .bulkDefaultsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-@media (max-width:760px) { .bulkScannerBand { grid-template-columns:1fr; } .bulkDefaultsGrid { grid-template-columns:1fr; } }
+@media (max-width:1000px) { .bulkDefaultsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } .intakeBatchGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media (max-width:760px) { .bulkScannerBand { grid-template-columns:1fr; } .bulkDefaultsGrid, .intakeBatchGrid { grid-template-columns:1fr; } }
 @media (max-width:520px) { .bulkScanForm { grid-template-columns:auto minmax(0, 1fr); } .bulkScanForm button { grid-column:1 / -1; justify-content:center; } }

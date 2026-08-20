@@ -6,6 +6,8 @@ This is the working memory for FlipTracker. Read this first when picking the pro
 
 FlipTracker is a resale inventory and research app for collectors and resellers. It starts with video games, then expands to cards, DVDs, Blu-rays, toys, electronics, and other collectibles.
 
+The current product direction is an eBay-first listing operating system. Cross-listing remains deferred. Near-term work should optimize the complete eBay pipeline: batch intake, identification review, listing readiness, pricing, publishing, active-inventory reconciliation, sold closeout, and fulfillment.
+
 The product should feel like a serious tool for making buying, listing, and collection-management decisions. It is not just a spreadsheet replacement; it should eventually help answer questions like:
 
 - What do I own?
@@ -109,6 +111,12 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Defer PriceCharting and other paid pricing providers until tester demand, product polish, and a paid FlipTracker subscription can support the cost.
 - Keep sourcing decisions deterministic and inspectable. Median reduces outlier impact; rarity and liquidity remain separate; low confidence prevents an automatic Buy even when a single comp looks profitable.
 - Keep eBay creation and eBay publishing separate. FlipTracker may create an unpublished offer after explicit seller authorization, but publishing remains absent until photos, category validation, account ownership, and a final confirmation step are reliable.
+- Organize new work around a batch pipeline instead of adding disconnected tools: Capture -> Identify -> Correct -> Price -> Publish -> Manage -> Sold/Fulfill.
+- v0.8 card intake is confirmation-first. Gemini may extract visible identifiers, then YGOPRODeck or Pokemon TCG API returns candidate printings; the seller must choose the exact printing and confirm language, finish, edition, and condition before saving. TCGplayer is not a launch dependency because its official documentation says new API access is not being granted, and Konami NEURON has no public developer recognition API.
+- Card catalog reference prices must remain visibly separate from verified eBay sold comps. Actual front/back photos remain required before publishing a card listing.
+- Finish v0.6.1 lifecycle reliability and production smoke testing before expanding listing automation.
+- Borrow continuous scanning and profit-rule ideas from book-scanning tools, batch validation from card-listing tools, and lifecycle/exception views from reseller inventory suites without rebuilding their cross-listing scope.
+- Use eBay Product Research as the authoritative seller-facing sold-data workflow when equivalent data is not available through approved APIs; do not present active asking prices as sold comps.
 
 ## Coding Conventions
 

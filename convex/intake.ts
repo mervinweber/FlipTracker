@@ -34,6 +34,8 @@ export const createScannedItem = mutation({
     ebayShipping: optionalText,
     createDraft: v.boolean(),
     skuPrefix: v.string(),
+    batchId: v.optional(v.id("intakeBatches")),
+    scanToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const title = args.title.trim();
@@ -45,6 +47,12 @@ export const createScannedItem = mutation({
 
     const now = Date.now();
     const ownerId = await currentOwnerId(ctx);
+    if (args.batchId && args.scanToken) {
+      const prior = await ctx.db.query("intakeBatchItems")
+        .withIndex("by_batchId_and_scanToken", (q) => q.eq("batchId", args.batchId!).eq("scanToken", args.scanToken!))
+        .unique();
+      if (prior) return { assetId: prior.assetId, listingId: prior.listingId ?? null, sku: prior.sku, copyNumber: prior.copyNumber, batchItemId: prior._id };
+    }
     const existingCopies = await ctx.db.query("assets").withIndex("by_upc", (q) => q.eq("upc", upc)).take(100);
     const assetId = await ctx.db.insert("assets", {
       ownerId,
@@ -65,6 +73,7 @@ export const createScannedItem = mutation({
       metadataConfidence: args.metadataConfidence,
       metadataCheckedAt: now,
       collectionId: args.collectionId,
+      intakeBatchId: args.batchId,
       storageLocation: args.storageLocation,
       purchasePrice: args.purchasePrice,
       condition: args.condition,
@@ -89,7 +98,17 @@ export const createScannedItem = mutation({
 
     const prefix = args.skuPrefix.trim().replace(/[^A-Za-z0-9-]/g, "").slice(0, 18) || "FT";
     const sku = `${prefix}-${String(assetId).slice(-8).toUpperCase()}`;
-    if (!args.createDraft) return { assetId, listingId: null, sku, copyNumber: existingCopies.length + 1 };
+    if (!args.createDraft) {
+      const copyNumber = existingCopies.length + 1;
+      const batchItemId = args.batchId ? await ctx.db.insert("intakeBatchItems", {
+        ownerId, batchId: args.batchId, scanToken: args.scanToken || String(assetId), barcode: upc,
+        status: args.metadataConfidence === "Low" || args.mediaFormat === "Unknown" ? "Review" : "Saved",
+        assetId, title, mediaFormat: args.mediaFormat, confidence: args.metadataConfidence, sku, copyNumber,
+        createdAt: now, updatedAt: now,
+      }) : null;
+      if (args.batchId) await ctx.db.patch(args.batchId, { updatedAt: now });
+      return { assetId, listingId: null, sku, copyNumber, batchItemId };
+    }
     const mediaIdentity = `${args.type} ${args.mediaFormat ?? ""}`.trim().toLowerCase();
     const isSingleMediaCase = ["dvd", "blu-ray", "blu ray", "cd"].some((format) => mediaIdentity.includes(format));
     const isBookWithCover = mediaIdentity.includes("book") && Boolean(args.coverImageUrl);
@@ -97,6 +116,7 @@ export const createScannedItem = mutation({
     const listingId = await ctx.db.insert("marketplaceListings", {
       ownerId,
       assetId,
+      intakeBatchId: args.batchId,
       platform: "eBay",
       status: "Draft",
       sku,
@@ -141,6 +161,14 @@ export const createScannedItem = mutation({
       });
     }
 
-    return { assetId, listingId, sku, copyNumber: existingCopies.length + 1 };
+    const copyNumber = existingCopies.length + 1;
+    const batchItemId = args.batchId ? await ctx.db.insert("intakeBatchItems", {
+      ownerId, batchId: args.batchId, scanToken: args.scanToken || String(assetId), barcode: upc,
+      status: args.metadataConfidence === "Low" || args.mediaFormat === "Unknown" ? "Review" : "Saved",
+      assetId, listingId, title, mediaFormat: args.mediaFormat, confidence: args.metadataConfidence, sku, copyNumber,
+      createdAt: now, updatedAt: now,
+    }) : null;
+    if (args.batchId) await ctx.db.patch(args.batchId, { updatedAt: now });
+    return { assetId, listingId, sku, copyNumber, batchItemId };
   },
 });

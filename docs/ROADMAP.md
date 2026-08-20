@@ -2,6 +2,19 @@
 
 FlipTracker should grow deliberately from a focused personal resale tracker into a polished collector/reseller platform.
 
+## Current Delivery Sequence
+
+1. `v0.6.1` - reliability, idempotency, and production smoke testing
+2. `v0.6.2` - continuous scanning, first-class batches, and reusable intake presets
+3. `v0.6.3` - exact eBay preview, listing-quality checks, and bulk validation
+4. `v0.6.4` - comp snapshots, profit floors, repricing, and stale-listing decisions
+5. `v0.6.5` - eBay reconciliation, unmatched records, and active-inventory operations
+6. `v0.6.6` - shipping recommendations, package economics, and fulfillment queue
+7. `v0.8` - specialized book, media, card, clothing, and general-merchandise workflows
+8. `v0.9` - authentication, owner-scoped data, onboarding, and private beta
+
+See `docs/PRODUCT_BENCHMARKS.md` for the product research behind this sequence.
+
 ## Product Lessons From Underpriced
 
 Underpriced is useful as a reference because it frames the reseller workflow around fast buy/skip decisions, not just inventory storage. Publicly visible ideas worth adapting for FlipTracker:
@@ -81,7 +94,7 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Add bounded bulk pricing approval with a review-before-apply queue
 - [ ] Keep active asking prices separate from manual or future automated sold comps
 
-## v0.6 AI Photo Recognition
+## Future Track - AI Photo Recognition
 - [ ] Photo/spine import workflow
 - [ ] Identify titles from shelf/spine photos
 - [ ] Confidence review queue
@@ -195,9 +208,9 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [x] Add shipping profiles with policy hints and advanced package overrides
 - [x] Add Clothing intake and structured listing specifics
 - [x] Preserve old drafts and explicit package/category overrides
-- [ ] Validate required category aspects before staging instead of waiting for an eBay error
-- [ ] Fetch category-specific aspects and allowed values for clothing
-- [ ] Add a high-throughput exception queue and keyboard shortcuts
+- [x] Validate required category aspects before staging instead of waiting for an eBay error
+- [x] Fetch category-specific aspects and allowed values for clothing
+- [x] Add a high-throughput exception queue and keyboard shortcuts
 - [ ] Add saved per-user listing presets after authentication is complete
 
 ## v0.6 Selling Readiness
@@ -210,3 +223,95 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 - [ ] Add readiness, lifecycle, and import-safety tests
 - [x] Code-split scanner, spreadsheet tools, and listing-heavy modules
 - [ ] Smoke test books, movies, games, cards, clothing, and general merchandise before release
+
+## v0.6.1 Release Hardening
+
+Goal: make the current listing factory dependable enough for a full week of real selling.
+
+- [ ] Add listing lifecycle tests for Draft -> Staged -> Published -> Sold/Ended
+- [ ] Add import deduplication and rollback tests
+- [ ] Make eBay action errors actionable and retry-safe
+- [ ] Verify staging and publishing are idempotent for repeated clicks and network retries
+- [ ] Run the production smoke matrix for a book, DVD/Blu-ray, game, card, clothing item, and general merchandise item
+- [ ] Add a release checklist showing Convex deployment, Vercel build, OAuth, seller defaults, and sold-sync health
+- [x] Reconcile stale TODO entries that were completed by v0.6
+
+Release gate: no known lifecycle transition can create a duplicate offer, duplicate sale, or orphaned inventory record.
+
+## v0.6.2 Speed Intake And Batches
+
+Goal: reduce touches per item when scanning a stack.
+
+- [x] Make an intake batch a first-class record with name, source, purchase cost, defaults, progress, and persisted scan items
+- [x] Add continuous camera Speed Mode that keeps the scanner open between items
+- [ ] Add reusable presets by item family for condition, completeness, bin, shipping profile, description, and draft behavior
+- [ ] Show duplicate-copy count, lookup confidence, and exception reason inline during scanning
+- [x] Add pause/resume controls and retry-safe scan tokens
+- [ ] Add retry-failed-lookup and undo-last-scan controls
+- [ ] Add a batch completion screen: scanned, identified, needs review, ready for photos, ready for pricing, and ready for eBay
+- [ ] Record scan-to-ready time so workflow improvements can be measured
+
+## v0.6.3 Listing Quality And Preview
+
+Goal: show exactly what eBay will receive before the seller commits.
+
+- [x] Add an eBay payload preview for title, category, condition, specifics, description, photos, price, quantity, package, and policies
+- [ ] Add title-length and keyword guidance without silently rewriting seller text
+- [ ] Score required/recommended item-specific coverage by category
+- [ ] Add photo order, rotation, missing-angle, and low-resolution checks
+- [ ] Add a fee/profit preview using clearly labeled estimates and seller-configurable assumptions
+- [ ] Support bulk validation with successful rows separated from exceptions
+- [ ] Track eBay draft/staged age and warn before records become stale
+
+## v0.6.4 Pricing And Offers Workspace
+
+Goal: turn research and repricing into a repeatable daily queue.
+
+- [ ] Save comp snapshots with query, condition, sample size, median, range, shipping, confidence, and timestamp
+- [x] Deep-link each record into eBay Product Research with a normalized query
+- [x] Keep active asking-price signals separate from seller-entered or verified sold data
+- [x] Calculate minimum acceptable price from cost, fees, shipping, and target profit
+- [x] Add bounded bulk price refresh with review-before-apply and immutable price history
+- [ ] Add stale-listing rules by age, views/watchers when available, price, category, and margin
+- [ ] Investigate eBay-supported Offers to Buyers capabilities; do not automate until API support and margin safeguards are verified
+
+## v0.6.5 Active Inventory Operations
+
+Goal: make FlipTracker the reliable source of truth after publication.
+
+- [ ] Add an operations inbox for unmatched sales, ended listings, quantity conflicts, sync failures, and missing inventory links
+- [x] Import unmatched eBay paid-order lines as reviewable sold records without creating duplicates
+- [ ] Reconcile local and eBay status, price, quantity, URL, SKU, and listing ID
+- [ ] Add safe bulk revise, end, and relist workflows with per-item outcomes
+- [ ] Add stale inventory views and a configurable review cadence
+- [ ] Surface orders awaiting shipment and preserve tracking/shipping state when eBay APIs permit
+- [ ] Add a lifecycle audit trail showing who/what changed each state
+
+## v0.6.6 Shipping And Fulfillment
+
+Goal: make shipping selection understandable and hard to misconfigure.
+
+- [x] Put item-aware package and service recommendations before advanced policy/package overrides
+- [ ] Save seller-measured package profiles by item family and quantity range (built-in profiles exist)
+- [ ] Preview buyer charge, estimated label cost, dimensional-weight risk, insurance, and net shipping impact
+- [x] Block known Media Mail and Standard Envelope eligibility/package errors before staging
+- [ ] Expand plain-language guidance for Priority Mail, UPS, FedEx, insurance, and dimensional weight
+- [ ] Add packing and insurance prompts for high-value items
+- [ ] Add post-sale packing queue, label/tracking handoff, and shipped confirmation where supported
+
+## v0.8 Vertical Listing Intelligence
+
+- [ ] Books: continuous ISBN intake, edition/cover confidence, author/title normalization, and lot grouping
+- [ ] Movies and games: edition, region, completeness, disc count, and bundle recommendations
+- [x] Cards foundation: phone photo/manual identifier capture, human-approved catalog match, and persisted set/card/provider/language/rarity/finish/edition fields
+- [ ] Cards completion: image batches, reference-image rehosting, sports-card provider, duplicate detection, and low-value lot rules
+- [ ] Clothing: reusable measurement templates, size/brand/category presets, and photo checklist
+- [ ] General merchandise: category suggestion, measured shipping, and flexible specifics
+
+## v0.9 Private Beta
+
+- [ ] Add authentication and owner-scoped Convex data
+- [ ] Backfill existing single-owner records safely
+- [ ] Add onboarding for eBay OAuth, seller defaults, shipping profiles, first scan, and first test listing
+- [ ] Add backup/export, error telemetry, privacy terms, and account deletion
+- [ ] Invite a small beta group only after ownership and production smoke tests pass

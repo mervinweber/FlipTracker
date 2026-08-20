@@ -2,6 +2,49 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  intakeBatches: defineTable({
+    ownerId: v.optional(v.string()),
+    name: v.string(),
+    status: v.string(),
+    source: v.optional(v.string()),
+    purchaseTotal: v.optional(v.number()),
+    defaultCondition: v.optional(v.string()),
+    defaultCompleteness: v.optional(v.string()),
+    defaultCollectionId: v.optional(v.id("collections")),
+    defaultStorageLocation: v.optional(v.string()),
+    defaultPurchasePrice: v.optional(v.number()),
+    defaultListingPrice: v.optional(v.number()),
+    defaultShippingPlan: v.optional(v.string()),
+    defaultSkuPrefix: v.optional(v.string()),
+    createDraft: v.boolean(),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_updatedAt", ["updatedAt"]),
+
+  intakeBatchItems: defineTable({
+    ownerId: v.optional(v.string()),
+    batchId: v.id("intakeBatches"),
+    scanToken: v.string(),
+    barcode: v.string(),
+    status: v.string(),
+    assetId: v.id("assets"),
+    listingId: v.optional(v.id("marketplaceListings")),
+    title: v.string(),
+    mediaFormat: v.optional(v.string()),
+    confidence: v.optional(v.string()),
+    sku: v.string(),
+    copyNumber: v.number(),
+    message: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_batchId", ["batchId"])
+    .index("by_batchId_and_scanToken", ["batchId", "scanToken"]),
+
   collections: defineTable({
     ownerId: v.optional(v.string()),
     name: v.string(),
@@ -33,6 +76,14 @@ export default defineSchema({
     cardSport: v.optional(v.string()),
     cardSet: v.optional(v.string()),
     cardNumber: v.optional(v.string()),
+    cardProvider: v.optional(v.string()),
+    cardProviderId: v.optional(v.string()),
+    cardLanguage: v.optional(v.string()),
+    cardRarity: v.optional(v.string()),
+    cardFinish: v.optional(v.string()),
+    cardEdition: v.optional(v.string()),
+    cardIdentificationMethod: v.optional(v.string()),
+    cardIdentificationConfidence: v.optional(v.number()),
     cardPlayer: v.optional(v.string()),
     cardTeam: v.optional(v.string()),
     coverImageUrl: v.optional(v.string()),
@@ -41,6 +92,7 @@ export default defineSchema({
     metadataConfidence: v.optional(v.string()),
     metadataCheckedAt: v.optional(v.number()),
     collectionId: v.optional(v.id("collections")),
+    intakeBatchId: v.optional(v.id("intakeBatches")),
     storageLocation: v.optional(v.string()),
     estimatedLow: v.optional(v.number()),
     estimatedHigh: v.optional(v.number()),
@@ -168,6 +220,7 @@ export default defineSchema({
   marketplaceListings: defineTable({
     ownerId: v.optional(v.string()),
     assetId: v.id("assets"),
+    intakeBatchId: v.optional(v.id("intakeBatches")),
     platform: v.string(),
     salePlatform: v.optional(v.string()),
     saleReference: v.optional(v.string()),
@@ -188,6 +241,12 @@ export default defineSchema({
     cardSport: v.optional(v.string()),
     cardSet: v.optional(v.string()),
     cardNumber: v.optional(v.string()),
+    cardProvider: v.optional(v.string()),
+    cardProviderId: v.optional(v.string()),
+    cardLanguage: v.optional(v.string()),
+    cardRarity: v.optional(v.string()),
+    cardFinish: v.optional(v.string()),
+    cardEdition: v.optional(v.string()),
     cardPlayer: v.optional(v.string()),
     cardTeam: v.optional(v.string()),
     itemSpecifics: v.optional(v.string()),
@@ -291,6 +350,15 @@ export default defineSchema({
   })
     .index("by_listingId", ["listingId"])
     .index("by_assetId", ["assetId"]),
+
+  cardCatalogCache: defineTable({
+    provider: v.string(),
+    cacheKey: v.string(),
+    candidatesJson: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_provider_and_cacheKey", ["provider", "cacheKey"]),
 
   sourcingAnalyses: defineTable({
     ownerId: v.optional(v.string()),

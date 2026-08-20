@@ -10,12 +10,15 @@
 
 import type * as aiDescriptions from "../aiDescriptions.js";
 import type * as assets from "../assets.js";
+import type * as cardCatalog from "../cardCatalog.js";
+import type * as cardIntake from "../cardIntake.js";
 import type * as collections from "../collections.js";
 import type * as crossListings from "../crossListings.js";
 import type * as ebay from "../ebay.js";
 import type * as ebayTaxonomy from "../ebayTaxonomy.js";
 import type * as http from "../http.js";
 import type * as intake from "../intake.js";
+import type * as intakeBatches from "../intakeBatches.js";
 import type * as linkedAccounts from "../linkedAccounts.js";
 import type * as listings from "../listings.js";
 import type * as mediaLookup from "../mediaLookup.js";
@@ -34,12 +37,15 @@ import type {
 declare const fullApi: ApiFromModules<{
   aiDescriptions: typeof aiDescriptions;
   assets: typeof assets;
+  cardCatalog: typeof cardCatalog;
+  cardIntake: typeof cardIntake;
   collections: typeof collections;
   crossListings: typeof crossListings;
   ebay: typeof ebay;
   ebayTaxonomy: typeof ebayTaxonomy;
   http: typeof http;
   intake: typeof intake;
+  intakeBatches: typeof intakeBatches;
   linkedAccounts: typeof linkedAccounts;
   listings: typeof listings;
   mediaLookup: typeof mediaLookup;

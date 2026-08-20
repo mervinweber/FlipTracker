@@ -1,0 +1,30 @@
+.cardScannerWorkspace { display: grid; gap: 18px; }
+.cardScannerHeader { align-items: flex-start; }
+.cardScannerHeader .statusPill { display: inline-flex; align-items: center; gap: 6px; }
+.cardGameSwitch { display: flex; gap: 8px; width: fit-content; }
+.cardScannerColumns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); background: var(--panel); border-radius: 8px; overflow: hidden; }
+.cardScannerStage { min-width: 0; padding: 20px; border-right: 1px solid var(--border); }
+.cardScannerStage:last-child { border-right: 0; }
+.cardScannerStage > header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+.cardScannerStage > header > span { display: grid; place-items: center; flex: 0 0 28px; height: 28px; border-radius: 50%; background: var(--primary); color: white; font-weight: 800; }
+.cardScannerStage h3 { margin: 1px 0 3px; font-size: 1rem; }
+.cardScannerStage header p, .cardScannerStage small { margin: 0; color: var(--muted); }
+.cardPhotoAction { min-height: 132px; display: grid; place-items: center; align-content: center; gap: 6px; padding: 18px; border: 1px dashed var(--accent); background: var(--surface); text-align: center; cursor: pointer; }
+.cardPhotoAction input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.cardIdentityFields, .cardConfirmFields { display: grid; gap: 12px; margin: 16px 0; }
+.cardConfirmFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cardCandidateList { display: grid; gap: 8px; max-height: 570px; overflow-y: auto; }
+.cardCandidate { width: 100%; min-height: 90px; display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--border); }
+.cardCandidate:hover, .cardCandidate.selected { border-color: var(--accent); background: var(--surface-strong); }
+.cardCandidate img, .cardImagePlaceholder { width: 58px; height: 78px; object-fit: contain; background: #080d18; border-radius: 4px; }
+.cardImagePlaceholder { display: grid; place-items: center; color: var(--muted); font-size: .68rem; text-align: center; }
+.cardCandidate span { display: grid; min-width: 0; gap: 4px; }
+.cardCandidate strong, .cardCandidate small { overflow-wrap: anywhere; }
+.cardScannerEmpty { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 8px; color: var(--muted); border: 1px dashed var(--border); }
+.checkboxLabel { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; margin: 8px 0 14px; }
+.checkboxLabel input { width: auto; }
+.cardPhotoReminder { margin: 12px 0 0; color: var(--warning); font-size: .82rem; }
+.spin { animation: cardSpin .8s linear infinite; }
+@keyframes cardSpin { to { transform: rotate(360deg); } }
+@media (max-width: 1080px) { .cardScannerColumns { grid-template-columns: 1fr; } .cardScannerStage { border-right: 0; border-bottom: 1px solid var(--border); } .cardScannerStage:last-child { border-bottom: 0; } }
+@media (max-width: 600px) { .cardConfirmFields { grid-template-columns: 1fr; } .cardScannerStage { padding: 15px; } .cardScannerHeader { display: grid; } }
