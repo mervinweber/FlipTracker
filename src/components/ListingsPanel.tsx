@@ -400,6 +400,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const createEbayOffer = useAction(api.ebay.createUnpublishedOffer);
   const publishEbayOffer = useAction(api.ebay.publishOffer);
   const updateEbayPrice = useAction(api.ebay.updatePublishedPrice);
+  const revisePublishedListing = useAction(api.ebay.revisePublishedListing);
   const endEbayListing = useAction(api.ebay.endPublishedListing);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
@@ -422,6 +423,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [repriceCharm, setRepriceCharm] = useState(true);
   const [repriceBusy, setRepriceBusy] = useState(false);
   const [repriceError, setRepriceError] = useState('');
+  const [listingSaveBusy, setListingSaveBusy] = useState(false);
+  const [listingSaveError, setListingSaveError] = useState('');
   const markEditingPhotoReady = useCallback(() => {
     setEditing((current) => current && !current.hasActualPhoto ? { ...current, hasActualPhoto: true } : current);
   }, []);
@@ -599,6 +602,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setExceptionWorkflow(fromExceptionQueue);
     setTaxonomyMissingAspects([]);
     setDescriptionError('');
+    setListingSaveError('');
     setEditorStep(initialStep);
     setEditing({
       ...listing,
@@ -1237,9 +1241,17 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
   async function save() {
     if (!editing?.title.trim()) return;
+    const updatesLiveEbay = editing.platform === 'eBay' && editing.status === 'Active' && Boolean(editing.externalListingId && editing.ebayOfferId);
+    if (updatesLiveEbay && !adminKey) {
+      setListingSaveError('Load your private access key in Seller Connection before revising this live eBay listing.');
+      return;
+    }
+    setListingSaveBusy(true);
+    setListingSaveError('');
     const soldDate = editing.status === 'Sold' ? editing.soldDate || dateToday() : editing.soldDate;
     const soldPrice = editing.status === 'Sold' ? editing.soldPrice ?? editing.currentPrice ?? editing.listedPrice : editing.soldPrice;
-    await updateListing({
+    try {
+      await updateListing({
       id: editing._id,
       platform: editing.platform,
       saleChannelDetail: editing.platform === 'Other' ? editing.saleChannelDetail || undefined : undefined,
@@ -1283,17 +1295,26 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       packageHeightIn: editing.packageHeightIn,
       imageMode: editing.imageMode || undefined,
       priceChangeReason: priceChangeReason || undefined,
-    });
-    const savedListingId = editing._id;
-    const nextException = exceptionWorkflow ? exceptionListings.find((listing) => listing._id !== savedListingId) : undefined;
-    if (nextException) {
-      const nextStep = (readinessByListingId.get(nextException._id) || []).find((issue) => issue.blocking)?.step || 'details';
-      openListingEditor(nextException, nextStep, true);
-    } else {
-      setEditing(null);
-      setExceptionWorkflow(false);
+      });
+      if (updatesLiveEbay) {
+        const result = await revisePublishedListing({ adminKey, listingId: editing._id });
+        setEbayNotice(`Updated live eBay listing ${result.listingId}. Inventory API listings must be revised through FlipTracker.`);
+      }
+      const savedListingId = editing._id;
+      const nextException = exceptionWorkflow ? exceptionListings.find((listing) => listing._id !== savedListingId) : undefined;
+      if (nextException) {
+        const nextStep = (readinessByListingId.get(nextException._id) || []).find((issue) => issue.blocking)?.step || 'details';
+        openListingEditor(nextException, nextStep, true);
+      } else {
+        setEditing(null);
+        setExceptionWorkflow(false);
+      }
+      setPriceChangeReason('');
+    } catch (error) {
+      setListingSaveError(error instanceof Error ? error.message : 'Could not save this listing.');
+    } finally {
+      setListingSaveBusy(false);
     }
-    setPriceChangeReason('');
   }
 
   useEffect(() => {
@@ -1497,7 +1518,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.externalListingId) ? <button className="iconButton ebayEndButton" disabled={endListingBusy || !adminKey} aria-label={`End ${listing.title} on eBay`} title="End live eBay listing" onClick={() => { setEndListingError(''); setEndListingPrompt(listing); }}><CircleStop size={16}/></button> : null}
                     <button className="iconButton saleCloseButton" aria-label={`${listing.status === 'Sold' ? 'Edit sale for' : 'Record sale for'} ${listing.title}`} title={listing.status === 'Sold' ? 'Edit sale details' : 'Record sale'} onClick={() => requestSaleEditor(listing)}><DollarSign size={15}/></button>
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
-                    {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="Open marketplace listing" title="Open marketplace listing"><ExternalLink size={15}/></a> : null}
+                    {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="View marketplace listing" title={listing.platform === 'eBay' && listing.ebayOfferId ? 'View on eBay. Inventory API listings must be edited in FlipTracker.' : 'Open marketplace listing'}><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
                   </div></td>
                 </tr>
@@ -1603,11 +1624,12 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <span className={editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}>{editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'Image ready' : 'Image needed' : editing.hasActualPhoto ? 'Photos ready' : 'Photo needed'}</span>
             <span className={(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'ready' : 'missing'}>{(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'Price ready' : 'Price needed'}</span>
           </div>
+          {editing.platform === 'eBay' && editing.status === 'Active' && editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Inventory API listing:</strong> eBay's app and Seller Hub cannot revise this listing. Make changes here and use Save &amp; Update eBay. Use End Listing or Record Sale for status changes.</p> : null}
           <div className="formGrid listingFactoryForm">
             <div className="span2 listingReadinessPanelWrap"><ListingReadinessPanel issues={editingReadinessIssues} onNavigate={setEditorStep}/></div>
             {editorStep === 'details' ? <>
             <label>Platform<select value={editing.platform} onChange={(event) => patchEditing({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
-            <label>Status<select value={editing.status} onChange={(event) => patchEditing({ status: event.target.value })}>{STATUSES.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label>Status<select value={editing.status} disabled={editing.platform === 'eBay' && editing.status === 'Active' && Boolean(editing.ebayOfferId)} onChange={(event) => patchEditing({ status: event.target.value })}>{STATUSES.map((value) => <option key={value}>{value}</option>)}</select></label>
             {editing.platform === 'Other' ? <label className="span2">Sale Channel<input value={editing.saleChannelDetail || ''} onChange={(event) => patchEditing({ saleChannelDetail: event.target.value })} placeholder="Local shop, yard sale, convention..."/></label> : null}
             <label className="span2">Listing Title<input value={editing.title} onChange={(event) => patchEditing({ title: event.target.value })}/></label>
             <label>SKU<input value={editing.sku || ''} onChange={(event) => patchEditing({ sku: event.target.value })}/></label>
@@ -1690,7 +1712,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               photoUrls: [editing.photoUrl, editing.ebayImageUrl].filter(Boolean),
             }}/></div> : null}
           </div>
-          <div className="listingFactoryFooter"><button className="secondary" onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'preview' ? <button onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button onClick={save}><Save size={16}/> {exceptionWorkflow ? 'Save & Next' : 'Save Listing'}</button>}</div></div>
+          {listingSaveError ? <p className="formError listingSaveError">{listingSaveError}</p> : null}
+          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'preview' ? <button disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button disabled={listingSaveBusy} onClick={save}><Save size={16}/> {listingSaveBusy ? 'Updating...' : exceptionWorkflow ? 'Save & Next' : editing.platform === 'eBay' && editing.status === 'Active' && editing.ebayOfferId ? 'Save & Update eBay' : 'Save Listing'}</button>}</div></div>
         </section></div>
       ) : null}
     </>

@@ -96,6 +96,7 @@ Prototype snapshot:
 - [x] Add listing create, update, sold, and delete behavior
 - [x] Preserve listing price changes with a reason and timestamp
 - [x] Add confirmation-protected live eBay repricing by percentage, exact value, or calculated profit floor
+- [x] Revise active Inventory API listings from FlipTracker and explain that eBay's app/Seller Hub cannot edit those listings
 - [x] Add an account-wide eBay active/scheduled listing count with a configurable 200-listing planning target
 - [x] Add Inventory and Listings primary views
 - [x] Create an internal eBay draft from an inventory item

@@ -1857,6 +1857,35 @@ export const publishOffer = action({
   },
 });
 
+export const revisePublishedListing = action({
+  args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
+  handler: async (ctx, args): Promise<{ listingId: string; listingUrl: string; offerId: string }> => {
+    requireAdminKey(args.adminKey);
+    const before = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    if (!before) throw new ConvexError("Listing or inventory item not found.");
+    const { listing } = before;
+    if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId || !listing.ebayOfferId) {
+      throw new ConvexError("Only a published Inventory API listing can be revised through this action.");
+    }
+    try {
+      const refreshed = await ctx.runAction(api.ebay.createUnpublishedOffer, args);
+      const listingUrl = listing.listingUrl || (environment() === "production"
+        ? `https://www.ebay.com/itm/${listing.externalListingId}`
+        : `https://www.sandbox.ebay.com/itm/${listing.externalListingId}`);
+      await ctx.runMutation(internal.ebay.markOfferPublished, {
+        listingId: listing._id,
+        ebayListingId: listing.externalListingId,
+        listingUrl,
+      });
+      return { listingId: listing.externalListingId, listingUrl, offerId: refreshed.offerId };
+    } catch (error) {
+      const message = `eBay listing revision failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`;
+      await ctx.runMutation(internal.ebay.markDraftError, { listingId: listing._id, message });
+      throw new ConvexError(message);
+    }
+  },
+});
+
 export const updatePublishedPrice = action({
   args: {
     adminKey: v.string(),
