@@ -55,7 +55,7 @@ Prototype snapshot:
 - [x] Add cached Pokemon TCG API and YGOPRODeck catalog adapters without making TCGplayer API access a launch dependency
 - [x] Add optional Gemini card-identifier extraction, exact-print candidate review, variant fields, and confirmed-card inventory/eBay-draft creation
 - [ ] Add card photo batches, reference-art rehosting, sports-card provider research, duplicate detection, and low-value lot rules
-- [ ] v0.9: authentication, owner-scoped data, onboarding, backups, telemetry, and private beta
+- [ ] v0.9: authentication and owner-scoped/eBay-tenant foundations are implemented; activate Clerk, claim legacy data, complete onboarding/backups/telemetry, and pass private-beta isolation tests
 - [x] Document competitor workflow lessons in `docs/PRODUCT_BENCHMARKS.md`
 
 ## Completed Product Foundation
@@ -144,6 +144,15 @@ Prototype snapshot:
 - [x] Upload the stored photo set to eBay Picture Services and reuse cached eBay URLs
 
 ## Beta Launch Blockers - Engineering
+
+- [x] Add optional Clerk sign-in and authenticated Convex provider wiring
+- [x] Add owner IDs/indexes and enforce ownership on private reads and writes
+- [x] Add an admin-protected first-owner migration for legacy records
+- [x] Scope eBay OAuth, seller defaults, active imports, and sold imports by owner
+- [ ] Configure Clerk issuer/public key, activate `convex/auth.config.ts`, and claim existing production data
+- [ ] Set `FLIPTRACKER_AUTH_REQUIRED=true` only after the claim and isolation checks pass
+- [ ] Verify a second beta account cannot see or mutate the first owner's records
+- [ ] Add self-service account deletion, retention language, and a tested restore process
 
 These must be completed in code before the beta URL is shared with other users.
 
@@ -251,7 +260,7 @@ These must be completed in code before the beta URL is shared with other users.
 - [ ] Open Terminal and change into the project:
 
   ```bash
-  cd /Users/mervinweber/Documents/FlipTracker
+  cd /Users/mervinweber/Documents/FlipTrackerV2/FlipTracker
   ```
 
 - [ ] Install dependencies:

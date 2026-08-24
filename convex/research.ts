@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { applyOwnerFilter, assertOwner, currentOwnerId } from "./ownership";
 
 export const addValueCheck = mutation({
   args: {
@@ -17,6 +17,7 @@ export const addValueCheck = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.assetId), ownerId, "Inventory item");
     await ctx.db.insert("valueHistory", {
       ownerId,
       assetId: args.assetId, source: args.source, low: args.low, high: args.high,
@@ -36,6 +37,9 @@ export const addValueCheck = mutation({
 
 export const historyForAsset = query({
   args: { assetId: v.id("assets") },
-  handler: async (ctx, args) =>
-    await ctx.db.query("valueHistory").withIndex("by_asset", (q) => q.eq("assetId", args.assetId)).collect(),
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.assetId), ownerId, "Inventory item");
+    return applyOwnerFilter(await ctx.db.query("valueHistory").withIndex("by_asset", (q) => q.eq("assetId", args.assetId)).collect(), ownerId);
+  },
 });

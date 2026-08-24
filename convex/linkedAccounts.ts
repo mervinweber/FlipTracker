@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { assertOwner, currentOwnerId } from "./ownership";
 
 const platforms = ["eBay", "Poshmark", "Mercari", "Depop", "Facebook Marketplace", "OfferUp", "Craigslist", "Other"];
 const statuses = ["Linked", "Needs Login", "Paused", "Disconnected"];
@@ -45,7 +45,7 @@ export const update = mutation({
   },
   handler: async (ctx, { id, ...patch }) => {
     const existing = await ctx.db.get(id);
-    if (!existing) throw new Error("Linked account not found");
+    assertOwner(existing, await currentOwnerId(ctx), "Linked account");
     await ctx.db.patch(id, { ...patch, updatedAt: Date.now() });
     return id;
   },
@@ -54,6 +54,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("linkedAccounts") },
   handler: async (ctx, args) => {
+    assertOwner(await ctx.db.get(args.id), await currentOwnerId(ctx), "Linked account");
     await ctx.db.delete(args.id);
     return null;
   },

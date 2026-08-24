@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { currentOwnerId } from "./ownership";
+import { assertOwner, currentOwnerId } from "./ownership";
 
 type CompInput = { price: number; shipping?: number };
 
@@ -131,6 +131,7 @@ async function insertAnalysis(
   }
   const now = Date.now();
   const ownerId = await currentOwnerId(ctx);
+  if (input.assetId) assertOwner(await ctx.db.get(input.assetId), ownerId, "Inventory item");
   const metrics = calculateAnalysis(input);
   const analysisId = await ctx.db.insert("sourcingAnalyses", {
     ownerId,
@@ -188,7 +189,7 @@ export const details = query({
     const ownerId = await currentOwnerId(ctx);
     const analysis = await ctx.db.get(args.id);
     if (!analysis) return null;
-    if (ownerId && analysis.ownerId && analysis.ownerId !== ownerId) return null;
+    assertOwner(analysis, ownerId, "Analysis");
     const comps = await ctx.db.query("sourcingComps").withIndex("by_analysisId", (q) => q.eq("analysisId", args.id)).take(100);
     return { analysis, comps };
   },
@@ -215,7 +216,8 @@ export const convertToInventory = mutation({
   handler: async (ctx, args) => {
     const ownerId = await currentOwnerId(ctx);
     const analysis = await ctx.db.get(args.id);
-    if (!analysis) throw new Error("Analysis not found.");
+    assertOwner(analysis, ownerId, "Analysis");
+    if (analysis.assetId) assertOwner(await ctx.db.get(analysis.assetId), ownerId, "Inventory item");
     const now = Date.now();
     const assetId = analysis.assetId ?? await ctx.db.insert("assets", {
       ownerId,
@@ -251,6 +253,8 @@ export const convertToInventory = mutation({
 export const remove = mutation({
   args: { id: v.id("sourcingAnalyses") },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.id), ownerId, "Analysis");
     const comps = await ctx.db.query("sourcingComps").withIndex("by_analysisId", (q) => q.eq("analysisId", args.id)).take(100);
     for (const comp of comps) await ctx.db.delete(comp._id);
     await ctx.db.delete(args.id);

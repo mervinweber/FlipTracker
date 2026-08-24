@@ -310,8 +310,12 @@ Goal: make shipping selection understandable and hard to misconfigure.
 
 ## v0.9 Private Beta
 
-- [ ] Add authentication and owner-scoped Convex data
-- [ ] Backfill existing single-owner records safely
+- [x] Add optional Clerk authentication gate and owner-scoped Convex data foundation
+- [x] Add an admin-protected first-owner migration for existing single-owner records
+- [x] Scope eBay OAuth tokens, seller settings, active imports, and sold imports by owner
+- [x] Add listing lifecycle activity and an operations inbox
+- [x] Support safe revisions for active listings created in the eBay app/Seller Hub
 - [ ] Add onboarding for eBay OAuth, seller defaults, shipping profiles, first scan, and first test listing
 - [ ] Add backup/export, error telemetry, privacy terms, and account deletion
+- [ ] Activate Clerk in development and production, claim legacy data, and pass two-account isolation testing
 - [ ] Invite a small beta group only after ownership and production smoke tests pass

@@ -21,6 +21,8 @@ npm run dev
 
 Set `VITE_CONVEX_URL` in `.env.local` before using the migrated UI. Without it, the app shows a setup message instead of loading inventory.
 
+For the v0.9 authenticated beta, also set `VITE_CLERK_PUBLISHABLE_KEY`. Follow the ordered rollout in `docs/V0.9_RELEASE_PLAN.md`; do not enable required auth before assigning the existing records to the first owner.
+
 ## Run Convex
 
 ```bash
@@ -59,6 +61,20 @@ npm install
 npx convex dev
 npm run dev
 ```
+
+## v0.9 Authentication
+
+Authentication remains opt-in until the production owner migration is complete. The application uses its current private single-seller behavior when `VITE_CLERK_PUBLISHABLE_KEY` is absent.
+
+1. Create the Clerk app and Convex JWT integration.
+2. Set `CLERK_JWT_ISSUER_DOMAIN` in Convex development and production.
+3. Copy `docs/snippets/convex-auth.config.ts.txt` to `convex/auth.config.ts`.
+4. Set `VITE_CLERK_PUBLISHABLE_KEY` in `.env.local` and Vercel.
+5. Deploy, sign in as the owner, and use **Assign Existing Data** once.
+6. Verify two-account isolation.
+7. Set `FLIPTRACKER_AUTH_REQUIRED=true` in Convex development and production.
+
+See `docs/V0.9_RELEASE_PLAN.md` for commands, release gates, and rollback preparation.
 
 The inventory table, dashboard cards, add/edit/delete actions, and Excel import now use Convex. Excel export still runs in the browser from the current Convex query result.
 

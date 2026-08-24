@@ -1,11 +1,14 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ConvexProvider } from 'convex/react';
+import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
+import AuthGate from './components/AuthGate';
 import './styles.css';
 import { convex } from './convex';
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
+const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 function MissingConvexConfig() {
   return (
@@ -19,7 +22,11 @@ function MissingConvexConfig() {
 }
 
 root.render(
-  convex ? (
+  convex && clerkPublishableKey ? (
+    <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/">
+      <AuthGate client={convex}><App /></AuthGate>
+    </ClerkProvider>
+  ) : convex ? (
     <ConvexProvider client={convex}>
       <App />
     </ConvexProvider>

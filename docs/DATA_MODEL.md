@@ -1,5 +1,14 @@
 # Data Model
 
+## Ownership And Audit Additions (v0.9)
+
+- `users`: authenticated profile keyed by Convex token identifier, including the one-time legacy-claim timestamp.
+- `ownerId`: optional migration field and indexed tenant boundary on inventory, photos, intake, collections, research, sourcing, listings, sales, cross-listing, and eBay seller records.
+- `listingEvents`: append-only operational history linked to both listing and asset, with event type, source, status transition, message, metadata, and timestamp.
+- `ebayConnections` / `ebaySettings`: owner-specific in authenticated mode; legacy deployment-wide records are renamed during the first-owner claim.
+
+Clients do not send `ownerId`. Convex mutations derive it from the authenticated identity, and record-ID mutations verify ownership before changing related data.
+
 ## collections
 One purchase/source event.
 

@@ -4,8 +4,8 @@ import { currentOwnerId } from "./ownership";
 
 const optionalText = v.optional(v.string());
 
-function ebaySingletonKey() {
-  return `seller:${process.env.EBAY_ENVIRONMENT?.toLowerCase() === "production" ? "production" : "sandbox"}`;
+function ebaySingletonKey(ownerId?: string) {
+  return `seller:${process.env.EBAY_ENVIRONMENT?.toLowerCase() === "production" ? "production" : "sandbox"}${ownerId ? `:${ownerId}` : ""}`;
 }
 
 export const createCard = mutation({
@@ -84,7 +84,7 @@ export const createCard = mutation({
     });
     const sku = `FT-CARD-${String(assetId).slice(-8).toUpperCase()}`;
     if (!args.createDraft) return { assetId, listingId: null, sku };
-    const settings = await ctx.db.query("ebaySettings").withIndex("by_singletonKey", (q) => q.eq("singletonKey", ebaySingletonKey())).unique();
+    const settings = await ctx.db.query("ebaySettings").withIndex("by_singletonKey", (q) => q.eq("singletonKey", ebaySingletonKey(ownerId))).unique();
     const ebayCategoryId = args.game === "pokemon" ? settings?.pokemonCardCategoryId : settings?.yugiohCardCategoryId;
     const itemSpecifics = [
       `Game: ${args.game === "pokemon" ? "Pokemon TCG" : "Yu-Gi-Oh! TCG"}`,

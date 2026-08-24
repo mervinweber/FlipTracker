@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import { applyOwnerFilter, currentOwnerId } from "./ownership";
 
 function low(a: any) { return a.valueSource === "User Override" ? (a.userLow || 0) : (a.estimatedLow || 0); }
 function high(a: any) { return a.valueSource === "User Override" ? (a.userHigh || 0) : (a.estimatedHigh || 0); }
@@ -6,8 +7,9 @@ function high(a: any) { return a.valueSource === "User Override" ? (a.userHigh |
 export const dashboard = query({
   args: {},
   handler: async (ctx) => {
-    const assets = await ctx.db.query("assets").collect();
-    const collections = await ctx.db.query("collections").collect();
+    const ownerId = await currentOwnerId(ctx);
+    const assets = applyOwnerFilter(await ctx.db.query("assets").collect(), ownerId);
+    const collections = applyOwnerFilter(await ctx.db.query("collections").collect(), ownerId);
     return {
       assetCount: assets.length,
       collectionCount: collections.length,

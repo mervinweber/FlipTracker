@@ -1,10 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { applyOwnerFilter, assertOwner, currentOwnerId } from "./ownership";
 
 export const list = query({
   args: {},
-  handler: async (ctx) => await ctx.db.query("collections").order("desc").take(100),
+  handler: async (ctx) => applyOwnerFilter(await ctx.db.query("collections").order("desc").take(100), await currentOwnerId(ctx)),
 });
 
 export const create = mutation({
@@ -34,7 +34,7 @@ export const update = mutation({
   },
   handler: async (ctx, { id, ...patch }) => {
     const existing = await ctx.db.get(id);
-    if (!existing) throw new Error("Collection not found");
+    assertOwner(existing, await currentOwnerId(ctx), "Collection");
     await ctx.db.patch(id, { ...patch, updatedAt: Date.now() });
   },
 });
@@ -42,8 +42,11 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("collections") },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.id), ownerId, "Collection");
     const assets = await ctx.db.query("assets").withIndex("by_collection", (q) => q.eq("collectionId", args.id)).take(250);
     for (const asset of assets) {
+      if (ownerId && asset.ownerId !== ownerId) continue;
       await ctx.db.patch(asset._id, { collectionId: undefined, updatedAt: Date.now() });
     }
     await ctx.db.delete(args.id);

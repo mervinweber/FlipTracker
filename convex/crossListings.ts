@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { assertOwner, currentOwnerId } from "./ownership";
 
 const platforms = ["Poshmark", "Mercari", "Depop", "Facebook Marketplace", "OfferUp", "Craigslist", "Other"];
 const statuses = ["Ready", "Listed", "Sold", "Ended", "Needs Review"];
@@ -59,9 +59,10 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const asset = await ctx.db.get(args.assetId);
-    if (!asset) throw new Error("Inventory item not found");
     const now = Date.now();
     const ownerId = await currentOwnerId(ctx);
+    assertOwner(asset, ownerId, "Inventory item");
+    if (args.linkedAccountId) assertOwner(await ctx.db.get(args.linkedAccountId), ownerId, "Linked account");
     return await ctx.db.insert("crossListings", {
       ownerId,
       ...args,
@@ -96,7 +97,9 @@ export const update = mutation({
   },
   handler: async (ctx, { id, ...patch }) => {
     const existing = await ctx.db.get(id);
-    if (!existing) throw new Error("Cross listing not found");
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(existing, ownerId, "Cross listing");
+    if (patch.linkedAccountId) assertOwner(await ctx.db.get(patch.linkedAccountId), ownerId, "Linked account");
     const now = Date.now();
     await ctx.db.patch(id, { ...patch, updatedAt: now });
     return id;
@@ -106,6 +109,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("crossListings") },
   handler: async (ctx, args) => {
+    assertOwner(await ctx.db.get(args.id), await currentOwnerId(ctx), "Cross listing");
     await ctx.db.delete(args.id);
     return null;
   },
@@ -123,7 +127,7 @@ export const markSold = mutation({
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Cross listing not found");
+    assertOwner(existing, await currentOwnerId(ctx), "Cross listing");
     const now = Date.now();
     await ctx.db.patch(args.id, {
       status: "Sold",

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { applyOwnerFilter, currentOwnerId } from "./ownership";
+import { applyOwnerFilter, assertOwner, currentOwnerId } from "./ownership";
 
 const defaults = {
   source: v.optional(v.string()),
@@ -41,6 +41,7 @@ export const getItems = query({
   handler: async (ctx, args) => {
     if (!args.batchId) return [];
     const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.batchId), ownerId, "Intake batch");
     return applyOwnerFilter(await ctx.db.query("intakeBatchItems").withIndex("by_batchId", (q) => q.eq("batchId", args.batchId!)).order("desc").take(500), ownerId);
   },
 });
@@ -68,8 +69,9 @@ export const create = mutation({
 export const update = mutation({
   args: { id: v.id("intakeBatches"), name: v.optional(v.string()), ...defaults },
   handler: async (ctx, { id, ...patch }) => {
+    const ownerId = await currentOwnerId(ctx);
     const batch = await ctx.db.get(id);
-    if (!batch) throw new Error("Intake batch not found.");
+    assertOwner(batch, ownerId, "Intake batch");
     if (patch.name !== undefined && !patch.name.trim()) throw new Error("Batch name is required.");
     if (patch.purchaseTotal !== undefined && patch.purchaseTotal < 0) throw new Error("Purchase total cannot be negative.");
     await ctx.db.patch(id, { ...patch, name: patch.name?.trim(), updatedAt: Date.now() });
@@ -79,8 +81,9 @@ export const update = mutation({
 export const setStatus = mutation({
   args: { id: v.id("intakeBatches"), status: v.union(v.literal("Active"), v.literal("Paused"), v.literal("Completed")) },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const batch = await ctx.db.get(args.id);
-    if (!batch) throw new Error("Intake batch not found.");
+    assertOwner(batch, ownerId, "Intake batch");
     const now = Date.now();
     await ctx.db.patch(args.id, { status: args.status, completedAt: args.status === "Completed" ? now : undefined, updatedAt: now });
   },

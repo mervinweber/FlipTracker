@@ -2,6 +2,19 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  users: defineTable({
+    ownerId: v.string(),
+    subject: v.string(),
+    email: v.optional(v.string()),
+    name: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    legacyDataClaimedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_subject", ["subject"]),
+
   intakeBatches: defineTable({
     ownerId: v.optional(v.string()),
     name: v.string(),
@@ -22,6 +35,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_status", ["status"])
     .index("by_updatedAt", ["updatedAt"]),
 
@@ -42,6 +56,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_batchId", ["batchId"])
     .index("by_batchId_and_scanToken", ["batchId", "scanToken"]),
 
@@ -55,7 +70,9 @@ export default defineSchema({
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_purchaseDate", ["purchaseDate"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_purchaseDate", ["purchaseDate"]),
 
   assets: defineTable({
     ownerId: v.optional(v.string()),
@@ -131,6 +148,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_console", ["console"])
     .index("by_type", ["type"])
     .index("by_barcode", ["barcode"])
@@ -149,7 +167,9 @@ export default defineSchema({
     ebayImageUrl: v.optional(v.string()),
     ebayUploadedAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_assetId", ["assetId"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_assetId", ["assetId"]),
 
   sales: defineTable({
     ownerId: v.optional(v.string()),
@@ -169,6 +189,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_asset", ["assetId"])
     .index("by_listingId", ["listingId"]),
 
@@ -184,6 +205,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_platform", ["platform"])
     .index("by_status", ["status"]),
 
@@ -212,6 +234,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_assetId", ["assetId"])
     .index("by_platform", ["platform"])
     .index("by_status", ["status"])
@@ -287,6 +310,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_assetId", ["assetId"])
     .index("by_sku", ["sku"])
     .index("by_platform_and_sku", ["platform", "sku"])
@@ -299,6 +323,7 @@ export default defineSchema({
     .index("by_soldDate", ["soldDate"]),
 
   ebayConnections: defineTable({
+    ownerId: v.optional(v.string()),
     singletonKey: v.string(),
     environment: v.string(),
     accessToken: v.string(),
@@ -308,17 +333,23 @@ export default defineSchema({
     refreshTokenExpiresAt: v.optional(v.number()),
     connectedAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_singletonKey", ["singletonKey"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_singletonKey", ["singletonKey"]),
 
   ebayOauthStates: defineTable({
+    ownerId: v.optional(v.string()),
     stateHash: v.string(),
     environment: v.string(),
     returnUrl: v.string(),
     expiresAt: v.number(),
     createdAt: v.number(),
-  }).index("by_stateHash", ["stateHash"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_stateHash", ["stateHash"]),
 
   ebaySettings: defineTable({
+    ownerId: v.optional(v.string()),
     singletonKey: v.string(),
     environment: v.string(),
     marketplaceId: v.string(),
@@ -338,7 +369,9 @@ export default defineSchema({
     otherCategoryId: v.optional(v.string()),
     activeListingTarget: v.optional(v.number()),
     updatedAt: v.number(),
-  }).index("by_singletonKey", ["singletonKey"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_singletonKey", ["singletonKey"]),
 
   listingPriceHistory: defineTable({
     ownerId: v.optional(v.string()),
@@ -349,8 +382,26 @@ export default defineSchema({
     reason: v.optional(v.string()),
     createdAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_listingId", ["listingId"])
     .index("by_assetId", ["assetId"]),
+
+  listingEvents: defineTable({
+    ownerId: v.optional(v.string()),
+    listingId: v.id("marketplaceListings"),
+    assetId: v.id("assets"),
+    eventType: v.string(),
+    source: v.string(),
+    message: v.optional(v.string()),
+    fromStatus: v.optional(v.string()),
+    toStatus: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_listingId", ["listingId"])
+    .index("by_assetId", ["assetId"])
+    .index("by_eventType", ["eventType"]),
 
   cardCatalogCache: defineTable({
     provider: v.string(),
@@ -399,6 +450,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_ownerId", ["ownerId"])
     .index("by_assetId", ["assetId"])
     .index("by_recommendation", ["recommendation"])
     .index("by_demoKey", ["demoKey"])
@@ -413,7 +465,9 @@ export default defineSchema({
     deliveredPrice: v.number(),
     observedAt: v.number(),
     createdAt: v.number(),
-  }).index("by_analysisId", ["analysisId"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_analysisId", ["analysisId"]),
 
   valueHistory: defineTable({
     ownerId: v.optional(v.string()),
@@ -425,7 +479,9 @@ export default defineSchema({
     url: v.optional(v.string()),
     notes: v.optional(v.string()),
     checkedAt: v.number(),
-  }).index("by_asset", ["assetId"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_asset", ["assetId"]),
 
   researchChecks: defineTable({
     ownerId: v.optional(v.string()),
@@ -436,5 +492,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     nextReviewAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_asset", ["assetId"]),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_asset", ["assetId"]),
 });

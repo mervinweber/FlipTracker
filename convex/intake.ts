@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { assertOwner, currentOwnerId } from "./ownership";
 
 const optionalText = v.optional(v.string());
 
@@ -47,13 +47,19 @@ export const createScannedItem = mutation({
 
     const now = Date.now();
     const ownerId = await currentOwnerId(ctx);
+    if (args.batchId) assertOwner(await ctx.db.get(args.batchId), ownerId, "Intake batch");
+    if (args.collectionId) assertOwner(await ctx.db.get(args.collectionId), ownerId, "Collection");
     if (args.batchId && args.scanToken) {
       const prior = await ctx.db.query("intakeBatchItems")
         .withIndex("by_batchId_and_scanToken", (q) => q.eq("batchId", args.batchId!).eq("scanToken", args.scanToken!))
         .unique();
-      if (prior) return { assetId: prior.assetId, listingId: prior.listingId ?? null, sku: prior.sku, copyNumber: prior.copyNumber, batchItemId: prior._id };
+      if (prior) {
+        assertOwner(prior, ownerId, "Intake item");
+        return { assetId: prior.assetId, listingId: prior.listingId ?? null, sku: prior.sku, copyNumber: prior.copyNumber, batchItemId: prior._id };
+      }
     }
-    const existingCopies = await ctx.db.query("assets").withIndex("by_upc", (q) => q.eq("upc", upc)).take(100);
+    const existingCopies = (await ctx.db.query("assets").withIndex("by_upc", (q) => q.eq("upc", upc)).take(100))
+      .filter((asset) => !ownerId || asset.ownerId === ownerId);
     const assetId = await ctx.db.insert("assets", {
       ownerId,
       type: args.type,

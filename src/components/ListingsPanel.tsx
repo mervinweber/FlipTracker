@@ -332,6 +332,15 @@ function ebayListingOrigin(listing: Listing) {
   return 'FlipTracker draft';
 }
 
+function operationsIssue(listing: Listing) {
+  if (listing.platform !== 'eBay') return '';
+  if (listing.ebayLastError) return listing.ebayLastError;
+  if (listing.status === 'Active' && !listing.externalListingId) return 'Active locally but missing its eBay item ID.';
+  if (listing.ebayDraftStatus === 'Imported eBay sale' && listing.assetType === 'General Merchandise') return 'Imported sale needs its inventory category and cost reviewed.';
+  if (listing.ebayOfferId && !listing.externalListingId && listing.ebayDraftCreatedAt && Date.now() - listing.ebayDraftCreatedAt > 14 * 86_400_000) return 'Staged offer is more than 14 days old and should be reviewed or refreshed.';
+  return '';
+}
+
 function isNewCondition(condition?: string) {
   return ['new', 'brand new', 'sealed'].includes(condition?.trim().toLowerCase() || '');
 }
@@ -413,10 +422,12 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const endEbayListing = useAction(api.ebay.endPublishedListing);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
+  const listingActivity = useQuery(api.listings.activity, editing ? { listingId: editing._id } : 'skip');
   const [editorStep, setEditorStep] = useState<ListingEditorStep>('details');
   const [taxonomyMissingAspects, setTaxonomyMissingAspects] = useState<string[]>([]);
   const [exceptionWorkflow, setExceptionWorkflow] = useState(false);
   const [exceptionQueueExpanded, setExceptionQueueExpanded] = useState(true);
+  const [operationsExpanded, setOperationsExpanded] = useState(true);
   const [saleEditing, setSaleEditing] = useState<Listing | null>(null);
   const [endListingPrompt, setEndListingPrompt] = useState<Listing | null>(null);
   const [endListingBusy, setEndListingBusy] = useState(false);
@@ -558,6 +569,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     if (listing.platform !== 'eBay' || !['Draft', 'Pending'].includes(listing.status)) return false;
     return (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field));
   }), [listings, readinessByListingId]);
+  const operationsListings = useMemo(() => (listings || [])
+    .map((listing) => ({ listing, issue: operationsIssue(listing) }))
+    .filter((entry) => Boolean(entry.issue)), [listings]);
   const activeListingTarget = Math.max(1, Math.round(Number(ebaySettings.activeListingTarget) || 200));
   const projectedEbayListings = (sellerListingSummary?.activeCount ?? 0) + (sellerListingSummary?.scheduledCount ?? 0);
   const roomToListingTarget = Math.max(0, activeListingTarget - projectedEbayListings);
@@ -1267,7 +1281,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
   async function save() {
     if (!editing?.title.trim()) return;
-    const updatesLiveEbay = editing.platform === 'eBay' && editing.status === 'Active' && Boolean(editing.externalListingId && editing.ebayOfferId);
+    const updatesLiveEbay = editing.platform === 'eBay' && editing.status === 'Active' && Boolean(editing.externalListingId);
     if (updatesLiveEbay && !adminKey) {
       setListingSaveError('Load your private access key in Seller Connection before revising this live eBay listing.');
       return;
@@ -1324,7 +1338,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       });
       if (updatesLiveEbay) {
         const result = await revisePublishedListing({ adminKey, listingId: editing._id });
-        setEbayNotice(`Updated live eBay listing ${result.listingId}. Inventory API listings must be revised through FlipTracker.`);
+        setEbayNotice(`Updated live eBay listing ${result.listingId} through the ${result.revisionSource}.`);
       }
       const savedListingId = editing._id;
       const nextException = exceptionWorkflow ? exceptionListings.find((listing) => listing._id !== savedListingId) : undefined;
@@ -1513,6 +1527,14 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         </div> : null}
       </section>
 
+      <section className={`panel operationsInboxPanel ${operationsListings.length ? 'hasOperations' : ''}`}>
+        <div className="panelHeader">
+          <div><p className="eyebrow">eBay operations</p><h2>{operationsListings.length ? `${operationsListings.length} item${operationsListings.length === 1 ? '' : 's'} need reconciliation` : 'Operations inbox is clear'}</h2><p>{operationsListings.length ? 'Review sync failures, imported sales, and stale or incomplete eBay links.' : 'No known eBay lifecycle or synchronization problems need attention.'}</p></div>
+          {operationsListings.length ? <button className="secondary" onClick={() => setOperationsExpanded((expanded) => !expanded)}><AlertTriangle size={16}/>{operationsExpanded ? 'Collapse' : 'Review Inbox'}</button> : <span className="statusPill ebayConnected"><CheckCircle2 size={14}/> Healthy</span>}
+        </div>
+        {operationsListings.length && operationsExpanded ? <div className="operationsInboxList">{operationsListings.slice(0, 12).map(({ listing, issue }) => <button key={listing._id} className="operationsInboxRow" onClick={() => openListingEditor(listing)}><div><strong>{listing.title}</strong><small>{[listing.status, listing.externalListingId ? `eBay ${listing.externalListingId}` : undefined, listing.sku ? `SKU ${listing.sku}` : undefined].filter(Boolean).join(' · ')}</small></div><span>{issue}</span><b>Review</b></button>)}</div> : null}
+      </section>
+
       <section className="panel listingControls">
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search listings..." value={query} onChange={(event) => setQuery(event.target.value)}/></div>
         <select value={status} onChange={(event) => setStatus(event.target.value)}>{['All', ...STATUSES].map((value) => <option key={value}>{value}</option>)}</select>
@@ -1651,7 +1673,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <span className={(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'ready' : 'missing'}>{(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'Price ready' : 'Price needed'}</span>
           </div>
           {editing.platform === 'eBay' && editing.status === 'Active' && editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with FlipTracker API:</strong> eBay's app and Seller Hub cannot revise this listing. Make changes here and use Save &amp; Update eBay. Use End Listing or Record Sale for status changes.</p> : null}
-          {editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId && !editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with eBay app / Seller Hub:</strong> FlipTracker can sync its price and end or record the listing. Other edits are saved locally for now; revise those fields in eBay until Trading API field updates are added.</p> : null}
+          {editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId && !editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with eBay app / Seller Hub:</strong> FlipTracker reads the live item first and preserves its eBay-managed values before updating the fields reviewed here.</p> : null}
           <div className="formGrid listingFactoryForm">
             <div className="span2 listingReadinessPanelWrap"><ListingReadinessPanel issues={editingReadinessIssues} onNavigate={setEditorStep}/></div>
             {editorStep === 'details' ? <>
@@ -1739,8 +1761,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               photoUrls: [editing.photoUrl, editing.ebayImageUrl].filter(Boolean),
             }}/></div> : null}
           </div>
+          {editorStep === 'preview' ? <section className="listingActivity"><div><strong>Listing activity</strong><span>FlipTracker and eBay lifecycle changes</span></div>{listingActivity === undefined ? <p>Loading activity...</p> : listingActivity.length ? <ol>{listingActivity.slice(0, 8).map((event) => <li key={event._id}><span>{event.message || event.eventType}</span><small>{event.source} · {new Date(event.createdAt).toLocaleString()}</small></li>)}</ol> : <p>No activity has been recorded for this older listing yet.</p>}</section> : null}
           {listingSaveError ? <p className="formError listingSaveError">{listingSaveError}</p> : null}
-          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'preview' ? <button disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button disabled={listingSaveBusy} onClick={save}><Save size={16}/> {listingSaveBusy ? 'Updating...' : exceptionWorkflow ? 'Save & Next' : editing.platform === 'eBay' && editing.status === 'Active' && editing.ebayOfferId ? 'Save & Update eBay' : editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId ? 'Save in FlipTracker' : 'Save Listing'}</button>}</div></div>
+          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'preview' ? <button disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button disabled={listingSaveBusy} onClick={save}><Save size={16}/> {listingSaveBusy ? 'Updating...' : exceptionWorkflow ? 'Save & Next' : editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId ? 'Save & Update eBay' : 'Save Listing'}</button>}</div></div>
         </section></div>
       ) : null}
     </>

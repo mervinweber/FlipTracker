@@ -96,7 +96,8 @@ http.route({
       if (!token.refresh_token) throw new Error("eBay did not return a refresh token. Reconnect and approve seller access.");
       const now = Date.now();
       await ctx.runMutation(internal.ebay.saveConnection, {
-        singletonKey: `seller:${environment()}`,
+        ownerId: savedState.ownerId,
+        singletonKey: `seller:${environment()}${savedState.ownerId ? `:${savedState.ownerId}` : ""}`,
         environment: environment(),
         accessToken: token.access_token,
         refreshToken: token.refresh_token,

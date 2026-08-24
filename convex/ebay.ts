@@ -3,6 +3,13 @@ import { XMLParser } from "fast-xml-parser";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import {
+  conditionIdForNativeListing,
+  itemSpecificsXml,
+  mergeItemSpecifics,
+  remoteItemSpecifics,
+} from "./lib/ebayNativeRevision";
+import { currentOwnerId } from "./ownership";
 
 const EBAY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope",
@@ -69,8 +76,12 @@ function environment(): EbayEnvironment {
   return process.env.EBAY_ENVIRONMENT?.toLowerCase() === "production" ? "production" : "sandbox";
 }
 
-function singletonKey() {
-  return `seller:${environment()}`;
+function singletonKey(ownerId?: string) {
+  return `seller:${environment()}${ownerId ? `:${ownerId}` : ""}`;
+}
+
+async function currentSingletonKey(ctx: ActionCtx) {
+  return singletonKey(await currentOwnerId(ctx));
 }
 
 function endpoints() {
@@ -408,7 +419,8 @@ async function uploadActualPhoto(accessToken: string, dataUrl: string) {
 }
 
 async function refreshAccessToken(ctx: ActionCtx, forceRefresh = false) {
-  const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: singletonKey() });
+  const key = await currentSingletonKey(ctx);
+  const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: key });
   if (!connection) throw new Error("Connect an eBay seller account first.");
   if (!forceRefresh && connection.accessTokenExpiresAt > Date.now() + 300_000) return connection.accessToken;
 
@@ -429,7 +441,7 @@ async function refreshAccessToken(ctx: ActionCtx, forceRefresh = false) {
   if (!response.ok) throw new Error(ebayError(data, response.status));
   const token = data as TokenResponse;
   await ctx.runMutation(internal.ebay.updateAccessToken, {
-    singletonKey: singletonKey(),
+    singletonKey: key,
     accessToken: token.access_token,
     accessTokenExpiresAt: Date.now() + token.expires_in * 1000,
     scopes: token.scope,
@@ -447,6 +459,16 @@ function parseItemSpecifics(value?: string) {
     if (name && itemValue) aspects[name] = [itemValue];
   }
   return aspects;
+}
+
+function scalarText(value: unknown) {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return scalarText(record["#text"] ?? record.value);
+  }
+  return "";
 }
 
 function removeCatalogIdentifiers(aspects: Record<string, string[]>) {
@@ -599,10 +621,10 @@ export const getSettings = internalQuery({
 });
 
 export const getDraftBundle = internalQuery({
-  args: { listingId: v.id("marketplaceListings") },
+  args: { listingId: v.id("marketplaceListings"), ownerId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const listing = await ctx.db.get(args.listingId);
-    if (!listing) return null;
+    if (!listing || (args.ownerId && listing.ownerId !== args.ownerId)) return null;
     const asset = await ctx.db.get(listing.assetId);
     const photos = asset ? await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", asset._id)).collect() : [];
     return asset ? { listing, asset, photos: photos.sort((a, b) => a.position - b.position) } : null;
@@ -611,6 +633,7 @@ export const getDraftBundle = internalQuery({
 
 export const saveOauthState = internalMutation({
   args: {
+    ownerId: v.optional(v.string()),
     stateHash: v.string(),
     environment: v.string(),
     returnUrl: v.string(),
@@ -634,6 +657,7 @@ export const consumeOauthState = internalMutation({
 
 export const saveConnection = internalMutation({
   args: {
+    ownerId: v.optional(v.string()),
     singletonKey: v.string(),
     environment: v.string(),
     accessToken: v.string(),
@@ -674,6 +698,7 @@ export const updateAccessToken = internalMutation({
 
 export const saveSettingsRecord = internalMutation({
   args: {
+    ownerId: v.optional(v.string()),
     singletonKey: v.string(),
     environment: v.string(),
     marketplaceId: v.string(),
@@ -714,6 +739,7 @@ export const markDraftCreated = internalMutation({
     imageSource: v.string(),
   },
   handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
     await ctx.db.patch(args.listingId, {
       sku: args.sku,
       ebayInventorySku: args.sku,
@@ -729,6 +755,7 @@ export const markDraftCreated = internalMutation({
       pricingStatus: "eBay Offer Staged",
       updatedAt: Date.now(),
     });
+    if (listing) await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "staged", source: "eBay Inventory API", message: `Offer ${args.offerId} staged with eBay.`, fromStatus: listing.status, toStatus: listing.status, createdAt: Date.now() });
   },
 });
 
@@ -739,6 +766,7 @@ export const markOfferPublished = internalMutation({
     listingUrl: v.string(),
   },
   handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
     await ctx.db.patch(args.listingId, {
       externalListingId: args.ebayListingId,
       listingUrl: args.listingUrl,
@@ -749,6 +777,7 @@ export const markOfferPublished = internalMutation({
       pricingStatus: "Published",
       updatedAt: Date.now(),
     });
+    if (listing) await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: listing.status === "Active" ? "link_refreshed" : "published", source: "eBay", message: listing.status === "Active" ? `Refreshed eBay item ${args.ebayListingId}.` : `Published as eBay item ${args.ebayListingId}.`, fromStatus: listing.status, toStatus: "Active", createdAt: Date.now() });
   },
 });
 
@@ -777,13 +806,36 @@ export const markPublishedPriceUpdated = internalMutation({
       ebayLastError: undefined,
       updatedAt: now,
     });
+    await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "price_changed", source: "eBay", message: args.reason, metadata: JSON.stringify({ from: listing.currentPrice ?? listing.listedPrice, to: args.newPrice }), createdAt: now });
+  },
+});
+
+export const markPublishedListingRevised = internalMutation({
+  args: {
+    listingId: v.id("marketplaceListings"),
+    revisionSource: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
+    const now = Date.now();
+    await ctx.db.patch(args.listingId, {
+      ebayDraftStatus: "Live listing updated",
+      ebayLastError: undefined,
+      ebayLastSyncedAt: now,
+      pricingSource: args.revisionSource,
+      pricingUpdatedAt: now,
+      updatedAt: now,
+    });
+    if (listing) await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "revised", source: args.revisionSource, message: "Live eBay listing updated.", createdAt: now });
   },
 });
 
 export const markDraftError = internalMutation({
   args: { listingId: v.id("marketplaceListings"), message: v.string() },
   handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
     await ctx.db.patch(args.listingId, { ebayLastError: args.message, updatedAt: Date.now() });
+    if (listing) await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "sync_failed", source: "eBay", message: args.message, createdAt: Date.now() });
   },
 });
 
@@ -800,6 +852,7 @@ export const markOfferWithdrawn = internalMutation({
       pricingStatus: "Ended",
       updatedAt: now,
     });
+    await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "ended", source: "eBay", message: "Live eBay listing ended.", fromStatus: listing.status, toStatus: "Cancelled", createdAt: now });
     const relatedListings = await ctx.db
       .query("marketplaceListings")
       .withIndex("by_assetId", (q) => q.eq("assetId", listing.assetId))
@@ -812,6 +865,7 @@ export const markOfferWithdrawn = internalMutation({
 
 export const reconcileSoldOrderLine = internalMutation({
   args: {
+    ownerId: v.optional(v.string()),
     externalListingId: v.optional(v.string()),
     sku: v.optional(v.string()),
     title: v.optional(v.string()),
@@ -825,20 +879,22 @@ export const reconcileSoldOrderLine = internalMutation({
     buyer: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const previouslyImported = await ctx.db
+    const previouslyImported = (await ctx.db
       .query("marketplaceListings")
       .withIndex("by_ebayOrderId_and_ebayOrderLineItemId", (q) => q
         .eq("ebayOrderId", args.orderId)
         .eq("ebayOrderLineItemId", args.orderLineItemKey))
-      .unique();
+      .collect()).find((candidate) => !args.ownerId || candidate.ownerId === args.ownerId);
     if (previouslyImported) {
       return { matched: true, updated: false, imported: false };
     }
     const listingById = args.externalListingId
-      ? await ctx.db.query("marketplaceListings").withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId)).first()
+      ? (await ctx.db.query("marketplaceListings").withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId)).collect())
+        .find((candidate) => !args.ownerId || candidate.ownerId === args.ownerId)
       : null;
     const listingBySku = !listingById && args.sku
-      ? await ctx.db.query("marketplaceListings").withIndex("by_platform_and_sku", (q) => q.eq("platform", "eBay").eq("sku", args.sku)).first()
+      ? (await ctx.db.query("marketplaceListings").withIndex("by_platform_and_sku", (q) => q.eq("platform", "eBay").eq("sku", args.sku)).collect())
+        .find((candidate) => !args.ownerId || candidate.ownerId === args.ownerId)
       : null;
     const listing = listingById ?? listingBySku;
     if (!listing || listing.platform.toLowerCase() !== "ebay") {
@@ -847,6 +903,7 @@ export const reconcileSoldOrderLine = internalMutation({
       const title = args.title?.trim() || `eBay item ${args.externalListingId || args.sku || args.orderLineItemKey}`;
       const notes = `Imported from eBay order ${args.orderId}.${quantity > 1 ? ` Quantity: ${quantity}.` : ""}`;
       const assetId = await ctx.db.insert("assets", {
+        ownerId: args.ownerId,
         type: "General Merchandise",
         title,
         metadataSource: "eBay order import",
@@ -860,6 +917,7 @@ export const reconcileSoldOrderLine = internalMutation({
         updatedAt: now,
       });
       const listingId = await ctx.db.insert("marketplaceListings", {
+        ownerId: args.ownerId,
         assetId,
         platform: "eBay",
         salePlatform: "eBay",
@@ -889,6 +947,7 @@ export const reconcileSoldOrderLine = internalMutation({
         updatedAt: now,
       });
       await ctx.db.insert("sales", {
+        ownerId: args.ownerId,
         assetId,
         listingId,
         platform: "eBay",
@@ -970,7 +1029,7 @@ export const reconcileSoldOrderLine = internalMutation({
       updatedAt: now,
     };
     if (existingSale) await ctx.db.patch(existingSale._id, saleRecord);
-    else await ctx.db.insert("sales", { ...saleRecord, createdAt: now });
+    else await ctx.db.insert("sales", { ownerId: listing.ownerId, ...saleRecord, createdAt: now });
     return { matched: true, updated: true, imported: false };
   },
 });
@@ -996,9 +1055,11 @@ export const beginOauth = action({
   handler: async (ctx, args): Promise<{ authorizationUrl: string; callbackUrl: string }> => {
     requireAdminKey(args.adminKey);
     const state = randomState();
+    const ownerId = await currentOwnerId(ctx);
     const callbackUrl = `${requiredEnv("CONVEX_SITE_URL")}/ebay/callback`;
     const returnUrl = safeReturnUrl(args.returnUrl);
     await ctx.runMutation(internal.ebay.saveOauthState, {
+      ownerId,
       stateHash: await sha256(state),
       environment: environment(),
       returnUrl,
@@ -1027,8 +1088,9 @@ export const loadSetup = action({
     warning?: string;
   }> => {
     requireAdminKey(args.adminKey);
-    const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: singletonKey() });
-    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+    const key = await currentSingletonKey(ctx);
+    const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: key });
+    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: key });
     const base = {
       connected: Boolean(connection),
       environment: environment(),
@@ -1091,6 +1153,7 @@ export const loadSetup = action({
 
 export const upsertActiveNativeListing = internalMutation({
   args: {
+    ownerId: v.optional(v.string()),
     externalListingId: v.string(),
     title: v.string(),
     sku: v.optional(v.string()),
@@ -1103,9 +1166,9 @@ export const upsertActiveNativeListing = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const existing = await ctx.db.query("marketplaceListings")
+    const existing = (await ctx.db.query("marketplaceListings")
       .withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId))
-      .first();
+      .collect()).find((candidate) => !args.ownerId || candidate.ownerId === args.ownerId);
     if (existing) {
       const origin = existing.ebayOfferId ? "FlipTracker Inventory API" : existing.ebayListingOrigin || "eBay app / Seller Hub";
       await ctx.db.patch(existing._id, {
@@ -1126,6 +1189,7 @@ export const upsertActiveNativeListing = internalMutation({
       return { imported: false, updated: true, listingId: existing._id };
     }
     const assetId = await ctx.db.insert("assets", {
+      ownerId: args.ownerId,
       type: "General Merchandise",
       title: args.title,
       coverImageUrl: args.pictureUrl,
@@ -1138,6 +1202,7 @@ export const upsertActiveNativeListing = internalMutation({
       updatedAt: now,
     });
     const listingId = await ctx.db.insert("marketplaceListings", {
+      ownerId: args.ownerId,
       assetId,
       platform: "eBay",
       status: "Active",
@@ -1167,7 +1232,7 @@ export const getSellerListingSummary = action({
   handler: async (ctx, args): Promise<SellerListingSummary> => {
     requireAdminKey(args.adminKey);
     try {
-      const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: singletonKey() });
+      const connection = await ctx.runQuery(internal.ebay.getConnection, { singletonKey: await currentSingletonKey(ctx) });
       const grantedScopes = new Set(connection?.scopes.split(/\s+/).filter(Boolean) ?? []);
       const accessToken = await refreshAccessToken(ctx, !grantedScopes.has(EBAY_BROWSE_SCOPE));
       const response = await tradingApiFetch(accessToken, "GetMyeBaySelling", `<?xml version="1.0" encoding="utf-8"?>
@@ -1206,6 +1271,7 @@ export const syncActiveListings = action({
   handler: async (ctx, args): Promise<{ checked: number; imported: number; updated: number }> => {
     requireAdminKey(args.adminKey);
     try {
+      const ownerId = await currentOwnerId(ctx);
       const accessToken = await refreshAccessToken(ctx);
       let pageNumber = 1;
       let totalPages = 1;
@@ -1238,6 +1304,7 @@ export const syncActiveListings = action({
           const listedDate = String(item.ListingDetails?.StartTime ?? "").slice(0, 10) || undefined;
           const listingUrl = String(item.ListingDetails?.ViewItemURL ?? `${environment() === "production" ? "https://www.ebay.com" : "https://www.sandbox.ebay.com"}/itm/${externalListingId}`);
           const result = await ctx.runMutation(internal.ebay.upsertActiveNativeListing, {
+            ownerId,
             externalListingId,
             title,
             sku: item.SKU ? String(item.SKU) : undefined,
@@ -1266,6 +1333,7 @@ export const syncSoldOrders = action({
   handler: async (ctx, args): Promise<{ ordersChecked: number; lineItemsChecked: number; matched: number; updated: number; imported: number; unmatched: number }> => {
     requireAdminKey(args.adminKey);
     try {
+      const ownerId = await currentOwnerId(ctx);
       const accessToken = await refreshAccessToken(ctx);
       const days = Math.min(90, Math.max(1, Math.round(args.days ?? 30)));
       const end = new Date();
@@ -1299,6 +1367,7 @@ export const syncSoldOrders = action({
             if (!Number.isFinite(soldPrice) || soldPrice <= 0) continue;
             const share = orderItemTotal > 0 ? soldPrice / orderItemTotal : 1 / Math.max(1, lineItems.length);
             const result: { matched: boolean; updated: boolean; imported: boolean } = await ctx.runMutation(internal.ebay.reconcileSoldOrderLine, {
+              ownerId,
               externalListingId: lineItem.legacyItemId,
               sku: lineItem.sku,
               title: lineItem.title,
@@ -1336,7 +1405,7 @@ export const endPublishedListing = action({
   args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
   handler: async (ctx, args): Promise<{ ended: true; externalListingId: string }> => {
     requireAdminKey(args.adminKey);
-    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId, ownerId: await currentOwnerId(ctx) });
     if (!bundle) throw new ConvexError("Listing or inventory item not found.");
     const { listing } = bundle;
     if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId) {
@@ -1404,10 +1473,12 @@ export const saveSettings = action({
   },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     requireAdminKey(args.adminKey);
+    const ownerId = await currentOwnerId(ctx);
     const { adminKey: _adminKey, ...settings } = args;
     await ctx.runMutation(internal.ebay.saveSettingsRecord, {
       ...settings,
-      singletonKey: singletonKey(),
+      ownerId,
+      singletonKey: singletonKey(ownerId),
       environment: environment(),
     });
     return { ok: true };
@@ -1421,9 +1492,10 @@ export const lookupActivePricing = action({
     if (!args.listingIds.length) throw new ConvexError("Select at least one listing to price.");
     if (args.listingIds.length > 25) throw new ConvexError("Price up to 25 listings at a time.");
     const accessToken = await applicationAccessToken();
+    const ownerId = await currentOwnerId(ctx);
     const results = [];
     for (const listingId of args.listingIds) {
-      const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId });
+      const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId, ownerId });
       if (!bundle) {
         results.push({ listingId, matchCount: 0, confidence: "Low", warning: "Listing or inventory item was not found." });
         continue;
@@ -1483,9 +1555,11 @@ export const createInventoryLocation = action({
       });
     }
 
-    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+    const ownerId = await currentOwnerId(ctx);
+    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey(ownerId) });
     await ctx.runMutation(internal.ebay.saveSettingsRecord, {
-      singletonKey: singletonKey(),
+      ownerId,
+      singletonKey: singletonKey(ownerId),
       environment: environment(),
       marketplaceId: settings?.marketplaceId ?? "EBAY_US",
       currency: settings?.currency ?? "USD",
@@ -1549,9 +1623,11 @@ export const ensureMediaMailPolicy = action({
     }
     if (!fulfillmentPolicyId) throw new Error("eBay did not return the Media Mail policy ID.");
 
-    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+    const ownerId = await currentOwnerId(ctx);
+    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey(ownerId) });
     await ctx.runMutation(internal.ebay.saveSettingsRecord, {
-      singletonKey: singletonKey(),
+      ownerId,
+      singletonKey: singletonKey(ownerId),
       environment: environment(),
       marketplaceId: settings?.marketplaceId ?? marketplace,
       currency: settings?.currency ?? "USD",
@@ -1686,9 +1762,11 @@ export const provisionSandboxDefaults = action({
     }
 
     if (!fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) throw new Error("eBay did not return all three policy IDs.");
-    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+    const ownerId = await currentOwnerId(ctx);
+    const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey(ownerId) });
     await ctx.runMutation(internal.ebay.saveSettingsRecord, {
-      singletonKey: singletonKey(),
+      ownerId,
+      singletonKey: singletonKey(ownerId),
       environment: environment(),
       marketplaceId: settings?.marketplaceId ?? marketplace,
       currency: settings?.currency ?? "USD",
@@ -1714,7 +1792,7 @@ export const createUnpublishedOffer = action({
   args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
   handler: async (ctx, args): Promise<{ offerId: string; sku: string; updated: boolean }> => {
     requireAdminKey(args.adminKey);
-    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId, ownerId: await currentOwnerId(ctx) });
     if (!bundle) throw new Error("Listing or inventory item not found.");
     const { listing, asset } = bundle;
     if (listing.platform.toLowerCase() !== "ebay") throw new Error("Only eBay listings can be sent to eBay.");
@@ -1724,7 +1802,7 @@ export const createUnpublishedOffer = action({
 
     try {
       const accessToken = await refreshAccessToken(ctx);
-      const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+      const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: await currentSingletonKey(ctx) });
       if (!settings?.merchantLocationKey) throw new Error("Choose an eBay inventory location in Seller Connection.");
       const fulfillmentPolicyId = listing.fulfillmentPolicyId || settings.fulfillmentPolicyId;
       if (!fulfillmentPolicyId) throw new Error("Choose an eBay shipping policy before sending this draft.");
@@ -1984,7 +2062,7 @@ export const publishOffer = action({
   args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
   handler: async (ctx, args): Promise<{ listingId: string; listingUrl: string }> => {
     requireAdminKey(args.adminKey);
-    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId, ownerId: await currentOwnerId(ctx) });
     if (!bundle) throw new Error("Listing or inventory item not found.");
     if (!bundle.listing.ebayOfferId) throw new Error("Stage this item with eBay before publishing it.");
     if (bundle.listing.externalListingId && bundle.listing.listingUrl) {
@@ -2018,25 +2096,135 @@ export const publishOffer = action({
 
 export const revisePublishedListing = action({
   args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
-  handler: async (ctx, args): Promise<{ listingId: string; listingUrl: string; offerId: string }> => {
+  handler: async (ctx, args): Promise<{ listingId: string; listingUrl: string; offerId?: string; revisionSource: string }> => {
     requireAdminKey(args.adminKey);
-    const before = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    const before = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId, ownerId: await currentOwnerId(ctx) });
     if (!before) throw new ConvexError("Listing or inventory item not found.");
-    const { listing } = before;
-    if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId || !listing.ebayOfferId) {
-      throw new ConvexError("Only a published Inventory API listing can be revised through this action.");
+    const { listing, asset } = before;
+    if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId) {
+      throw new ConvexError("Only an active linked eBay listing can be revised through this action.");
     }
     try {
-      const refreshed = await ctx.runAction(api.ebay.createUnpublishedOffer, args);
       const listingUrl = listing.listingUrl || (environment() === "production"
         ? `https://www.ebay.com/itm/${listing.externalListingId}`
         : `https://www.sandbox.ebay.com/itm/${listing.externalListingId}`);
-      await ctx.runMutation(internal.ebay.markOfferPublished, {
+      if (listing.ebayOfferId) {
+        const refreshed = await ctx.runAction(api.ebay.createUnpublishedOffer, args);
+        await ctx.runMutation(internal.ebay.markOfferPublished, {
+          listingId: listing._id,
+          ebayListingId: listing.externalListingId,
+          listingUrl,
+        });
+        await ctx.runMutation(internal.ebay.markPublishedListingRevised, {
+          listingId: listing._id,
+          revisionSource: "FlipTracker Inventory API revision",
+        });
+        return {
+          listingId: listing.externalListingId,
+          listingUrl,
+          offerId: refreshed.offerId,
+          revisionSource: "Inventory API",
+        };
+      }
+
+      if (!/^\d+$/.test(listing.externalListingId)) throw new Error("The linked eBay item ID is not valid.");
+      const accessToken = await refreshAccessToken(ctx);
+      const remoteResponse = await tradingApiFetch(accessToken, "GetItem", `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <DetailLevel>ReturnAll</DetailLevel>
+  <IncludeItemSpecifics>true</IncludeItemSpecifics>
+  <ItemID>${xmlValue(listing.externalListingId)}</ItemID>
+</GetItemRequest>`);
+      const remoteItem = (remoteResponse as { Item?: Record<string, any> }).Item;
+      if (!remoteItem) throw new Error("eBay did not return the live listing details needed for a safe revision.");
+
+      const localAspects = removeCatalogIdentifiers(parseItemSpecifics(listing.itemSpecifics));
+      const aspects = mergeItemSpecifics(remoteItemSpecifics(remoteItem.ItemSpecifics), localAspects);
+      const isBook = `${asset.type} ${asset.mediaFormat ?? ""}`.toLowerCase().includes("book");
+      if (listing.language) setAspect(aspects, "Language", listing.language);
+      if (isBook) {
+        setAspect(aspects, "Book Title", (listing.bookTitle || asset.title).trim().slice(0, 65));
+        setAspect(aspects, "Author", listing.author || asset.author);
+      }
+      setAspectDefault(aspects, "Format", asset.mediaFormat);
+      setAspectDefault(aspects, isBook ? "Publisher" : "Studio", asset.studio);
+      setAspectDefault(aspects, "Release Year", asset.releaseYear);
+      setAspectDefault(aspects, "Rating", asset.rating);
+
+      const uploadedPhotoUrls: string[] = [];
+      for (const [index, photo] of before.photos.slice(0, 12).entries()) {
+        let uploadedUrl = photo.ebayImageUrl;
+        if (!uploadedUrl) {
+          const blob = await ctx.storage.get(photo.storageId);
+          if (!blob) throw new Error(`Photo ${index + 1} is missing from storage. Remove it and capture it again.`);
+          uploadedUrl = await uploadPhotoBlob(accessToken, blob, photo.filename || `fliptracker-${index + 1}.jpg`);
+          await ctx.runMutation(internal.photos.markEbayUploaded, { photoId: photo._id, ebayImageUrl: uploadedUrl });
+        }
+        uploadedPhotoUrls.push(uploadedUrl);
+      }
+      if (!uploadedPhotoUrls.length && asset.photoDataUrl) {
+        uploadedPhotoUrls.push(await uploadActualPhoto(accessToken, asset.photoDataUrl));
+      }
+
+      const remoteConditionName = scalarText(remoteItem.ConditionDisplayName).trim().toLowerCase();
+      const localConditionName = listing.condition?.trim().toLowerCase() ?? "";
+      const conditionChanged = Boolean(localConditionName && localConditionName !== remoteConditionName);
+      const conditionId = conditionChanged ? conditionIdForNativeListing(listing.condition, remoteItem.ConditionID) : "";
+      const categoryId = validatedCategoryId(listing.ebayCategoryId || scalarText(remoteItem.PrimaryCategory?.CategoryID));
+      const price = listing.currentPrice ?? listing.listedPrice;
+      if (!price || price < 0.99) throw new Error("Add a price of at least $0.99 before revising the live listing.");
+
+      const remoteProfiles = remoteItem.SellerProfiles as Record<string, any> | undefined;
+      const shippingProfileId = listing.fulfillmentPolicyId || scalarText(remoteProfiles?.SellerShippingProfile?.ShippingProfileID);
+      const paymentProfileId = scalarText(remoteProfiles?.SellerPaymentProfile?.PaymentProfileID);
+      const returnProfileId = scalarText(remoteProfiles?.SellerReturnProfile?.ReturnProfileID);
+      const sellerProfilesXml = shippingProfileId || paymentProfileId || returnProfileId
+        ? `<SellerProfiles>${shippingProfileId ? `<SellerShippingProfile><ShippingProfileID>${xmlValue(shippingProfileId)}</ShippingProfileID></SellerShippingProfile>` : ""}${paymentProfileId ? `<SellerPaymentProfile><PaymentProfileID>${xmlValue(paymentProfileId)}</PaymentProfileID></SellerPaymentProfile>` : ""}${returnProfileId ? `<SellerReturnProfile><ReturnProfileID>${xmlValue(returnProfileId)}</ReturnProfileID></SellerReturnProfile>` : ""}</SellerProfiles>`
+        : "";
+
+      const remotePackage = remoteItem.ShippingPackageDetails as Record<string, unknown> | undefined;
+      const hasLocalPackage = [listing.packageWeightOz, listing.packageLengthIn, listing.packageWidthIn, listing.packageHeightIn]
+        .some((value) => value !== undefined);
+      let packageXml = "";
+      if (hasLocalPackage) {
+        const defaults = defaultPackageForAsset(asset);
+        const remoteWeightOz = parsedAmount(remotePackage?.WeightMajor) * 16 + parsedAmount(remotePackage?.WeightMinor);
+        const totalWeightOz = listing.packageWeightOz ?? (remoteWeightOz || defaults.weightOz);
+        const length = listing.packageLengthIn ?? (parsedAmount(remotePackage?.PackageLength) || defaults.lengthIn);
+        const width = listing.packageWidthIn ?? (parsedAmount(remotePackage?.PackageWidth) || defaults.widthIn);
+        const depth = listing.packageHeightIn ?? (parsedAmount(remotePackage?.PackageDepth) || defaults.heightIn);
+        const shippingPackage = scalarText(remotePackage?.ShippingPackage);
+        packageXml = `<ShippingPackageDetails>${shippingPackage ? `<ShippingPackage>${xmlValue(shippingPackage)}</ShippingPackage>` : ""}<PackageLength>${length}</PackageLength><PackageWidth>${width}</PackageWidth><PackageDepth>${depth}</PackageDepth><WeightMajor>${Math.floor(totalWeightOz / 16)}</WeightMajor><WeightMinor>${Math.round(totalWeightOz % 16)}</WeightMinor></ShippingPackageDetails>`;
+      }
+
+      const pictureXml = uploadedPhotoUrls.length
+        ? `<PictureDetails>${uploadedPhotoUrls.map((url) => `<PictureURL>${xmlValue(url)}</PictureURL>`).join("")}</PictureDetails>`
+        : "";
+      const description = listing.description?.trim() || scalarText(remoteItem.Description) || listing.title;
+      await tradingApiFetch(accessToken, "ReviseFixedPriceItem", `<?xml version="1.0" encoding="utf-8"?>
+<ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Item>
+    <ItemID>${xmlValue(listing.externalListingId)}</ItemID>
+    <Title>${xmlValue(listing.title.trim().slice(0, 80))}</Title>
+    <Description>${xmlValue(description)}</Description>
+    <StartPrice>${moneyRound(price).toFixed(2)}</StartPrice>
+    ${categoryId ? `<PrimaryCategory><CategoryID>${xmlValue(categoryId)}</CategoryID></PrimaryCategory>` : ""}
+    ${conditionId ? `<ConditionID>${xmlValue(conditionId)}</ConditionID>` : ""}
+    ${itemSpecificsXml(aspects)}
+    ${sellerProfilesXml}
+    ${packageXml}
+    ${pictureXml}
+  </Item>
+</ReviseFixedPriceItemRequest>`);
+      await ctx.runMutation(internal.ebay.markPublishedListingRevised, {
         listingId: listing._id,
-        ebayListingId: listing.externalListingId,
-        listingUrl,
+        revisionSource: "FlipTracker Trading API revision",
       });
-      return { listingId: listing.externalListingId, listingUrl, offerId: refreshed.offerId };
+      return {
+        listingId: listing.externalListingId,
+        listingUrl,
+        revisionSource: "Trading API",
+      };
     } catch (error) {
       const message = `eBay listing revision failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`;
       await ctx.runMutation(internal.ebay.markDraftError, { listingId: listing._id, message });
@@ -2054,7 +2242,7 @@ export const updatePublishedPrice = action({
   },
   handler: async (ctx, args): Promise<{ oldPrice: number; newPrice: number; listingId: string }> => {
     requireAdminKey(args.adminKey);
-    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId });
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId, ownerId: await currentOwnerId(ctx) });
     if (!bundle) throw new ConvexError("Listing or inventory item not found.");
     const { listing } = bundle;
     if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Active" || !listing.externalListingId) {
@@ -2067,7 +2255,7 @@ export const updatePublishedPrice = action({
 
     try {
       const accessToken = await refreshAccessToken(ctx);
-      const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: singletonKey() });
+      const settings = await ctx.runQuery(internal.ebay.getSettings, { singletonKey: await currentSingletonKey(ctx) });
       if (listing.ebayOfferId) {
         const response = await ebayFetch(accessToken, "/sell/inventory/v1/bulk_update_price_quantity", {
           method: "POST",

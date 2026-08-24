@@ -1,5 +1,15 @@
 # Architecture
 
+## v0.9 Identity And Tenancy
+
+- Clerk supplies browser identity and a Convex-compatible JWT.
+- `AuthGate` wraps the app with `ConvexProviderWithClerk` when the Clerk publishable key exists.
+- Convex derives `ownerId` from the authenticated token identifier; clients never choose an owner ID.
+- Private tables carry optional `ownerId` during migration. Once `FLIPTRACKER_AUTH_REQUIRED=true`, unauthenticated calls fail and authenticated reads/writes are owner-scoped.
+- The first authenticated owner can claim legacy unowned records only with the private admin key. The operation is one-time and refuses a competing owner.
+- eBay connection/settings keys include owner identity in authenticated mode. OAuth state carries the owner through the server callback; legacy mode retains the old deployment-wide key until migration.
+- `listingEvents` records status, publish, revise, price, end, and sync-failure activity for operational review.
+
 ```text
 GitHub -> Vercel -> React/Vite/PWA -> Convex
 ```

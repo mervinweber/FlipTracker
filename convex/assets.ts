@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { assertOwner, currentOwnerId } from "./ownership";
 
 const assetInput = {
   type: v.string(),
@@ -194,8 +194,7 @@ export const update = mutation({
   handler: async (ctx, { id, ...patch }) => {
     const ownerId = await currentOwnerId(ctx);
     const existing = await ctx.db.get(id);
-    if (!existing) throw new Error("Asset not found");
-    if (ownerId && existing.ownerId && existing.ownerId !== ownerId) throw new Error("Asset not found");
+    assertOwner(existing, ownerId, "Asset");
 
     const valueInputsChanged =
       (patch.title !== undefined && patch.title !== existing.title) ||
@@ -223,7 +222,7 @@ export const remove = mutation({
     const ownerId = await currentOwnerId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) return;
-    if (ownerId && existing.ownerId && existing.ownerId !== ownerId) throw new Error("Asset not found");
+    assertOwner(existing, ownerId, "Asset");
     const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", args.id)).collect();
     for (const photo of photos) {
       await ctx.storage.delete(photo.storageId);
@@ -245,6 +244,7 @@ export const removeMany = mutation({
     for (const id of ids) {
       const asset = await ctx.db.get(id);
       if (!asset) continue;
+      assertOwner(asset, ownerId, "Asset");
       const sales = await ctx.db.query("sales").withIndex("by_asset", (q) => q.eq("assetId", id)).take(1);
       const listings = await ctx.db.query("marketplaceListings").withIndex("by_assetId", (q) => q.eq("assetId", id)).collect();
       const protectedListing = listings.find((listing) =>
@@ -294,6 +294,7 @@ export const updatePurchasePriceMany = mutation({
     amount: v.number(),
   },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const ids = [...new Set(args.ids)];
     if (!ids.length) throw new Error("Select at least one inventory item.");
     if (ids.length > 100) throw new Error("Bulk cost editing supports up to 100 inventory items at a time.");
@@ -302,7 +303,9 @@ export const updatePurchasePriceMany = mutation({
     const records = [];
     for (const id of ids) {
       const asset = await ctx.db.get(id);
-      if (asset) records.push(asset);
+      if (!asset) continue;
+      assertOwner(asset, ownerId, "Asset");
+      records.push(asset);
     }
     if (!records.length) throw new Error("The selected inventory items were not found.");
 

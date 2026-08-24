@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { applyOwnerFilter, assertOwner, currentOwnerId } from "./ownership";
 
 function midpoint(low?: number, high?: number) {
   if (low !== undefined && high !== undefined) return Math.round(((low + high) / 2) * 100) / 100;
@@ -104,7 +104,8 @@ const listingPatch = {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const listings = await ctx.db.query("marketplaceListings").order("desc").take(500);
+    const ownerId = await currentOwnerId(ctx);
+    const listings = applyOwnerFilter(await ctx.db.query("marketplaceListings").order("desc").take(500), ownerId);
     return await Promise.all(
       listings.map(async (listing) => {
         const asset = await ctx.db.get(listing.assetId);
@@ -151,18 +152,62 @@ export const list = query({
 
 export const priceHistory = query({
   args: { listingId: v.id("marketplaceListings") },
-  handler: async (ctx, args) =>
-    await ctx.db
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.listingId), ownerId, "Listing");
+    return applyOwnerFilter(await ctx.db
       .query("listingPriceHistory")
       .withIndex("by_listingId", (q) => q.eq("listingId", args.listingId))
       .order("desc")
-      .take(100),
+      .take(100), ownerId);
+  },
+});
+
+export const activity = query({
+  args: { listingId: v.id("marketplaceListings") },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.listingId), ownerId, "Listing");
+    return applyOwnerFilter(await ctx.db.query("listingEvents")
+      .withIndex("by_listingId", (q) => q.eq("listingId", args.listingId))
+      .order("desc")
+      .take(50), ownerId);
+  },
+});
+
+export const recordEvent = internalMutation({
+  args: {
+    listingId: v.id("marketplaceListings"),
+    eventType: v.string(),
+    source: v.string(),
+    message: v.optional(v.string()),
+    fromStatus: v.optional(v.string()),
+    toStatus: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
+    if (!listing) return null;
+    return await ctx.db.insert("listingEvents", {
+      ownerId: listing.ownerId,
+      listingId: listing._id,
+      assetId: listing.assetId,
+      eventType: args.eventType,
+      source: args.source,
+      message: args.message,
+      fromStatus: args.fromStatus,
+      toStatus: args.toStatus,
+      metadata: args.metadata,
+      createdAt: Date.now(),
+    });
+  },
 });
 
 export const stats = query({
   args: {},
   handler: async (ctx) => {
-    const listings = await ctx.db.query("marketplaceListings").order("desc").take(1000);
+    const ownerId = await currentOwnerId(ctx);
+    const listings = applyOwnerFilter(await ctx.db.query("marketplaceListings").order("desc").take(1000), ownerId);
     const active = listings.filter((listing) => listing.status === "Active");
     const sold = listings.filter((listing) => listing.status === "Sold");
     const soldWithDates = sold.filter((listing) => listing.listedDate && listing.soldDate);
@@ -198,10 +243,9 @@ export const create = mutation({
   args: { assetId: v.id("assets"), ...listingFields },
   handler: async (ctx, args) => {
     const asset = await ctx.db.get(args.assetId);
-    if (!asset) throw new Error("Inventory item not found");
-
-    const now = Date.now();
     const ownerId = await currentOwnerId(ctx);
+    assertOwner(asset, ownerId, "Inventory item");
+    const now = Date.now();
     const listingId = await ctx.db.insert("marketplaceListings", {
       ownerId,
       ...args,
@@ -223,6 +267,16 @@ export const create = mutation({
         createdAt: now,
       });
     }
+    await ctx.db.insert("listingEvents", {
+      ownerId,
+      listingId,
+      assetId: args.assetId,
+      eventType: "created",
+      source: "FlipTracker",
+      toStatus: args.status,
+      message: `${args.platform} listing created in ${args.status}.`,
+      createdAt: now,
+    });
     if (args.status === "Active") {
       await ctx.db.patch(args.assetId, { status: "Listed", updatedAt: now });
     } else if (args.status === "Sold") {
@@ -269,7 +323,8 @@ export const update = mutation({
   },
   handler: async (ctx, { id, priceChangeReason, purchasePrice, ...patch }) => {
     const existing = await ctx.db.get(id);
-    if (!existing) throw new Error("Listing not found");
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(existing, ownerId, "Listing");
 
     const now = Date.now();
     const monetaryValues = [purchasePrice, patch.soldPrice, patch.shippingCharged, patch.shippingCost, patch.fees];
@@ -278,6 +333,7 @@ export const update = mutation({
     }
     if (patch.currentPrice !== undefined && patch.currentPrice !== existing.currentPrice) {
       await ctx.db.insert("listingPriceHistory", {
+        ownerId: existing.ownerId,
         listingId: id,
         assetId: existing.assetId,
         date: now,
@@ -291,6 +347,31 @@ export const update = mutation({
       ? { pricingStatus: "Ready for eBay", pricingSource: patch.pricingSource ?? "Manual listing edit", pricingUpdatedAt: now }
       : {};
     await ctx.db.patch(id, { ...patch, ...pricingPatch, updatedAt: now });
+    if (patch.status !== undefined && patch.status !== existing.status) {
+      await ctx.db.insert("listingEvents", {
+        ownerId: existing.ownerId,
+        listingId: id,
+        assetId: existing.assetId,
+        eventType: "status_changed",
+        source: "FlipTracker",
+        fromStatus: existing.status,
+        toStatus: patch.status,
+        message: `Listing moved from ${existing.status} to ${patch.status}.`,
+        createdAt: now,
+      });
+    }
+    if (patch.currentPrice !== undefined && patch.currentPrice !== existing.currentPrice) {
+      await ctx.db.insert("listingEvents", {
+        ownerId: existing.ownerId,
+        listingId: id,
+        assetId: existing.assetId,
+        eventType: "price_changed",
+        source: "FlipTracker",
+        message: priceChangeReason || "Listing price updated.",
+        metadata: JSON.stringify({ from: existing.currentPrice ?? existing.listedPrice, to: patch.currentPrice }),
+        createdAt: now,
+      });
+    }
     if (purchasePrice !== undefined) {
       await ctx.db.patch(existing.assetId, { purchasePrice, updatedAt: now });
     }
@@ -347,7 +428,7 @@ export const update = mutation({
         if (legacyMatch) {
           await ctx.db.patch(legacyMatch._id, saleRecord);
         } else {
-          await ctx.db.insert("sales", { ...saleRecord, createdAt: now });
+          await ctx.db.insert("sales", { ownerId: existing.ownerId, ...saleRecord, createdAt: now });
         }
       }
     }
@@ -360,11 +441,15 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const listing = await ctx.db.get(args.id);
     if (!listing) return null;
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(listing, ownerId, "Listing");
     const history = await ctx.db
       .query("listingPriceHistory")
       .withIndex("by_listingId", (q) => q.eq("listingId", args.id))
       .take(500);
     for (const entry of history) await ctx.db.delete(entry._id);
+    const events = await ctx.db.query("listingEvents").withIndex("by_listingId", (q) => q.eq("listingId", args.id)).take(500);
+    for (const event of events) await ctx.db.delete(event._id);
     await ctx.db.delete(args.id);
     return null;
   },
@@ -379,6 +464,7 @@ export const applyQueuePricing = mutation({
     })),
   },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     if (!args.updates.length) throw new Error("Choose at least one priced listing.");
     if (args.updates.length > 100) throw new Error("Update up to 100 listings at a time.");
     const now = Date.now();
@@ -386,6 +472,7 @@ export const applyQueuePricing = mutation({
       if (!Number.isFinite(update.price) || update.price <= 0) throw new Error("Every approved listing needs a price above zero.");
       const listing = await ctx.db.get(update.listingId);
       if (!listing) throw new Error("A selected listing no longer exists.");
+      assertOwner(listing, ownerId, "Listing");
       if (listing.platform.toLowerCase() !== "ebay" || !["Draft", "Pending"].includes(listing.status)) {
         throw new Error(`${listing.title} is not an eBay Draft or Pending listing.`);
       }
@@ -393,6 +480,7 @@ export const applyQueuePricing = mutation({
       const previousPrice = listing.currentPrice ?? listing.listedPrice;
       if (previousPrice !== normalizedPrice) {
         await ctx.db.insert("listingPriceHistory", {
+          ownerId: listing.ownerId,
           listingId: listing._id,
           assetId: listing.assetId,
           date: now,

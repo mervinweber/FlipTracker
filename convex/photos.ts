@@ -3,7 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { api, internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
 import { action, internalMutation, mutation, query } from "./_generated/server";
-import { currentOwnerId } from "./ownership";
+import { assertOwner, currentOwnerId } from "./ownership";
 
 const MAX_PHOTOS = 12;
 
@@ -21,7 +21,10 @@ function usesCatalogImage(listing: { imageMode?: string; condition?: string }, a
 
 export const generateUploadUrl = mutation({
   args: {},
-  handler: async (ctx) => await ctx.storage.generateUploadUrl(),
+  handler: async (ctx) => {
+    await currentOwnerId(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
 });
 
 export const attach = mutation({
@@ -32,8 +35,9 @@ export const attach = mutation({
     contentType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const asset = await ctx.db.get(args.assetId);
-    if (!asset) throw new Error("Inventory item not found.");
+    assertOwner(asset, ownerId, "Inventory item");
     const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", args.assetId)).collect();
     if (photos.length >= MAX_PHOTOS) throw new Error(`An item can have up to ${MAX_PHOTOS} photos.`);
     return await ctx.db.insert("assetPhotos", {
@@ -50,8 +54,10 @@ export const attach = mutation({
 export const remove = mutation({
   args: { photoId: v.id("assetPhotos") },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const photo = await ctx.db.get(args.photoId);
     if (!photo) return;
+    assertOwner(photo, ownerId, "Photo");
     await ctx.storage.delete(photo.storageId);
     await ctx.db.delete(photo._id);
     const remaining = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", photo.assetId)).collect();
@@ -68,8 +74,9 @@ export const replace = mutation({
     contentType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const photo = await ctx.db.get(args.photoId);
-    if (!photo) throw new Error("Photo not found.");
+    assertOwner(photo, ownerId, "Photo");
     await ctx.db.patch(photo._id, {
       storageId: args.storageId,
       contentType: args.contentType?.slice(0, 80),
@@ -83,8 +90,9 @@ export const replace = mutation({
 export const makePrimary = mutation({
   args: { photoId: v.id("assetPhotos") },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const selected = await ctx.db.get(args.photoId);
-    if (!selected) throw new Error("Photo not found.");
+    assertOwner(selected, ownerId, "Photo");
     const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", selected.assetId)).collect();
     const ordered = photos.sort((a, b) => a.position - b.position);
     for (const photo of ordered) {
@@ -97,6 +105,8 @@ export const makePrimary = mutation({
 export const listForAsset = query({
   args: { assetId: v.id("assets") },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    assertOwner(await ctx.db.get(args.assetId), ownerId, "Inventory item");
     const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", args.assetId)).collect();
     return await Promise.all(photos.sort((a, b) => a.position - b.position).map(async (photo) => ({
       ...photo,
@@ -105,9 +115,9 @@ export const listForAsset = query({
   },
 });
 
-async function targetForAsset(ctx: QueryCtx, assetId: Id<"assets">) {
+async function targetForAsset(ctx: QueryCtx, assetId: Id<"assets">, ownerId?: string) {
   const asset = await ctx.db.get(assetId);
-  if (!asset) return null;
+  if (!asset || (ownerId && asset.ownerId !== ownerId)) return null;
   const listings = await ctx.db.query("marketplaceListings").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect();
   const listing = listings.find((item) => item.platform.toLowerCase() === "ebay" && ["Draft", "Pending"].includes(item.status)) ?? listings[0];
   const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect();
@@ -199,15 +209,16 @@ export const migrateLegacyPhotos = action({
 export const queue = query({
   args: {},
   handler: async (ctx) => {
+    const ownerId = await currentOwnerId(ctx);
     const listings = await ctx.db.query("marketplaceListings").order("desc").take(500);
     const seen = new Set<string>();
     const results = [];
     for (const listing of listings) {
-      if (listing.platform.toLowerCase() !== "ebay" || !["Draft", "Pending"].includes(listing.status) || seen.has(listing.assetId)) continue;
+      if ((ownerId && listing.ownerId !== ownerId) || listing.platform.toLowerCase() !== "ebay" || !["Draft", "Pending"].includes(listing.status) || seen.has(listing.assetId)) continue;
       const asset = await ctx.db.get(listing.assetId);
       if (!asset || usesCatalogImage(listing, asset)) continue;
       seen.add(listing.assetId);
-      const target = await targetForAsset(ctx, listing.assetId);
+      const target = await targetForAsset(ctx, listing.assetId, ownerId);
       if (target && target.photoCount === 0) results.push(target);
     }
     return results;
@@ -217,17 +228,18 @@ export const queue = query({
 export const findByCode = query({
   args: { code: v.string() },
   handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
     const code = args.code.trim();
     if (!code) return [];
     const assetIds = new Set<Id<"assets">>();
     const skuListings = await ctx.db.query("marketplaceListings").withIndex("by_sku", (q) => q.eq("sku", code)).collect();
-    for (const listing of skuListings) assetIds.add(listing.assetId);
+    for (const listing of skuListings) if (!ownerId || listing.ownerId === ownerId) assetIds.add(listing.assetId);
     const upcAssets = await ctx.db.query("assets").withIndex("by_upc", (q) => q.eq("upc", code)).collect();
     const barcodeAssets = await ctx.db.query("assets").withIndex("by_barcode", (q) => q.eq("barcode", code)).collect();
-    for (const asset of [...upcAssets, ...barcodeAssets]) assetIds.add(asset._id);
+    for (const asset of [...upcAssets, ...barcodeAssets]) if (!ownerId || asset.ownerId === ownerId) assetIds.add(asset._id);
     const targets = [];
     for (const assetId of [...assetIds].slice(0, 20)) {
-      const target = await targetForAsset(ctx, assetId);
+      const target = await targetForAsset(ctx, assetId, ownerId);
       if (target) targets.push(target);
     }
     return targets;
