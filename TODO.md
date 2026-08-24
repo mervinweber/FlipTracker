@@ -2,6 +2,16 @@
 
 This file is the working checklist for the combined FlipTracker inventory, research, listing, and sales app.
 
+## v0.9.1 Listing Speed
+
+- [x] Add a compact Fast Review workflow for title, condition, price, shipping, photo status, and estimated net
+- [x] Add Save & Next and Save, Stage & Next for continuous listing review
+- [x] Remember item-family condition, shipping profile, policy, and image defaults locally without requiring Clerk
+- [x] Add a Listings batch dashboard for photos, pricing, exceptions, ready items, and staged offers
+- [x] Add a completed-intake handoff to Photos and Fast Review
+- [x] Add confirmation-protected bulk publishing for selected staged offers with per-item failures left selected
+- [ ] Measure scan-to-ready time across a real DVD/book batch and tune the remaining high-friction steps
+
 Prototype snapshot:
 
 - Functional today: inventory, eBay seller linking, draft staging, sold sync, photo capture, and the Cross Listings queue shell.
@@ -20,7 +30,7 @@ Prototype snapshot:
 - [x] Add deterministic backend package and media-category fallbacks for older drafts
 - [x] Add a listing-readiness validator that explains every blocking eBay aspect before staging
 - [x] Add category-specific aspect discovery from the eBay Taxonomy API, beginning with clothing leaf categories
-- [ ] Add saved shipping-profile defaults per item family after authentication/settings are user-owned
+- [x] Add browser-local shipping-profile defaults per item family; migrate them to account settings when multi-user auth is activated
 - [x] Add a one-screen keyboard-first exception queue for drafts blocked by photos, price, category, or required specifics
 - [x] Code-split the listing factory and scanner to reduce the current large JavaScript bundle
 

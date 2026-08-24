@@ -1,6 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Barcode, Camera, CheckCircle2, CircleDashed, ExternalLink, Keyboard, LayoutList, Pause, Play, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Barcode, Camera, CheckCircle2, CircleDashed, ExternalLink, Images, Keyboard, LayoutList, Pause, Play, Plus, RotateCcw, Save, Trash2, WandSparkles, X } from 'lucide-react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
@@ -332,6 +332,15 @@ export default function BulkIntakePanel() {
       </section>
 
       <section className="cards bulkIntakeCards"><div className="metric"><span>Scanned</span><strong>{rows.length}</strong></div><div className="metric"><span>Saved</span><strong>{savedCount}</strong></div><div className="metric"><span>Drafts</span><strong>{draftCount}</strong></div><div className="metric attention"><span>Needs Review</span><strong>{reviewCount}</strong></div></section>
+
+      {selectedBatch?.status === 'Completed' ? <section className="panel batchCompletionPanel">
+        <div className="panelHeader"><div><p className="eyebrow">Batch complete</p><h2>{selectedBatch.name}</h2><p>{savedCount} items identified, {draftCount} listing drafts created, and {reviewCount} lookup exception{reviewCount === 1 ? '' : 's'} remain.</p></div><span className="badge sold"><CheckCircle2 size={14}/> Scanning finished</span></div>
+        <div className="batchNextActions">
+          <button onClick={() => { window.location.hash = '#photos'; }}><Images size={18}/><span><strong>Add item photos</strong><small>Work through drafts that require actual photos.</small></span></button>
+          <button onClick={() => { window.location.hash = '#listings'; }}><WandSparkles size={18}/><span><strong>Fast review listings</strong><small>Approve routine details and isolate exceptions.</small></span></button>
+          {reviewCount ? <button className="secondary" onClick={() => setHideCompleted(true)}><AlertTriangle size={18}/><span><strong>Resolve {reviewCount} scans</strong><small>Retry or correct low-confidence lookups.</small></span></button> : null}
+        </div>
+      </section> : null}
 
       <section className="panel bulkQueuePanel">
         <div className="panelHeader"><div><h2>Scan Queue</h2><p>Low-confidence metadata is saved but held for review before eBay publishing.</p></div><button className="secondary" onClick={() => setHideCompleted((hidden) => !hidden)}><Trash2 size={15}/>{hideCompleted ? 'Show Completed' : 'Hide Completed'}</button></div>

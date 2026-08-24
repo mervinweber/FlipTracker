@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Tags, Trash2, Truck, Upload, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -9,6 +9,7 @@ import ListingReadinessPanel from './ListingReadinessPanel';
 import EbayCategoryAspects from './EbayCategoryAspects';
 import EbayPayloadPreview from './EbayPayloadPreview';
 import { validateListingReadiness, type ListingReadinessStep } from '../utils/listingReadiness';
+import { applyListingSpeedPreset, listingFamily, loadListingSpeedPresets, saveListingSpeedPreset } from '../utils/listingSpeedPresets';
 import {
   EBAY_CATEGORY_CHOICES,
   EBAY_SHIPPING_PROFILES,
@@ -422,6 +423,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const endEbayListing = useAction(api.ebay.endPublishedListing);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
+  const [fastReviewing, setFastReviewing] = useState<Listing | null>(null);
+  const [rememberFastDefaults, setRememberFastDefaults] = useState(true);
   const listingActivity = useQuery(api.listings.activity, editing ? { listingId: editing._id } : 'skip');
   const [editorStep, setEditorStep] = useState<ListingEditorStep>('details');
   const [taxonomyMissingAspects, setTaxonomyMissingAspects] = useState<string[]>([]);
@@ -478,10 +481,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !saleEditing && !endListingPrompt && !repricing && !pricingRows) return;
+    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [editing, endListingPrompt, pricingRows, repricing, saleEditing]);
+  }, [editing, endListingPrompt, fastReviewing, pricingRows, repricing, saleEditing]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -555,16 +558,28 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     return { ...listing, fulfillmentPolicyName };
   }, [ebaySettings.fulfillmentPolicyId, ebaySetup?.policies.fulfillment]);
   const readinessByListingId = useMemo(() => new Map(
-    (listings || []).map((listing) => [listing._id, validateListingReadiness(listingReadinessInput(listing), sellerReadinessDefaults)]),
-  ), [listingReadinessInput, listings, sellerReadinessDefaults]);
+    (listings || []).map((listing) => {
+      const prepared = listingWithWorkflowDefaults(listing);
+      return [listing._id, validateListingReadiness(listingReadinessInput(prepared), sellerReadinessDefaults)];
+    }),
+  ), [ebaySetup?.policies.fulfillment, listingReadinessInput, listings, sellerReadinessDefaults]);
   const blockingIssuesFor = useCallback((listing: Listing) => (
     readinessByListingId.get(listing._id) || validateListingReadiness(listingReadinessInput(listing), sellerReadinessDefaults)
   ).filter((issue) => issue.blocking), [listingReadinessInput, readinessByListingId, sellerReadinessDefaults]);
   const selectedReadyForEbay = useMemo(() => selectedListings.filter((listing) => (
     queueStatus(listing) === 'Ready for eBay' && !(readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking)
   )), [readinessByListingId, selectedListings]);
+  const selectedStagedForEbay = useMemo(() => selectedListings.filter((listing) => (
+    listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId)
+  )), [selectedListings]);
   const selectedBlockedCount = selectedListings.filter((listing) => (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking)).length;
   const editingReadinessIssues = useMemo(() => editing ? validateListingReadiness({ ...listingReadinessInput(editing), missingCategoryAspects: taxonomyMissingAspects }, sellerReadinessDefaults) : [], [editing, listingReadinessInput, sellerReadinessDefaults, taxonomyMissingAspects]);
+  const fastReviewIssues = useMemo(() => fastReviewing ? validateListingReadiness(listingReadinessInput(fastReviewing), sellerReadinessDefaults) : [], [fastReviewing, listingReadinessInput, sellerReadinessDefaults]);
+  const fastReviewNet = useMemo(() => {
+    if (!fastReviewing) return 0;
+    const price = fastReviewing.currentPrice ?? fastReviewing.listedPrice ?? 0;
+    return price - (price * 0.15) - (fastReviewing.purchasePrice ?? 0) - (fastReviewing.shippingCost ?? 0);
+  }, [fastReviewing]);
   const exceptionListings = useMemo(() => (listings || []).filter((listing) => {
     if (listing.platform !== 'eBay' || !['Draft', 'Pending'].includes(listing.status)) return false;
     return (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field));
@@ -572,6 +587,17 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const operationsListings = useMemo(() => (listings || [])
     .map((listing) => ({ listing, issue: operationsIssue(listing) }))
     .filter((entry) => Boolean(entry.issue)), [listings]);
+  const batchCompletion = useMemo(() => {
+    const draftRows = (listings || []).filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status));
+    return {
+      total: draftRows.length,
+      needsPhotos: draftRows.filter((listing) => queueStatus(listing) === 'Needs Photo').length,
+      needsPricing: draftRows.filter((listing) => queueStatus(listing) === 'Ready for Pricing').length,
+      exceptions: draftRows.filter((listing) => (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field))).length,
+      ready: draftRows.filter((listing) => queueStatus(listing) === 'Ready for eBay' && !(readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking)).length,
+      staged: draftRows.filter((listing) => Boolean(listing.ebayOfferId)).length,
+    };
+  }, [listings, readinessByListingId]);
   const activeListingTarget = Math.max(1, Math.round(Number(ebaySettings.activeListingTarget) || 200));
   const projectedEbayListings = (sellerListingSummary?.activeCount ?? 0) + (sellerListingSummary?.scheduledCount ?? 0);
   const roomToListingTarget = Math.max(0, activeListingTarget - projectedEbayListings);
@@ -614,7 +640,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setEditing((current) => current ? { ...current, ...patch } : current);
   }
 
-  function openListingEditor(listing: Listing, initialStep: ListingEditorStep = 'details', fromExceptionQueue = false) {
+  function listingWithWorkflowDefaults(listing: Listing) {
     const condition = listing.condition?.trim().toLowerCase() || '';
     const isBookWithCover = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book') && Boolean(listing.photoUrl);
     const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
@@ -622,27 +648,64 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     const configuredProfile = EBAY_SHIPPING_PROFILES.find((profile) => profile.key === listing.shippingPreset || profile.label === listing.shippingPreset);
     const shippingProfile = configuredProfile || resolveShippingProfile({ itemType: listing.assetType, mediaFormat: listing.mediaFormat, title: listing.title });
     const suggestedPolicy = findSuggestedShippingPolicy(ebaySetup?.policies.fulfillment || [], shippingProfile);
+    const withPreset = applyListingSpeedPreset(listing, loadListingSpeedPresets());
+    const presetProfile = EBAY_SHIPPING_PROFILES.find((profile) => profile.key === withPreset.shippingPreset || profile.label === withPreset.shippingPreset) || shippingProfile;
+    const presetPolicy = withPreset.fulfillmentPolicyId || findSuggestedShippingPolicy(ebaySetup?.policies.fulfillment || [], presetProfile)?.id || suggestedPolicy?.id;
+    return {
+      ...withPreset,
+      language: withPreset.language || itemSpecificValue(withPreset.itemSpecifics, 'Language') || 'English',
+      bookTitle: (withPreset.bookTitle || itemSpecificValue(withPreset.itemSpecifics, 'Book Title') || (isBookListing(withPreset) ? withPreset.assetTitle : undefined))?.slice(0, 65),
+      author: withPreset.author || itemSpecificValue(withPreset.itemSpecifics, 'Author') || withPreset.assetAuthor,
+      imageMode: withPreset.imageMode || imageMode,
+      category: withPreset.category || categoryResolution.choice.categoryName,
+      ebayCategoryId: withPreset.ebayCategoryId || categoryResolution.categoryId,
+      fulfillmentPolicyId: presetPolicy,
+      shippingPreset: presetProfile.key,
+      packageType: undefined,
+      packageWeightOz: withPreset.packageWeightOz ?? presetProfile.weight.value,
+      packageLengthIn: withPreset.packageLengthIn ?? presetProfile.dimensions.length,
+      packageWidthIn: withPreset.packageWidthIn ?? presetProfile.dimensions.width,
+      packageHeightIn: withPreset.packageHeightIn ?? presetProfile.dimensions.height,
+    } satisfies Listing;
+  }
+
+  function openListingEditor(listing: Listing, initialStep: ListingEditorStep = 'details', fromExceptionQueue = false) {
     setSaleEditing(null);
+    setFastReviewing(null);
     setExceptionWorkflow(fromExceptionQueue);
     setTaxonomyMissingAspects([]);
     setDescriptionError('');
     setListingSaveError('');
     setEditorStep(initialStep);
-    setEditing({
-      ...listing,
-      language: listing.language || itemSpecificValue(listing.itemSpecifics, 'Language') || 'English',
-      bookTitle: (listing.bookTitle || itemSpecificValue(listing.itemSpecifics, 'Book Title') || (isBookListing(listing) ? listing.assetTitle : undefined))?.slice(0, 65),
-      author: listing.author || itemSpecificValue(listing.itemSpecifics, 'Author') || listing.assetAuthor,
-      imageMode,
-      category: listing.category || categoryResolution.choice.categoryName,
-      ebayCategoryId: listing.ebayCategoryId || categoryResolution.categoryId,
-      fulfillmentPolicyId: listing.fulfillmentPolicyId || suggestedPolicy?.id,
-      shippingPreset: shippingProfile.key,
-      packageType: undefined,
-      packageWeightOz: listing.packageWeightOz ?? shippingProfile.weight.value,
-      packageLengthIn: listing.packageLengthIn ?? shippingProfile.dimensions.length,
-      packageWidthIn: listing.packageWidthIn ?? shippingProfile.dimensions.width,
-      packageHeightIn: listing.packageHeightIn ?? shippingProfile.dimensions.height,
+    setEditing(listingWithWorkflowDefaults(listing));
+  }
+
+  function openFastReview(listing?: Listing) {
+    const target = listing || queueListings[0];
+    if (!target) {
+      setEbayError('There are no Draft or Pending listings in this view.');
+      return;
+    }
+    setEditing(null);
+    setSaleEditing(null);
+    setListingSaveError('');
+    setFastReviewing(listingWithWorkflowDefaults(target));
+  }
+
+  function patchFastReview(patch: Partial<Listing>) {
+    setFastReviewing((current) => current ? { ...current, ...patch } : current);
+  }
+
+  function selectFastShippingPreset(value: string) {
+    const profile = shippingProfileForKey(value as EbayShippingProfileKey);
+    const suggestedPolicy = findSuggestedShippingPolicy(ebaySetup?.policies.fulfillment || [], profile);
+    patchFastReview({
+      shippingPreset: profile.key,
+      fulfillmentPolicyId: suggestedPolicy?.id || fastReviewing?.fulfillmentPolicyId,
+      packageWeightOz: profile.weight.value,
+      packageLengthIn: profile.dimensions.length,
+      packageWidthIn: profile.dimensions.width,
+      packageHeightIn: profile.dimensions.height,
     });
   }
 
@@ -1238,6 +1301,71 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     }
   }
 
+  async function saveFastReview(stageAfterSave = false) {
+    if (!fastReviewing?.title.trim()) {
+      setListingSaveError('Enter a buyer-facing title.');
+      return;
+    }
+    const price = fastReviewing.currentPrice ?? fastReviewing.listedPrice;
+    if (!price || price <= 0) {
+      setListingSaveError('Enter a listing price greater than $0.');
+      return;
+    }
+    const blockers = validateListingReadiness(listingReadinessInput(fastReviewing), sellerReadinessDefaults).filter((issue) => issue.blocking);
+    if (stageAfterSave && blockers.length) {
+      setListingSaveError(`This listing still needs attention: ${blockers.slice(0, 3).map((issue) => issue.message).join(' ')}`);
+      return;
+    }
+    if (stageAfterSave && (!adminKey || !sellerDefaultsReady)) {
+      setListingSaveError('Load the seller account and complete its defaults before staging.');
+      return;
+    }
+    setListingSaveBusy(true);
+    setListingSaveError('');
+    try {
+      await updateListing({
+        id: fastReviewing._id,
+        title: fastReviewing.title.trim(),
+        description: fastReviewing.description || undefined,
+        condition: fastReviewing.condition || undefined,
+        language: fastReviewing.language || undefined,
+        bookTitle: fastReviewing.bookTitle || undefined,
+        author: fastReviewing.author || undefined,
+        ebayCategoryId: fastReviewing.ebayCategoryId || undefined,
+        category: fastReviewing.category || undefined,
+        listedPrice: fastReviewing.listedPrice ?? price,
+        currentPrice: price,
+        fulfillmentPolicyId: fastReviewing.fulfillmentPolicyId || undefined,
+        shippingPreset: fastReviewing.shippingPreset || undefined,
+        packageWeightOz: fastReviewing.packageWeightOz,
+        packageLengthIn: fastReviewing.packageLengthIn,
+        packageWidthIn: fastReviewing.packageWidthIn,
+        packageHeightIn: fastReviewing.packageHeightIn,
+        imageMode: fastReviewing.imageMode || undefined,
+      });
+      if (rememberFastDefaults) {
+        saveListingSpeedPreset(listingFamily(fastReviewing), {
+          condition: fastReviewing.condition,
+          shippingPreset: fastReviewing.shippingPreset,
+          fulfillmentPolicyId: fastReviewing.fulfillmentPolicyId,
+          imageMode: fastReviewing.imageMode,
+        });
+      }
+      if (stageAfterSave) {
+        await createEbayOffer({ adminKey, listingId: fastReviewing._id });
+        setEbayNotice(`Saved and staged ${fastReviewing.title}. It is not live yet.`);
+      }
+      const currentIndex = queueListings.findIndex((listing) => listing._id === fastReviewing._id);
+      const next = queueListings[currentIndex + 1] || queueListings.find((listing) => listing._id !== fastReviewing._id);
+      if (next) setFastReviewing(listingWithWorkflowDefaults(next));
+      else setFastReviewing(null);
+    } catch (error) {
+      setListingSaveError(error instanceof Error ? error.message : 'Could not save this listing.');
+    } finally {
+      setListingSaveBusy(false);
+    }
+  }
+
   async function sendSelectedToEbay() {
     if (!adminKey) {
       setEbayError('Enter the Seller Access Key before sending drafts to eBay.');
@@ -1276,6 +1404,40 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       setEbayNotice(`${succeeded.length} unpublished eBay offer${succeeded.length === 1 ? '' : 's'} created or refreshed.`);
     }
     if (failures.length) setEbayError(`${failures.length} item${failures.length === 1 ? '' : 's'} failed. ${failures.slice(0, 3).join(' ')}`);
+    setQueueBusy(false);
+  }
+
+  async function publishSelectedStaged() {
+    if (!adminKey || !sellerDefaultsReady) {
+      setEbayError('Load the connected seller account before publishing.');
+      return;
+    }
+    if (!selectedStagedForEbay.length) {
+      setEbayError('Select at least one staged eBay listing to publish.');
+      return;
+    }
+    if (!confirm(`Publish ${selectedStagedForEbay.length} staged listing${selectedStagedForEbay.length === 1 ? '' : 's'} live on eBay? Buyers will be able to purchase every successful listing.`)) return;
+    setQueueBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    const succeeded: Id<'marketplaceListings'>[] = [];
+    const failures: string[] = [];
+    for (const listing of selectedStagedForEbay) {
+      try {
+        await createEbayOffer({ adminKey, listingId: listing._id });
+        await publishEbayOffer({ adminKey, listingId: listing._id });
+        succeeded.push(listing._id);
+      } catch (error) {
+        failures.push(`${listing.title}: ${readableActionError(error, 'Publish failed')}`);
+      }
+    }
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      succeeded.forEach((id) => next.delete(id));
+      return next;
+    });
+    if (succeeded.length) setEbayNotice(`${succeeded.length} listing${succeeded.length === 1 ? '' : 's'} published live on eBay.`);
+    if (failures.length) setEbayError(`${failures.length} listing${failures.length === 1 ? '' : 's'} failed and remain selected. ${failures.slice(0, 3).join(' ')}`);
     setQueueBusy(false);
   }
 
@@ -1425,13 +1587,23 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
       <section className="panel listingQueueBar">
         <div className="queueSummary">
-          <div><p className="eyebrow">Listing queue</p><h2>Select, price, stage, then publish</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} selected and ready</p></div>
-          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Select</span><span>2. Find Fair Value</span><span>3. Stage with eBay</span><span>4. Publish</span></div>
+          <div><p className="eyebrow">Listing queue</p><h2>Scan, review exceptions, then publish</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} ready · {selectedStagedForEbay.length} staged</p></div>
+          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Scan</span><span>2. Fast Review</span><span>3. Stage</span><span>4. Publish</span></div>
+        </div>
+        <div className="batchCompletionGrid" aria-label="Listing batch completion">
+          <button className="batchCompletionMetric" onClick={() => setQueueType('All')}><span>In progress</span><strong>{batchCompletion.total}</strong></button>
+          <button className="batchCompletionMetric attention" onClick={() => setQueueType('Needs Photo')}><span>Need photos</span><strong>{batchCompletion.needsPhotos}</strong></button>
+          <button className="batchCompletionMetric attention" onClick={() => setQueueType('Ready for Pricing')}><span>Need prices</span><strong>{batchCompletion.needsPricing}</strong></button>
+          <button className="batchCompletionMetric attention" onClick={() => setExceptionQueueExpanded(true)}><span>Exceptions</span><strong>{batchCompletion.exceptions}</strong></button>
+          <button className="batchCompletionMetric ready" onClick={() => setQueueType('Ready for eBay')}><span>Ready</span><strong>{batchCompletion.ready}</strong></button>
+          <button className="batchCompletionMetric staged" onClick={() => setQueueType('Staged for eBay')}><span>Staged</span><strong>{batchCompletion.staged}</strong></button>
         </div>
         <div className="actions queueActions">
+          <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={() => openFastReview()}><WandSparkles size={16}/> Fast Review</button>
           <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear Selection' : 'Select All in View'}</button>
           <button disabled={!selectedIds.size || queueBusy} onClick={openPricingReview}><DollarSign size={16}/> {queueBusy ? 'Checking eBay...' : 'Find Fair Value'}</button>
           <button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage with eBay${selectedReadyForEbay.length ? ` (${selectedReadyForEbay.length})` : ''}`}</button>
+          <button className="ebayPublishButton" disabled={!selectedStagedForEbay.length || queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish Staged${selectedStagedForEbay.length ? ` (${selectedStagedForEbay.length})` : ''}`}</button>
         </div>
         {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
@@ -1565,6 +1737,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.externalListingId) ? <button className="iconButton ebayRepriceButton" disabled={repriceBusy} aria-label={`Update live eBay price for ${listing.title}`} title={`Update live eBay price through ${listing.ebayOfferId ? 'Inventory API' : 'eBay Trading API'}`} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={16}/></button> : null}
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.externalListingId) ? <button className="iconButton ebayEndButton" disabled={endListingBusy || !adminKey} aria-label={`End ${listing.title} on eBay`} title="End live eBay listing" onClick={() => { setEndListingError(''); setEndListingPrompt(listing); }}><CircleStop size={16}/></button> : null}
                     <button className="iconButton saleCloseButton" aria-label={`${listing.status === 'Sold' ? 'Edit sale for' : 'Record sale for'} ${listing.title}`} title={listing.status === 'Sold' ? 'Edit sale details' : 'Record sale'} onClick={() => requestSaleEditor(listing)}><DollarSign size={15}/></button>
+                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <button className="iconButton fastReviewRowButton" aria-label={`Fast review ${listing.title}`} title="Fast review" onClick={() => openFastReview(listing)}><WandSparkles size={15}/></button> : null}
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="View marketplace listing" title={listing.platform === 'eBay' && listing.ebayOfferId ? 'View on eBay. Inventory API listings must be edited in FlipTracker.' : 'Open marketplace listing'}><ExternalLink size={15}/></a> : null}
                     <button className="danger iconButton" aria-label={`Delete ${listing.title}`} title="Delete listing" onClick={() => remove(listing)}><Trash2 size={15}/></button>
@@ -1575,6 +1748,42 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           </div>
         )}
       </section>
+
+      {fastReviewing ? (
+        <div className="modalBackdrop"><section className="modal wideModal fastReviewModal">
+          <header className="modalHeader"><div><p className="eyebrow">Fast listing review</p><h2>{fastReviewing.assetTitle}</h2><span className="statusPill">{[fastReviewing.assetType, fastReviewing.sku ? `SKU ${fastReviewing.sku}` : undefined].filter(Boolean).join(' · ')}</span></div><button className="iconButton secondary" aria-label="Close fast review" onClick={() => setFastReviewing(null)}><X size={18}/></button></header>
+          <div className="fastReviewProgress"><span>{Math.max(1, queueListings.findIndex((listing) => listing._id === fastReviewing._id) + 1)} of {queueListings.length}</span><strong>{listingFamily(fastReviewing)} workflow</strong><small>Only routine selling choices are shown here.</small></div>
+          <div className="fastReviewLayout">
+            <section className="fastReviewPhoto">
+              {fastReviewing.ebayImageUrl || fastReviewing.photoUrl ? <img src={fastReviewing.ebayImageUrl || fastReviewing.photoUrl} alt={fastReviewing.title}/> : <div className="fastReviewPhotoMissing"><Camera size={32}/><strong>No image yet</strong><span>Add actual photos from the phone queue.</span></div>}
+              <button className="secondary" onClick={() => { setFastReviewing(null); window.location.hash = '#photos'; }}><Camera size={16}/> Open Photo Queue</button>
+            </section>
+            <section className="fastReviewFields">
+              <label>eBay Title<input value={fastReviewing.title} maxLength={80} onChange={(event) => patchFastReview({ title: event.target.value })}/><small>{fastReviewing.title.length}/80 characters</small></label>
+              <div className="fastReviewFieldRow">
+                <label>Condition<select value={fastReviewing.condition || ''} onChange={(event) => patchFastReview({ condition: event.target.value })}><option value="">Choose condition</option>{['New','Like New','Very Good','Good','Acceptable','For Parts'].map((value) => <option key={value}>{value}</option>)}</select></label>
+                <label>Price<input type="number" inputMode="decimal" min="0.99" step="0.01" value={fastReviewing.currentPrice ?? fastReviewing.listedPrice ?? ''} onChange={(event) => patchFastReview({ currentPrice: optionalNumber(event.target.value) })}/></label>
+              </div>
+              <div className="fastReviewFieldRow">
+                <label>Shipping Profile<select value={fastReviewing.shippingPreset || 'custom'} onChange={(event) => selectFastShippingPreset(event.target.value)}>{EBAY_SHIPPING_PROFILES.map((profile) => <option key={profile.key} value={profile.key}>{profile.label}</option>)}</select></label>
+                <label>eBay Shipping Policy<select value={fastReviewing.fulfillmentPolicyId || ''} onChange={(event) => patchFastReview({ fulfillmentPolicyId: event.target.value || undefined })}><option value="">Use seller default</option>{ebaySetup?.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
+              </div>
+              <div className="fastReviewSummary">
+                <div><span>Package</span><strong>{fastReviewing.packageWeightOz ?? '—'} oz</strong></div>
+                <div><span>Item cost</span><strong>{money(fastReviewing.purchasePrice)}</strong></div>
+                <div><span>Estimated net</span><strong className={fastReviewNet < 0 ? 'lossValue' : 'profitValue'}>{money(fastReviewNet)}</strong><small>after 15% fee estimate{fastReviewing.shippingCost ? ' and saved shipping cost' : ''}</small></div>
+              </div>
+              <label className="checkRow fastPresetToggle"><input type="checkbox" checked={rememberFastDefaults} onChange={(event) => setRememberFastDefaults(event.target.checked)}/><span><strong>Remember these defaults for {listingFamily(fastReviewing)} items</strong><small>Condition, shipping profile, policy, and image source stay on this browser.</small></span></label>
+            </section>
+          </div>
+          <section className={`fastReviewReadiness ${fastReviewIssues.some((issue) => issue.blocking) ? 'blocked' : 'ready'}`}>
+            <div><strong>{fastReviewIssues.some((issue) => issue.blocking) ? `${fastReviewIssues.filter((issue) => issue.blocking).length} item${fastReviewIssues.filter((issue) => issue.blocking).length === 1 ? '' : 's'} need attention` : 'Ready to stage'}</strong><span>{fastReviewIssues.length ? fastReviewIssues.slice(0, 3).map((issue) => issue.message).join(' ') : 'Category, shipping, photo, price, and required details pass local checks.'}</span></div>
+            {fastReviewIssues.length ? <button className="secondary" onClick={() => openListingEditor(fastReviewing, fastReviewIssues[0].step, true)}>Open Full Editor</button> : null}
+          </section>
+          {listingSaveError ? <p className="formError listingSaveError">{listingSaveError}</p> : null}
+          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => setFastReviewing(null)}>Close</button><div className="actions"><button className="secondary" disabled={listingSaveBusy} onClick={() => openListingEditor(fastReviewing)}>Advanced</button><button disabled={listingSaveBusy} onClick={() => saveFastReview(false)}><Save size={16}/> {listingSaveBusy ? 'Saving...' : 'Save & Next'}</button><button className="ebaySendButton" disabled={listingSaveBusy || fastReviewIssues.some((issue) => issue.blocking) || !sellerDefaultsReady} onClick={() => saveFastReview(true)}><CloudUpload size={16}/> Save, Stage & Next</button></div></div>
+        </section></div>
+      ) : null}
 
       {repricing ? (
         <div className="modalBackdrop"><section className="modal repriceModal">

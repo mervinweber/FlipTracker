@@ -622,3 +622,171 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 .photoWorkflowFooter p { margin:0; font-size:12px; }
 @media (max-width:850px) { .photoQueueLayout { grid-template-columns:1fr; } .photoQueueList { max-height:280px; } .photoGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:560px) { .photoLookupBand { grid-template-columns:1fr; } .photoLookupBand > button { justify-content:center; } .photoQueueHeader { align-items:stretch; } .photoQueueCount { width:100%; box-sizing:border-box; } .photoCaptureActions, .photoWorkflowFooter { flex-direction:column; align-items:stretch; } .photoGrid { grid-template-columns:1fr 1fr; } .photoTargetHeader { flex-direction:column; } }
+.batchCompletionGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.batchCompletionMetric {
+  min-height: 68px;
+  padding: 10px 12px;
+  border: 1px solid #334155;
+  background: #0b1324;
+  color: #dbeafe;
+  text-align: left;
+}
+
+.batchCompletionMetric span,
+.batchCompletionMetric small {
+  display: block;
+  color: #9fb0c8;
+  font-size: 12px;
+}
+
+.batchCompletionMetric strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 22px;
+}
+
+.batchCompletionMetric.attention strong { color: #fbbf24; }
+.batchCompletionMetric.ready strong { color: #6ee7b7; }
+.batchCompletionMetric.staged strong { color: #93c5fd; }
+
+.fastReviewButton,
+.fastReviewRowButton {
+  background: #0f766e;
+  border-color: #14b8a6;
+}
+
+.fastReviewModal {
+  width: min(980px, calc(100vw - 28px));
+}
+
+.fastReviewProgress {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 0 14px;
+  color: #cbd5e1;
+}
+
+.fastReviewProgress span {
+  color: #93c5fd;
+  font-weight: 800;
+}
+
+.fastReviewProgress small {
+  color: #94a3b8;
+}
+
+.fastReviewLayout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.6fr);
+  gap: 18px;
+}
+
+.fastReviewPhoto {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fastReviewPhoto img,
+.fastReviewPhotoMissing {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  border: 1px solid #334155;
+  background: #07101f;
+  object-fit: contain;
+}
+
+.fastReviewPhotoMissing {
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  padding: 20px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.fastReviewFields {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  min-width: 0;
+}
+
+.fastReviewFieldRow,
+.fastReviewSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fastReviewSummary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 12px;
+  border: 1px solid #27364c;
+  background: #0b1324;
+}
+
+.fastReviewSummary span,
+.fastReviewSummary small,
+.fastReviewSummary strong {
+  display: block;
+}
+
+.fastReviewSummary span,
+.fastReviewSummary small { color: #94a3b8; font-size: 12px; }
+.fastReviewSummary strong { margin-top: 4px; }
+
+.fastPresetToggle {
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid #27364c;
+  background: #0b1324;
+}
+
+.fastPresetToggle span,
+.fastPresetToggle small { display: block; }
+.fastPresetToggle small { margin-top: 3px; color: #94a3b8; }
+
+.fastReviewReadiness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #1f8a62;
+  background: #09251f;
+}
+
+.fastReviewReadiness.blocked {
+  border-color: #a16207;
+  background: #291d08;
+}
+
+.fastReviewReadiness strong,
+.fastReviewReadiness span { display: block; }
+.fastReviewReadiness span { margin-top: 3px; color: #cbd5e1; font-size: 13px; }
+
+@media (max-width: 900px) {
+  .batchCompletionGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .batchCompletionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fastReviewLayout { grid-template-columns: 1fr; }
+  .fastReviewPhoto img,
+  .fastReviewPhotoMissing { max-height: 280px; aspect-ratio: 4 / 3; }
+  .fastReviewFieldRow,
+  .fastReviewSummary { grid-template-columns: 1fr; }
+  .fastReviewProgress { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .fastReviewReadiness { align-items: stretch; flex-direction: column; }
+  .fastReviewModal .listingFactoryFooter { align-items: stretch; flex-direction: column; }
+  .fastReviewModal .listingFactoryFooter .actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+}

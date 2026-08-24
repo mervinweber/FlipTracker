@@ -319,3 +319,16 @@ Goal: make shipping selection understandable and hard to misconfigure.
 - [ ] Add backup/export, error telemetry, privacy terms, and account deletion
 - [ ] Activate Clerk in development and production, claim legacy data, and pass two-account isolation testing
 - [ ] Invite a small beta group only after ownership and production smoke tests pass
+
+## v0.9.1 Listing Speed
+
+Goal: make an ordinary book, movie, or game require only scan, photograph, and approve.
+
+- [x] Add compact Fast Review while retaining the full editor for exceptions
+- [x] Add browser-local item-family presets that work in legacy single-user mode
+- [x] Add Save & Next and Save, Stage & Next listing-factory actions
+- [x] Add batch completion counts and direct handoff from intake to photos and listings
+- [x] Add selected staged-offer publishing with explicit confirmation and per-item outcomes
+- [ ] Add undo-last-scan and retry-all-failed controls to bulk intake
+- [ ] Add a configurable description template per item family
+- [ ] Record scan-to-ready time and compare it across books, movies, games, cards, and clothing

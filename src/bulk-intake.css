@@ -33,3 +33,37 @@
 @media (max-width:1000px) { .bulkDefaultsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } .intakeBatchGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:760px) { .bulkScannerBand { grid-template-columns:1fr; } .bulkDefaultsGrid, .intakeBatchGrid { grid-template-columns:1fr; } }
 @media (max-width:520px) { .bulkScanForm { grid-template-columns:auto minmax(0, 1fr); } .bulkScanForm button { grid-column:1 / -1; justify-content:center; } }
+.batchCompletionPanel {
+  border-color: #1f8a62;
+}
+
+.batchNextActions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.batchNextActions button {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 78px;
+  padding: 14px;
+  text-align: left;
+}
+
+.batchNextActions button span,
+.batchNextActions button strong,
+.batchNextActions button small {
+  display: block;
+}
+
+.batchNextActions button small {
+  margin-top: 4px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .batchNextActions { grid-template-columns: 1fr; }
+}

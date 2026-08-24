@@ -1,5 +1,11 @@
 # Architecture
 
+## Listing Speed Layer
+
+The normal eBay workflow is exception-driven. `ListingsPanel` applies category and package inference plus browser-local item-family preferences before opening Fast Review. Fast Review exposes only title, condition, price, shipping, image readiness, and estimated net; the existing multi-step editor remains the authoritative correction surface for category-specific fields and unusual listings.
+
+Operational presets are stored in browser `localStorage` by `src/utils/listingSpeedPresets.ts`. They contain no credentials or OAuth data and intentionally work without Clerk. A future authenticated settings migration can move these preferences into owner-scoped Convex records.
+
 ## v0.9 Identity And Tenancy
 
 - Clerk supplies browser identity and a Convex-compatible JWT.

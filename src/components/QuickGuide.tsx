@@ -71,7 +71,8 @@ export default function QuickGuide() {
           <li>Open <strong>Listings</strong>, select the drafts you want to process, and choose <strong>Update Pricing</strong>.</li>
           <li>Check sold comps, enter each approved price, and apply the updates. Blank rows stay in Ready for Pricing.</li>
           <li>In eBay Seller Connection, enter the private seller key, connect the seller account, and save its location and business policies.</li>
-          <li>Edit the draft and move through Item, Category, Shipping &amp; Photos, and Price &amp; Description. FlipTracker automatically routes books, games, DVDs, Blu-rays, CDs, and cards.</li>
+          <li>Start with <strong>Fast Review</strong> to confirm the title, condition, price, shipping, photo status, and estimated net. Use Advanced only for category-specific exceptions.</li>
+          <li>The full editor still provides Item, Category, Shipping &amp; Photos, Price &amp; Description, and eBay payload preview. FlipTracker automatically routes books, games, DVDs, Blu-rays, CDs, and cards.</li>
           <li>Use <strong>Selling Readiness</strong> to review incomplete drafts. Correct the first blocker, then use <strong>Save &amp; Next</strong> to continue through the queue.</li>
           <li>For clothing or general merchandise, use the category finder to select a precise eBay leaf category.</li>
           <li>Complete the required eBay category fields loaded from Taxonomy. FlipTracker checks them again before staging.</li>
@@ -84,6 +85,7 @@ export default function QuickGuide() {
         <section><div className="guideNumber">7</div><div><h3>Publish it to eBay</h3><ol>
           <li>Open the staged row and review its title, category, condition, specifics, price, selected policy, package profile, and photos.</li>
           <li>Select the rocket button to publish. FlipTracker asks for confirmation before making the listing live.</li>
+          <li>For a prepared batch, select staged rows and use <strong>Publish Staged</strong>. Successful listings go live while failed rows remain selected for correction.</li>
           <li>Open the resulting eBay link and check the public listing, especially the shipping charge and mobile photo order.</li>
           <li>FlipTracker stores the eBay item ID and URL and moves the record into the Published queue.</li>
         </ol><p className="guideNote"><ShoppingBag size={15}/> Staging is not publishing. The listing only becomes purchasable after the separate Publish confirmation.</p></div></section>
