@@ -332,3 +332,16 @@ Goal: make an ordinary book, movie, or game require only scan, photograph, and a
 - [ ] Add undo-last-scan and retry-all-failed controls to bulk intake
 - [ ] Add a configurable description template per item family
 - [ ] Record scan-to-ready time and compare it across books, movies, games, cards, and clothing
+
+## v0.9.2 Active Listing Maintenance
+
+Goal: maintain a FlipTracker-created eBay catalog without opening every listing individually.
+
+- [x] Add a bulk percentage markdown preview for active Inventory API listings created by FlipTracker
+- [x] Exclude eBay app and Seller Hub listings from Inventory API bulk changes
+- [x] Process bulk price changes in bounded batches with individual failure reporting and price-history records
+- [x] Keep long revision errors and activity history readable in the mobile listing editor
+- [x] Route missing required item-specific failures back to the Category step
+- [x] Map the known book title into eBay's required Publication Name alias for textbook categories
+- [ ] Add stale-listing selection rules by listing age, price, category, and protected profit floor
+- [ ] Add reusable markdown strategies such as 30/60/90-day reductions without automatic execution

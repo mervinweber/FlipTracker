@@ -12,6 +12,16 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add confirmation-protected bulk publishing for selected staged offers with per-item failures left selected
 - [ ] Measure scan-to-ready time across a real DVD/book batch and tune the remaining high-friction steps
 
+## v0.9.2 Active Listing Maintenance
+
+- [x] Fix the five-step listing editor navigation and long activity/error wrapping on phone layouts
+- [x] Preserve actionable eBay/Convex revision details and route missing item specifics back to Category
+- [x] Fill the required textbook Publication Name alias from the known Book Title
+- [x] Add preview-and-confirm bulk percentage markdowns for active listings created through FlipTracker
+- [x] Keep eBay app/Seller Hub listings out of Inventory API bulk markdowns
+- [x] Record each successful bulk price change in listing Price History and report per-item failures
+- [ ] Production-smoke one required-specific revision and a two-listing bulk markdown before using it on the full catalog
+
 Prototype snapshot:
 
 - Functional today: inventory, eBay seller linking, draft staging, sold sync, photo capture, and the Cross Listings queue shell.
@@ -23,7 +33,7 @@ Prototype snapshot:
 - [x] Recenter the primary workflow on eBay inventory, intake, photos, pricing, staging, publishing, and sold sync
 - [x] Add Clothing as a first-class intake and listing type alongside books, games, movies, CDs, and cards
 - [x] Replace exposed category-code boxes with automatic UPC/ISBN/type routing and an exception-only category finder
-- [x] Add a four-step listing editor for item details, category specifics, shipping/photos, and price/description
+- [x] Add a five-step listing editor for item details, category specifics, shipping/photos, price/description, and payload preview
 - [x] Replace raw package fields with item-aware shipping profiles while retaining an advanced weight/dimension override
 - [x] Suggest a matching seller fulfillment policy from the selected package profile
 - [x] Add structured clothing Brand, Department, Size, Color, Material, and Style item specifics
@@ -106,6 +116,7 @@ Prototype snapshot:
 - [x] Add listing create, update, sold, and delete behavior
 - [x] Preserve listing price changes with a reason and timestamp
 - [x] Add confirmation-protected live eBay repricing by percentage, exact value, or calculated profit floor
+- [x] Add confirmation-protected bulk percentage markdowns for active FlipTracker Inventory API listings
 - [x] Revise active Inventory API listings from FlipTracker and explain that eBay's app/Seller Hub cannot edit those listings
 - [x] Show eBay listing origin and import/deduplicate active eBay app or Seller Hub listings
 - [x] Reprice native eBay fixed-price listings through Trading API while retaining Inventory API repricing for FlipTracker offers

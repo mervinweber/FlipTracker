@@ -1840,6 +1840,9 @@ export const createUnpublishedOffer = action({
         api.ebayTaxonomy.getCategoryAspects,
         { marketplaceId: settings.marketplaceId || "EBAY_US", categoryId },
       );
+      if (isBook && taxonomy.aspects.some((aspect) => aspect.required && aspect.name.trim().toLowerCase() === "publication name")) {
+        setAspectDefault(aspects, "Publication Name", (listing.bookTitle || asset.title).trim().slice(0, 65));
+      }
       const missingRequiredAspects = taxonomy.aspects
         .filter((aspect) => aspect.required && !aspectKey(aspects, aspect.name))
         .map((aspect) => aspect.name);
@@ -1967,14 +1970,17 @@ export const createUnpublishedOffer = action({
         // eBay-hosted photos that were already accepted by Picture Services.
         const minimalProduct = { ...product };
         const requiredAspects: Record<string, string[]> = {};
-        const languageKey = aspectKey(aspects, "Language");
-        const typeKey = aspectKey(aspects, "Type");
-        const bookTitleKey = aspectKey(aspects, "Book Title");
-        const authorKey = aspectKey(aspects, "Author");
-        if (languageKey) requiredAspects.Language = aspects[languageKey];
-        if (typeKey) requiredAspects.Type = aspects[typeKey];
-        if (bookTitleKey) requiredAspects["Book Title"] = aspects[bookTitleKey];
-        if (authorKey) requiredAspects.Author = aspects[authorKey];
+        const stableAspectNames = new Set([
+          "Language",
+          "Type",
+          "Book Title",
+          "Author",
+          ...taxonomy.aspects.filter((aspect) => aspect.required).map((aspect) => aspect.name),
+        ]);
+        for (const name of stableAspectNames) {
+          const key = aspectKey(aspects, name);
+          if (key) requiredAspects[name] = aspects[key];
+        }
         if (Object.keys(requiredAspects).length) minimalProduct.aspects = requiredAspects;
         else delete minimalProduct.aspects;
         const minimalInventoryItem = { ...inventoryItem, product: minimalProduct };
