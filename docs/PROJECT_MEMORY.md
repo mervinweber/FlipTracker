@@ -21,7 +21,7 @@ The product should feel like a serious tool for making buying, listing, and coll
 ## Built So Far
 
 - FlipTracker is now explicitly eBay-first. The primary navigation emphasizes Inventory, Listings, Bulk Intake, Photos, Sourcing, and Guide; the earlier cross-listing prototype remains in the codebase but is no longer promoted in the core listing path.
-- Listings uses a four-step eBay Listing Factory: Item, Category, Shipping & Photos, then Price & Description. A readiness strip keeps title, category, shipping, image, and price blockers visible without displaying every field at once.
+- Listings uses a five-step eBay Listing Factory: Item, Category, Shipping & Photos, Price & Description, then Preview. A readiness strip keeps title, category, shipping, image, and price blockers visible without displaying every field at once.
 - Books, DVDs/Blu-rays, CDs, video games, and cards receive deterministic eBay category routing from item type and product identifiers. Clothing and general merchandise intentionally require a leaf-category choice through the eBay category finder.
 - Shipping now starts with item-aware profiles for single media, multi-item media, trading cards, lightweight clothing, boxed clothing, and custom packages. Weight and dimensions remain available as advanced overrides, and explicit listing values remain authoritative in the backend.
 - v0.6 adds a shared listing-readiness validator used by the editor and staging workflow. It checks local title/category/price/photo/package/seller-policy requirements plus known book, card, clothing, Media Mail, and Standard Envelope rules before an offer reaches eBay.
@@ -56,6 +56,7 @@ The product should feel like a serious tool for making buying, listing, and coll
 - Sales Tracker's useful workflow is now merged into FlipTracker: marketplace listings, lifecycle statuses, listing prices/dates/platforms, price history, listing metrics, sold-profit tracking, CSV export, and old Sales Tracker JSON import.
 - Listings include a dedicated Record Sale closeout for eBay and non-eBay channels. It captures sale price/date, acquisition cost, shipping income/cost, fees, buyer, order reference, custom channel details, and notes; shows net profit before saving; and keeps the linked sale record synchronized when corrected.
 - Active eBay listings have a confirmation-protected live repricing workflow. Sellers can reduce by percentage, enter an exact price, or calculate a conservative profit floor from item cost, fee percentage, shipping income/cost, and target net profit. Local current price and immutable price history update only after eBay confirms success; ordinary repricing changes the public price but does not create a crossed-out Discounts Manager sale.
+- The Listings dashboard includes a Stale Listing Manager for active Inventory API listings created by FlipTracker. It shows 30/60/90-day age buckets, offers reusable or custom markdown strategies, excludes missing-date/invalid/too-new/profit-protected rows, previews old/new values, and never runs automatically.
 - eBay explicitly prevents Inventory API listings from being revised in its mobile app, Seller Hub, or another listing tool. FlipTracker's active-listing editor therefore replaces the complete Inventory Item and updates the published Offer through the Inventory API; its final action is labeled `Save & Update eBay`. Price-only changes still use the dedicated repricing action, and status changes use End Listing or Record Sale.
 - Listings show whether an eBay record originated as a FlipTracker draft/API offer or an eBay app/Seller Hub listing. `Sync Active Listings` imports or refreshes live native listings through `GetMyeBaySelling`, deduplicated by eBay item ID. Native fixed-price listings can be repriced through Trading API `ReviseInventoryStatus` and ended through `EndFixedPriceItem`; broader native listing field revisions remain local-only until FlipTracker can safely merge the current `GetItem` payload into `ReviseFixedPriceItem`. eBay app drafts are not available through `GetMyeBaySelling` before they become active or scheduled.
 - The Listings view shows an account-wide eBay active count plus scheduled listings using `GetMyeBaySelling`, so manual and FlipTracker-created listings are both included. The default planning target is 200 and can be changed in Seller Connection. This meter is not the monthly zero-insertion-fee allowance counter; Seller Hub remains authoritative for allowance usage and billing-period renewals.
@@ -117,7 +118,8 @@ Convex is the current application backend. Excel import/export remains a portabi
 - v0.8 card intake is confirmation-first. Gemini may extract visible identifiers, then YGOPRODeck or Pokemon TCG API returns candidate printings; the seller must choose the exact printing and confirm language, finish, edition, and condition before saving. TCGplayer is not a launch dependency because its official documentation says new API access is not being granted, and Konami NEURON has no public developer recognition API.
 - Card catalog reference prices must remain visibly separate from verified eBay sold comps. Actual front/back photos remain required before publishing a card listing.
 - Finish v0.6.1 lifecycle reliability and production smoke testing before expanding listing automation.
-- Borrow continuous scanning and profit-rule ideas from book-scanning tools, batch validation from card-listing tools, and lifecycle/exception views from reseller inventory suites without rebuilding their cross-listing scope.
+- Borrow continuous scanning and profit-rule ideas from book-scanning tools, front/back batch discipline and human-confirmed identification from card-listing tools, and templates/daily exception views from reseller inventory suites without rebuilding their cross-listing scope.
+- After v0.9.3, prioritize one daily operations queue, item-family templates, listing-quality scoring, and fulfillment handoff. These shorten the eBay workday more directly than adding another marketplace.
 - Use eBay Product Research as the authoritative seller-facing sold-data workflow when equivalent data is not available through approved APIs; do not present active asking prices as sold comps.
 
 ## Coding Conventions
@@ -161,12 +163,9 @@ Convex is the current application backend. Excel import/export remains a portabi
 
 ## Next Practical Steps
 
-1. Finish the Convex UI migration polish.
-2. Decide on product identity: logo direction, palette, typography, UI language.
-3. Convert accepted sourcing decisions into inventory records.
-4. Add a dedicated collection detail page and lot calculator.
-5. Add saved eBay research/value history display and richer comp fields.
-6. Configure and smoke test the eBay Sandbox seller connection with one DVD and one book.
-7. Pick and implement auth.
-8. Migrate legacy inline photos, then add final photo validation before enabling publish.
-9. Add richer game metadata: completeness, region, platform variants.
+1. Production-smoke the Stale Listing Manager on two low-risk FlipTracker-created listings.
+2. Build one Today queue spanning listing exceptions, stale inventory, unmatched sales, and orders awaiting shipment.
+3. Add reusable listing templates by item family.
+4. Add listing-quality and estimated-profit scoring before publish.
+5. Add a pick/pack queue with bin, package, insurance, label, tracking, and shipped status.
+6. Complete card front/back batch handling and duplicate/variation review.

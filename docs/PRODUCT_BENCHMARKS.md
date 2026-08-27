@@ -2,6 +2,8 @@
 
 This note records workflow ideas worth adapting for FlipTracker. It is not a commitment to copy every feature from a general-purpose reseller suite. FlipTracker remains eBay-first and optimized for books, games, DVDs/Blu-rays, cards, clothing, and occasional general merchandise.
 
+Last reviewed: August 27, 2026.
+
 ## eBay Seller Hub
 
 Useful patterns:
@@ -53,12 +55,40 @@ Useful patterns even though cross-listing is not the current priority:
 - Make stale inventory, custom labels, storage location, and platform status easy to filter.
 - Offer templates, bulk edits, image management, and mark-sold actions from the inventory workspace.
 - Report revenue, profit, average sale price, category, and source performance from the same lifecycle data.
+- Keep templates, barcode-assisted listing, drafts, bulk editing, and description construction close to the inventory record.
 
 Sources:
 
 - [Vendoo inventory management](https://help.vendoo.co/en/articles/6260262-vendoo-inventory-management-tools)
 - [Vendoo help center](https://help.vendoo.co/en/)
 - [List Perfectly features](https://listperfectly.com/pricing/)
+
+## Nifty
+
+Useful patterns:
+
+- Collect shared item facts first, then show only required and recommended eBay specifics.
+- Reuse photos and listing details, but keep marketplace payload review explicit.
+- Provide shortcuts such as create-from-similar and shipping presets rather than asking the seller to rebuild common choices.
+- Make refresh/reconciliation visible when a listing was changed outside the app.
+
+Sources:
+
+- [Nifty creating and editing items](https://docs.nifty.ai/crosslisting/creating-and-editing-items)
+- [Nifty sync and refresh](https://docs.nifty.ai/inventory-management/sync-and-refresh)
+
+## Opportunity Review
+
+The highest-value opportunities are operational, not additional marketplace connectors:
+
+1. **Daily Operations queue**: one prioritized view for ready listings, exceptions, stale inventory, unmatched sales, and orders awaiting shipment.
+2. **Item-family templates**: reusable condition, shipping, description, photo, and pricing defaults for books, discs, games, cards, and clothing.
+3. **Listing-quality score**: required/recommended specifics, title, photos, package readiness, and estimated profit summarized before publish.
+4. **Fulfillment handoff**: carry bin and package data into a pick/pack queue, then hand off to eBay labels and preserve tracking.
+5. **Card batch discipline**: pair front/back images, keep sequence stable, identify in bulk, and require human confirmation of the exact printing.
+6. **Measured throughput**: track scan-to-ready, ready-to-published, and sold-to-shipped time so improvements are judged by touches saved.
+
+Deliberately lower priority: broad cross-listing automation, automatic delist/relist, and paid market-data subscriptions. They add cost and account risk without improving the core eBay listing day as directly.
 
 ## FlipTracker Product Direction
 

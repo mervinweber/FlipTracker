@@ -22,6 +22,25 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Record each successful bulk price change in listing Price History and report per-item failures
 - [ ] Production-smoke one required-specific revision and a two-listing bulk markdown before using it on the full catalog
 
+## v0.9.3 Stale Listing Manager
+
+- [x] Add 30/60/90-day active-listing age buckets for FlipTracker-created eBay listings
+- [x] Add reusable gentle, standard, clearance, and custom markdown strategies
+- [x] Protect a seller-defined estimated profit floor using item cost, shipping, and fee assumptions
+- [x] Preview every eligible and excluded listing with its age, old/new price, and exclusion reason
+- [x] Keep all price changes confirmation-protected, bounded, and recorded in immutable price history
+- [x] Validate desktop and 390px mobile layouts without overlap or horizontal clipping
+- [ ] Production-smoke a two-listing strategy after deployment and verify both eBay prices and local price history
+
+## v0.9.4 Daily Operations - Next
+
+- [ ] Build one Today queue for ready-to-list, listing exceptions, stale inventory, unmatched sales, and orders awaiting shipment
+- [ ] Add reusable item-family listing templates for description, condition, shipping profile, photo checklist, and pricing assumptions
+- [ ] Add listing-quality scoring for title, required/recommended specifics, photo coverage, and estimated profit
+- [ ] Add a post-sale pick/pack queue with bin location, package profile, insurance prompt, and eBay label handoff
+- [ ] Add card batches that preserve front/back pairing through identify, review, price, and publish
+- [ ] Add throughput metrics for scanned, ready, published, sold, and shipped items per work session
+
 Prototype snapshot:
 
 - Functional today: inventory, eBay seller linking, draft staging, sold sync, photo capture, and the Cross Listings queue shell.

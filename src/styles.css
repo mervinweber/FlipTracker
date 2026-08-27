@@ -230,6 +230,17 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .listingOrigin { color:#93c5fd; font-weight:700; }
 .ebayDraftError { max-width:220px; color:#fca5a5; line-height:1.35; }
 .listingQueueBar { display:grid; gap:16px; margin-bottom:18px; border-left:3px solid var(--accent); }
+.activeMaintenancePanel { display:grid; grid-template-columns:minmax(260px, .9fr) minmax(0, 1.5fr); gap:18px; align-items:center; margin-bottom:18px; border-left:3px solid var(--warning); }
+.activeMaintenanceHeader { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.activeMaintenanceHeader h2 { margin:0; }
+.activeMaintenanceHeader p:not(.eyebrow) { margin:5px 0 0; font-size:13px; line-height:1.4; }
+.activeMaintenanceHeader button { flex:0 0 auto; }
+.activeMaintenanceMetrics { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
+.activeMaintenanceMetrics > div, .activeMaintenanceMetrics > button { display:block; min-height:68px; padding:10px 12px; border:0; border-radius:0; background:var(--surface-3); color:var(--text); text-align:left; }
+.activeMaintenanceMetrics > button:hover { background:#172033; }
+.activeMaintenanceMetrics span, .activeMaintenanceMetrics strong { display:block; }
+.activeMaintenanceMetrics span { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
+.activeMaintenanceMetrics strong { margin-top:4px; font-size:22px; }
 .queueSummary { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
 .queueSummary p { margin:6px 0 0; font-size:13px; }
 .queueSteps { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
@@ -393,9 +404,14 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .listingActivity li { display:grid; grid-template-columns:minmax(0, 1fr) minmax(150px, auto); gap:12px; min-width:0; padding-top:7px; border-top:1px solid var(--border); font-size:12px; line-height:1.4; }
 .listingActivity li > span { min-width:0; overflow-wrap:anywhere; }
 .listingActivity li small { color:var(--muted); text-align:right; overflow-wrap:anywhere; }
-.bulkMarkdownButton { border-color:rgba(245,158,11,.55); color:#fde68a; }
-.bulkMarkdownModal { max-width:760px; }
-.bulkMarkdownControls { display:grid; grid-template-columns:minmax(0, 1fr) minmax(240px, auto); gap:14px; align-items:end; }
+.bulkMarkdownButton { border:1px solid rgba(245,158,11,.55); color:#fde68a; background:#713f12; }
+.bulkMarkdownModal { width:min(920px, 95vw); max-width:920px; }
+.markdownStrategyPicker { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; margin-bottom:16px; }
+.markdownStrategyPicker button { min-height:42px; justify-content:center; }
+.markdownStrategyPicker button.active { color:#111827; background:#fbbf24; }
+.bulkMarkdownControls { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; align-items:end; }
+.bulkMarkdownControls .repriceCharm { grid-column:1 / -1; align-self:auto; }
+.bulkMarkdownControls label small { color:var(--muted); line-height:1.3; }
 .percentInput { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; }
 .percentInput input { border-radius:6px 0 0 6px; }
 .percentInput span { display:grid; min-height:40px; padding:0 14px; place-items:center; border:1px solid var(--border-strong); border-left:0; border-radius:0 6px 6px 0; background:var(--surface-3); font-weight:900; }
@@ -410,10 +426,15 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .bulkMarkdownPreview strong, .bulkMarkdownPreview small { display:block; }
 .bulkMarkdownPreview small { margin-top:2px; color:var(--muted); }
 .bulkMarkdownPreview b { white-space:nowrap; }
+.markdownOutcome { display:grid; justify-items:end; min-width:155px; }
+.markdownOutcome em { margin-bottom:3px; padding:3px 6px; border:1px solid var(--border); border-radius:5px; color:var(--muted); font-size:10px; font-style:normal; font-weight:900; text-transform:uppercase; }
+.markdownPreviewRow.eligible .markdownOutcome em { border-color:rgba(34,197,94,.5); color:#86efac; background:rgba(34,197,94,.08); }
+.markdownPreviewRow.profit-protected .markdownOutcome em { border-color:rgba(245,158,11,.5); color:#fde68a; background:rgba(245,158,11,.08); }
 .bulkMarkdownPreview p, .bulkMarkdownProgress { margin:0; padding:12px; color:var(--muted); }
 .bulkMarkdownProgress { margin-top:10px; border:1px solid var(--border); border-radius:6px; }
 @media (max-width:1050px) { .sandboxSetupGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards, .collectionGrid { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
+@media (max-width:900px) { .activeMaintenancePanel { grid-template-columns:1fr; } }
 @media (max-width:700px) { .sandboxSetupGrid { grid-template-columns:1fr; } }
 @media (max-width:700px) { .listingPhotoGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:600px) { .saleCloseoutGrid { grid-template-columns:1fr; } .saleCloseoutGrid .span2 { grid-column:auto; } }
@@ -433,9 +454,14 @@ td small { display:block; color:var(--muted); margin-top:3px; }
   .listingActivity { margin:0 12px 12px; }
   .listingActivity li { grid-template-columns:1fr; gap:3px; }
   .listingActivity li small { text-align:left; }
+  .activeMaintenanceHeader { align-items:flex-start; flex-direction:column; }
+  .activeMaintenanceHeader button { width:100%; justify-content:center; }
+  .activeMaintenanceMetrics { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .markdownStrategyPicker { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .bulkMarkdownControls, .bulkMarkdownSummary { grid-template-columns:1fr; }
   .bulkMarkdownPreview > div { grid-template-columns:1fr; gap:4px; }
   .bulkMarkdownPreview b { white-space:normal; }
+  .markdownOutcome { justify-items:start; }
   .exceptionQueueRow { grid-template-columns:1fr; gap:8px; }
   .operationsInboxRow { grid-template-columns:1fr; gap:8px; }
   .legacyClaimBanner { position:relative; grid-template-columns:1fr; padding:12px 16px; }

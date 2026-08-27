@@ -4,14 +4,11 @@ FlipTracker should grow deliberately from a focused personal resale tracker into
 
 ## Current Delivery Sequence
 
-1. `v0.6.1` - reliability, idempotency, and production smoke testing
-2. `v0.6.2` - continuous scanning, first-class batches, and reusable intake presets
-3. `v0.6.3` - exact eBay preview, listing-quality checks, and bulk validation
-4. `v0.6.4` - comp snapshots, profit floors, repricing, and stale-listing decisions
-5. `v0.6.5` - eBay reconciliation, unmatched records, and active-inventory operations
-6. `v0.6.6` - shipping recommendations, package economics, and fulfillment queue
-7. `v0.8` - specialized book, media, card, clothing, and general-merchandise workflows
-8. `v0.9` - authentication, owner-scoped data, onboarding, and private beta
+1. `v0.9.3` - guarded stale-listing strategies and active-price maintenance
+2. `v0.9.4` - one daily operations queue across listing, inventory, sales, and shipping
+3. `v0.9.5` - reusable item-family templates and listing-quality scoring
+4. `v0.9.6` - pick/pack fulfillment, package economics, and eBay label handoff
+5. `v0.10` - specialized card batches and deeper vertical listing intelligence
 
 See `docs/PRODUCT_BENCHMARKS.md` for the product research behind this sequence.
 
@@ -343,5 +340,53 @@ Goal: maintain a FlipTracker-created eBay catalog without opening every listing 
 - [x] Keep long revision errors and activity history readable in the mobile listing editor
 - [x] Route missing required item-specific failures back to the Category step
 - [x] Map the known book title into eBay's required Publication Name alias for textbook categories
-- [ ] Add stale-listing selection rules by listing age, price, category, and protected profit floor
-- [ ] Add reusable markdown strategies such as 30/60/90-day reductions without automatic execution
+- [x] Add stale-listing selection rules by listing age, price, and protected profit floor
+- [x] Add reusable markdown strategies such as 30/60/90-day reductions without automatic execution
+
+## v0.9.3 Stale Listing Manager
+
+Goal: make aging eBay inventory visible and safely actionable without opening listings one at a time.
+
+- [x] Show managed active inventory and 30/60/90-day age buckets on the Listings dashboard
+- [x] Provide gentle, standard, clearance, and custom review strategies
+- [x] Estimate post-fee profit from sale price, shipping income, item cost, and shipping cost
+- [x] Exclude too-new, missing-date, invalid-price, and profit-protected rows before confirmation
+- [x] Preview old/new totals and per-listing outcomes before updating eBay
+- [x] Keep eBay app/Seller Hub listings outside Inventory API batch changes
+- [ ] Production-smoke a two-listing strategy and verify eBay state plus local price history
+
+## v0.9.4 Daily Operations
+
+Goal: replace navigation between separate modules with one prioritized seller work queue.
+
+- [ ] Combine ready-to-list, listing exceptions, stale inventory, unmatched sales, and awaiting-shipment orders
+- [ ] Make every queue item open directly at the corrective action instead of a generic detail view
+- [ ] Add session completion counts and elapsed-time metrics
+- [ ] Preserve per-item outcomes so one API failure never blocks the rest of a batch
+
+## v0.9.5 Templates And Listing Quality
+
+Goal: reduce repeated decisions while keeping seller review authoritative.
+
+- [ ] Save item-family templates for condition, description, shipping, photos, pricing assumptions, and specifics
+- [ ] Score title length, required/recommended specifics, photo coverage, package readiness, and estimated profit
+- [ ] Add compact warnings and recommended fixes without silently rewriting seller data
+- [ ] Add bulk validation with clean rows separated from an exception queue
+
+## v0.9.6 Fulfillment
+
+Goal: carry the same inventory record from sale through packing and shipment.
+
+- [ ] Build a pick/pack queue with bin location and buyer/order context
+- [ ] Suggest the saved package profile and require measured exceptions
+- [ ] Prompt for insurance/signature on high-value items
+- [ ] Hand off to eBay label purchase and retain tracking/shipped state when supported
+
+## v0.10 Card Batches And Vertical Intelligence
+
+Goal: extend the proven batch pipeline where category-specific handling creates real speed.
+
+- [ ] Pair card front/back images and preserve sequence through scan, identify, review, price, and publish
+- [ ] Keep automated card identification human-confirmed before inventory creation
+- [ ] Add duplicate/variation checks and low-value lot recommendations
+- [ ] Apply the same vertical approach to book edition confidence, media completeness, and clothing measurements

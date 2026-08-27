@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -11,7 +11,7 @@ import EbayPayloadPreview from './EbayPayloadPreview';
 import { validateListingReadiness, type ListingReadinessStep } from '../utils/listingReadiness';
 import { applyListingSpeedPreset, listingFamily, loadListingSpeedPresets, saveListingSpeedPreset } from '../utils/listingSpeedPresets';
 import { ebaySpecificsStepForError, readableActionError } from '../utils/actionErrors';
-import { calculateMarkdownPrice, isFlipTrackerManagedActiveListing } from '../utils/listingBulkMarkdown';
+import { assessMarkdownListing, isFlipTrackerManagedActiveListing, listingAgeDays } from '../utils/listingBulkMarkdown';
 import {
   EBAY_CATEGORY_CHOICES,
   EBAY_SHIPPING_PROFILES,
@@ -118,6 +118,13 @@ type PricingRow = {
 };
 
 const QUEUE_TYPES = ['Ready for Pricing', 'Needs Photo', 'Ready for eBay', 'Staged for eBay', 'Published', 'Sold'] as const;
+
+const MARKDOWN_STRATEGIES = [
+  { key: 'gentle-30', label: '30 days · 5% off', minimumAgeDays: 30, percentage: 5 },
+  { key: 'standard-60', label: '60 days · 10% off', minimumAgeDays: 60, percentage: 10 },
+  { key: 'clearance-90', label: '90 days · 15% off', minimumAgeDays: 90, percentage: 15 },
+  { key: 'custom', label: 'Custom review', minimumAgeDays: 30, percentage: 10 },
+] as const;
 
 type ActivePricingResult = {
   listingId: Id<'marketplaceListings'>;
@@ -300,6 +307,14 @@ function optionalNumber(value: string) {
   return value === '' ? undefined : Number(value);
 }
 
+function markdownStatusLabel(status: 'eligible' | 'too-new' | 'missing-date' | 'profit-protected' | 'invalid-price') {
+  if (status === 'eligible') return 'Eligible';
+  if (status === 'too-new') return 'Too new';
+  if (status === 'missing-date') return 'Missing date';
+  if (status === 'profit-protected') return 'Profit protected';
+  return 'Invalid price';
+}
+
 function priceEndingAt99(value: number) {
   return Math.max(0.99, Math.ceil(value) - 0.01);
 }
@@ -439,7 +454,11 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [repriceBusy, setRepriceBusy] = useState(false);
   const [repriceError, setRepriceError] = useState('');
   const [bulkMarkdownOpen, setBulkMarkdownOpen] = useState(false);
+  const [bulkMarkdownStrategy, setBulkMarkdownStrategy] = useState('standard-60');
+  const [bulkMarkdownAge, setBulkMarkdownAge] = useState('60');
   const [bulkMarkdownPercent, setBulkMarkdownPercent] = useState('10');
+  const [bulkMarkdownFeePercent, setBulkMarkdownFeePercent] = useState('15');
+  const [bulkMarkdownMinimumProfit, setBulkMarkdownMinimumProfit] = useState('3');
   const [bulkMarkdownCharm, setBulkMarkdownCharm] = useState(true);
   const [bulkMarkdownBusy, setBulkMarkdownBusy] = useState(false);
   const [bulkMarkdownProgress, setBulkMarkdownProgress] = useState('');
@@ -530,14 +549,31 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const queueListings = useMemo(() => filtered.filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status)), [filtered]);
   const selectedListings = useMemo(() => (listings || []).filter((listing) => selectedIds.has(listing._id)), [listings, selectedIds]);
   const flipTrackerManagedActiveListings = useMemo(() => (listings || []).filter(isFlipTrackerManagedActiveListing), [listings]);
-  const bulkMarkdownRows = useMemo(() => {
-    const percentage = Number(bulkMarkdownPercent);
-    return flipTrackerManagedActiveListings.flatMap((listing) => {
-      const currentPrice = listing.currentPrice ?? listing.listedPrice ?? 0;
-      const newPrice = calculateMarkdownPrice(currentPrice, percentage, bulkMarkdownCharm);
-      return newPrice === undefined ? [] : [{ listing, currentPrice, newPrice }];
-    });
-  }, [bulkMarkdownCharm, bulkMarkdownPercent, flipTrackerManagedActiveListings]);
+  const activeAgeCounts = useMemo(() => ({
+    days30: flipTrackerManagedActiveListings.filter((listing) => (listingAgeDays(listing.listedDate) ?? -1) >= 30).length,
+    days60: flipTrackerManagedActiveListings.filter((listing) => (listingAgeDays(listing.listedDate) ?? -1) >= 60).length,
+    days90: flipTrackerManagedActiveListings.filter((listing) => (listingAgeDays(listing.listedDate) ?? -1) >= 90).length,
+  }), [flipTrackerManagedActiveListings]);
+  const bulkMarkdownAssessments = useMemo(() => flipTrackerManagedActiveListings.map((listing) => assessMarkdownListing(listing, {
+    minimumAgeDays: Number(bulkMarkdownAge),
+    percentage: Number(bulkMarkdownPercent),
+    feePercent: Number(bulkMarkdownFeePercent),
+    minimumProfit: Number(bulkMarkdownMinimumProfit),
+    charmPricing: bulkMarkdownCharm,
+  })), [bulkMarkdownAge, bulkMarkdownCharm, bulkMarkdownFeePercent, bulkMarkdownMinimumProfit, bulkMarkdownPercent, flipTrackerManagedActiveListings]);
+  const bulkMarkdownRows = useMemo(() => bulkMarkdownAssessments.flatMap((row) => (
+    row.status === 'eligible' && row.newPrice !== undefined ? [{ ...row, newPrice: row.newPrice }] : []
+  )), [bulkMarkdownAssessments]);
+  const bulkMarkdownExcluded = useMemo(() => ({
+    tooNew: bulkMarkdownAssessments.filter((row) => row.status === 'too-new').length,
+    protected: bulkMarkdownAssessments.filter((row) => row.status === 'profit-protected').length,
+    missingDate: bulkMarkdownAssessments.filter((row) => row.status === 'missing-date').length,
+    invalid: bulkMarkdownAssessments.filter((row) => row.status === 'invalid-price').length,
+  }), [bulkMarkdownAssessments]);
+  const bulkMarkdownPreviewRows = useMemo(() => {
+    const order = ['eligible', 'profit-protected', 'missing-date', 'too-new', 'invalid-price'];
+    return [...bulkMarkdownAssessments].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || (b.ageDays ?? -1) - (a.ageDays ?? -1));
+  }, [bulkMarkdownAssessments]);
 
   useEffect(() => {
     const visibleIds = new Set(queueListings.map((listing) => listing._id));
@@ -732,6 +768,22 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setRepriceError('');
   }
 
+  function selectBulkMarkdownStrategy(strategyKey: string) {
+    const strategy = MARKDOWN_STRATEGIES.find((option) => option.key === strategyKey) || MARKDOWN_STRATEGIES[1];
+    setBulkMarkdownStrategy(strategy.key);
+    if (strategy.key !== 'custom') {
+      setBulkMarkdownAge(String(strategy.minimumAgeDays));
+      setBulkMarkdownPercent(String(strategy.percentage));
+    }
+  }
+
+  function openActiveListingManager(strategyKey = bulkMarkdownStrategy) {
+    selectBulkMarkdownStrategy(strategyKey);
+    setBulkMarkdownError('');
+    setBulkMarkdownProgress('');
+    setBulkMarkdownOpen(true);
+  }
+
   async function submitReprice() {
     if (!repricing || !repricePreview?.valid) {
       setRepriceError('Enter values that calculate to a different eBay price of at least $0.99.');
@@ -775,19 +827,29 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
   async function submitBulkMarkdown() {
     const percentage = Number(bulkMarkdownPercent);
+    const age = Number(bulkMarkdownAge);
+    const feePercent = Number(bulkMarkdownFeePercent);
+    const minimumProfit = Number(bulkMarkdownMinimumProfit);
     if (!adminKey) {
       setBulkMarkdownError('Load the connected eBay seller account before updating live prices.');
       return;
     }
+    if (!Number.isFinite(age) || age < 0 || !Number.isFinite(percentage) || percentage <= 0 || percentage > 90
+      || !Number.isFinite(feePercent) || feePercent < 0 || feePercent > 50
+      || !Number.isFinite(minimumProfit) || minimumProfit < 0) {
+      setBulkMarkdownError('Enter a valid age, a markdown from 0.1% to 90%, fees from 0% to 50%, and a non-negative profit floor.');
+      return;
+    }
     if (!bulkMarkdownRows.length) {
-      setBulkMarkdownError('No eligible FlipTracker-created active listings would receive a lower price.');
+      setBulkMarkdownError('No eligible stale listings would receive a lower price without crossing the protected profit floor.');
       return;
     }
     const totalBefore = bulkMarkdownRows.reduce((sum, row) => sum + row.currentPrice, 0);
     const totalAfter = bulkMarkdownRows.reduce((sum, row) => sum + row.newPrice, 0);
     if (!confirm([
       `Update ${bulkMarkdownRows.length} FlipTracker-created live eBay listing${bulkMarkdownRows.length === 1 ? '' : 's'}?`,
-      `${percentage.toFixed(1)}% markdown · ${money(totalBefore)} total → ${money(totalAfter)} total`,
+      `${age}+ days · ${percentage.toFixed(1)}% markdown · ${money(totalBefore)} total → ${money(totalAfter)} total`,
+      `Minimum estimated profit: ${money(minimumProfit)} after ${feePercent.toFixed(1)}% estimated fees.`,
       'These public eBay prices change immediately. Listings created in the eBay app or Seller Hub are excluded.',
     ].join('\n\n'))) return;
 
@@ -805,7 +867,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         adminKey,
         listingId: row.listing._id,
         newPrice: row.newPrice,
-        reason: `${percentage.toFixed(1)}% bulk markdown for FlipTracker-created listings`,
+        reason: `${percentage.toFixed(1)}% stale-listing markdown after ${age} days`,
       })));
       results.forEach((result, resultIndex) => {
         if (result.status === 'rejected') failures.push(`${batch[resultIndex].listing.title}: ${readableActionError(result.reason, 'eBay rejected the price update.')}`);
@@ -815,7 +877,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     }
 
     const succeeded = bulkMarkdownRows.length - failures.length;
-    if (succeeded) setEbayNotice(`Updated ${succeeded} FlipTracker-created live eBay price${succeeded === 1 ? '' : 's'} by ${percentage.toFixed(1)}%.`);
+    if (succeeded) setEbayNotice(`Updated ${succeeded} stale FlipTracker-created live eBay price${succeeded === 1 ? '' : 's'} by ${percentage.toFixed(1)}%.`);
     if (failures.length) {
       const message = `${failures.length} price update${failures.length === 1 ? '' : 's'} failed. ${failures.slice(0, 3).join(' ')}`;
       setBulkMarkdownError(message);
@@ -1672,6 +1734,16 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
       </section>
 
+      <section className="panel activeMaintenancePanel">
+        <div className="activeMaintenanceHeader"><div><p className="eyebrow">Active inventory</p><h2>Stale Listing Manager</h2><p>Review age-based price changes with a protected profit floor before updating eBay.</p></div><button className="bulkMarkdownButton" disabled={!flipTrackerManagedActiveListings.length} onClick={() => openActiveListingManager()}><Clock3 size={16}/> Review Active Listings</button></div>
+        <div className="activeMaintenanceMetrics" aria-label="FlipTracker active listing age">
+          <div><span>Managed Active</span><strong>{flipTrackerManagedActiveListings.length}</strong></div>
+          <button onClick={() => openActiveListingManager('gentle-30')}><span>30+ Days</span><strong>{activeAgeCounts.days30}</strong></button>
+          <button onClick={() => openActiveListingManager('standard-60')}><span>60+ Days</span><strong>{activeAgeCounts.days60}</strong></button>
+          <button onClick={() => openActiveListingManager('clearance-90')}><span>90+ Days</span><strong>{activeAgeCounts.days90}</strong></button>
+        </div>
+      </section>
+
       <section className="panel ebaySetupPanel">
         <div className="panelHeader">
           <div><h2>Link Your eBay Account</h2><p>{ebaySetup?.connected && !sellerSetupExpanded ? (sellerDefaultsReady ? 'Connected and ready. Expand to manage location, policies, categories, and account counts.' : 'Connected, but listing defaults need attention.') : 'Link the seller account, then choose its policies and inventory location before staging offers from FlipTracker.'}</p></div>
@@ -1776,7 +1848,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <select value={platform} onChange={(event) => setPlatform(event.target.value)}>{['All', ...PLATFORMS].map((value) => <option key={value}>{value}</option>)}</select>
         <select aria-label="Filter by queue type" value={queueType} onChange={(event) => setQueueType(event.target.value)}><option value="All">Queue: All</option>{QUEUE_TYPES.map((value) => <option key={value} value={value}>{`Queue: ${value}`}</option>)}</select>
         <select aria-label="Sort listings" value={sortBy} onChange={(event) => setSortBy(event.target.value as ListingSort)}>{(['Newest', 'Queue', 'Status', 'Price High', 'Price Low'] as ListingSort[]).map((value) => <option key={value} value={value}>{`Sort: ${value}`}</option>)}</select>
-        <div className="actions listingTools"><button className="secondary" disabled={activeListingsSyncBusy || !ebaySetup?.connected} onClick={refreshActiveEbayListings}><RefreshCw size={16}/>{activeListingsSyncBusy ? 'Syncing Active...' : 'Sync Active Listings'}</button><button className="secondary" disabled={sellerSalesSyncBusy || !ebaySetup?.connected} onClick={refreshEbaySales}><RefreshCw size={16}/>{sellerSalesSyncBusy ? 'Refreshing Sales...' : 'Sync eBay Sales'}</button><button className="secondary bulkMarkdownButton" disabled={!flipTrackerManagedActiveListings.length || bulkMarkdownBusy || !ebaySetup?.connected} onClick={() => { setBulkMarkdownError(''); setBulkMarkdownProgress(''); setBulkMarkdownOpen(true); }}><Percent size={16}/> Markdown FlipTracker Listings ({flipTrackerManagedActiveListings.length})</button><label className="button secondary"><Upload size={16}/> Import Old JSON<input type="file" accept="application/json,.json" hidden onChange={importOldJson}/></label><button className="secondary" onClick={exportCsv}><Download size={16}/> Export CSV</button></div>
+        <div className="actions listingTools"><button className="secondary" disabled={activeListingsSyncBusy || !ebaySetup?.connected} onClick={refreshActiveEbayListings}><RefreshCw size={16}/>{activeListingsSyncBusy ? 'Syncing Active...' : 'Sync Active Listings'}</button><button className="secondary" disabled={sellerSalesSyncBusy || !ebaySetup?.connected} onClick={refreshEbaySales}><RefreshCw size={16}/>{sellerSalesSyncBusy ? 'Refreshing Sales...' : 'Sync eBay Sales'}</button><button className="secondary bulkMarkdownButton" disabled={!flipTrackerManagedActiveListings.length || bulkMarkdownBusy} onClick={() => openActiveListingManager()}><Clock3 size={16}/> Stale Listing Manager ({flipTrackerManagedActiveListings.length})</button><label className="button secondary"><Upload size={16}/> Import Old JSON<input type="file" accept="application/json,.json" hidden onChange={importOldJson}/></label><button className="secondary" onClick={exportCsv}><Download size={16}/> Export CSV</button></div>
       </section>
 
       <section className="panel inventoryPanel">
@@ -1880,21 +1952,27 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
       {bulkMarkdownOpen ? (
         <div className="modalBackdrop"><section className="modal bulkMarkdownModal">
-          <header className="modalHeader"><div><p className="eyebrow">Bulk live price update</p><h2>Markdown FlipTracker Listings</h2><p>{flipTrackerManagedActiveListings.length} active Inventory API listing{flipTrackerManagedActiveListings.length === 1 ? '' : 's'} found</p></div><button className="iconButton secondary" disabled={bulkMarkdownBusy} aria-label="Close bulk markdown" onClick={() => setBulkMarkdownOpen(false)}><X size={18}/></button></header>
+          <header className="modalHeader"><div><p className="eyebrow">Active listing maintenance</p><h2>Stale Listing Manager</h2><p>{flipTrackerManagedActiveListings.length} active listing{flipTrackerManagedActiveListings.length === 1 ? '' : 's'} created through FlipTracker</p></div><button className="iconButton secondary" disabled={bulkMarkdownBusy} aria-label="Close stale listing manager" onClick={() => setBulkMarkdownOpen(false)}><X size={18}/></button></header>
+          <div className="markdownStrategyPicker" role="group" aria-label="Markdown strategy">
+            {MARKDOWN_STRATEGIES.map((strategy) => <button key={strategy.key} className={bulkMarkdownStrategy === strategy.key ? 'active' : 'secondary'} onClick={() => selectBulkMarkdownStrategy(strategy.key)}>{strategy.label}</button>)}
+          </div>
           <div className="bulkMarkdownControls">
-            <label>Reduce each current price by<div className="percentInput"><input type="number" inputMode="decimal" min="0.1" max="90" step="0.1" value={bulkMarkdownPercent} onChange={(event) => setBulkMarkdownPercent(event.target.value)}/><span>%</span></div></label>
+            <label>Minimum listing age<input type="number" inputMode="numeric" min="0" max="3650" step="1" value={bulkMarkdownAge} onChange={(event) => { setBulkMarkdownStrategy('custom'); setBulkMarkdownAge(event.target.value); }}/><small>Days since the saved listed date</small></label>
+            <label>Price reduction<div className="percentInput"><input type="number" inputMode="decimal" min="0.1" max="90" step="0.1" value={bulkMarkdownPercent} onChange={(event) => { setBulkMarkdownStrategy('custom'); setBulkMarkdownPercent(event.target.value); }}/><span>%</span></div></label>
+            <label>Estimated eBay fee %<input type="number" inputMode="decimal" min="0" max="50" step="0.1" value={bulkMarkdownFeePercent} onChange={(event) => setBulkMarkdownFeePercent(event.target.value)}/></label>
+            <label>Minimum estimated profit<input type="number" inputMode="decimal" min="0" step="0.01" value={bulkMarkdownMinimumProfit} onChange={(event) => setBulkMarkdownMinimumProfit(event.target.value)}/></label>
             <label className="repriceCharm"><input type="checkbox" checked={bulkMarkdownCharm} onChange={(event) => setBulkMarkdownCharm(event.target.checked)}/><span>Round each result up to a .99 price</span></label>
           </div>
-          <div className="bulkMarkdownSummary"><div><span>Eligible</span><strong>{bulkMarkdownRows.length}</strong></div><div><span>Current Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.currentPrice, 0))}</strong></div><div><span>New Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.newPrice, 0))}</strong></div></div>
+          <div className="bulkMarkdownSummary"><div><span>Eligible</span><strong>{bulkMarkdownRows.length}</strong></div><div><span>Profit Protected</span><strong>{bulkMarkdownExcluded.protected}</strong></div><div><span>Too New</span><strong>{bulkMarkdownExcluded.tooNew}</strong></div><div><span>Missing Date</span><strong>{bulkMarkdownExcluded.missingDate}</strong></div><div><span>Current Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.currentPrice, 0))}</strong></div><div><span>New Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.newPrice, 0))}</strong></div></div>
           <div className="bulkMarkdownPreview" aria-label="Bulk markdown preview">
-            {bulkMarkdownRows.slice(0, 10).map((row) => <div key={row.listing._id}><span><strong>{row.listing.title}</strong><small>eBay {row.listing.externalListingId}</small></span><b>{money(row.currentPrice)} → {money(row.newPrice)}</b></div>)}
-            {bulkMarkdownRows.length > 10 ? <p>And {bulkMarkdownRows.length - 10} more eligible listings.</p> : null}
-            {!bulkMarkdownRows.length ? <p>No eligible listing would receive a lower price with these settings.</p> : null}
+            {bulkMarkdownPreviewRows.slice(0, 20).map((row) => <div key={row.listing._id} className={`markdownPreviewRow ${row.status}`}><span><strong>{row.listing.title}</strong><small>{row.ageDays === undefined ? 'No listed date' : `${row.ageDays} days active`} · eBay {row.listing.externalListingId}</small></span><span className="markdownOutcome"><em>{markdownStatusLabel(row.status)}</em><b>{row.newPrice === undefined ? money(row.currentPrice) : `${money(row.currentPrice)} → ${money(row.newPrice)}`}</b>{row.estimatedProfit !== undefined ? <small>Est. profit {money(row.estimatedProfit)}</small> : null}</span></div>)}
+            {bulkMarkdownPreviewRows.length > 20 ? <p>Showing 20 of {bulkMarkdownPreviewRows.length} managed active listings.</p> : null}
+            {!bulkMarkdownPreviewRows.length ? <p>No active Inventory API listings created by FlipTracker were found.</p> : null}
           </div>
-          <p className="ebaySafetyNote">Only active listings created through FlipTracker's Inventory API are included. This changes public eBay prices immediately and records each change in Price History.</p>
+          <p className="ebaySafetyNote">Profit estimates use saved purchase cost, shipping charged, shipping cost, and the fee assumption above. Missing costs are treated as $0. Only Eligible rows change; eBay app and Seller Hub listings remain excluded.</p>
           {bulkMarkdownProgress ? <p className="bulkMarkdownProgress">{bulkMarkdownProgress}</p> : null}
           {bulkMarkdownError ? <p className="formError">{bulkMarkdownError}</p> : null}
-          <div className="actions modalActions"><button className="secondary" disabled={bulkMarkdownBusy} onClick={() => setBulkMarkdownOpen(false)}>Cancel</button><button disabled={bulkMarkdownBusy || !bulkMarkdownRows.length || !adminKey} onClick={submitBulkMarkdown}><Percent size={16}/>{bulkMarkdownBusy ? 'Updating eBay...' : `Apply to ${bulkMarkdownRows.length} Listings`}</button></div>
+          <div className="actions modalActions"><button className="secondary" disabled={bulkMarkdownBusy} onClick={() => setBulkMarkdownOpen(false)}>Cancel</button><button disabled={bulkMarkdownBusy || !bulkMarkdownRows.length || !adminKey} onClick={submitBulkMarkdown}><Percent size={16}/>{bulkMarkdownBusy ? 'Updating eBay...' : `Apply to ${bulkMarkdownRows.length} Eligible Listings`}</button></div>
         </section></div>
       ) : null}
 
