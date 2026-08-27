@@ -317,6 +317,10 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .saleProfitSummary span { color:var(--muted); font-size:12px; font-weight:900; text-transform:uppercase; }
 .saleProfitSummary strong { font-size:26px; }
 .saleProfitSummary small { grid-column:1 / -1; color:var(--muted); }
+.saleArchiveOption { display:flex; flex-direction:row; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); }
+.saleArchiveOption input { width:18px; height:18px; margin-top:2px; flex:0 0 auto; }
+.saleArchiveOption span { display:grid; gap:3px; }
+.saleArchiveOption small { color:var(--muted); font-weight:500; }
 .repriceModal { width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); }
 .repriceCurrent { display:grid; grid-template-columns:1fr auto; gap:4px 16px; align-items:end; padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
 .repriceCurrent span { color:var(--muted); font-size:12px; font-weight:900; text-transform:uppercase; }

@@ -12,7 +12,7 @@ An eBay-first resale inventory, listing, and profit tracker for books, games, DV
 Convex-backed inventory UI with schema, backend functions, docs, Excel import/export, and value-review workflow.
 
 ## Prototype Status
-- Functional today: inventory management, eBay seller linking, draft staging, sold sync, and photo capture.
+- Functional today: inventory management, eBay seller linking, draft staging, sold sync, sale closeout/archiving, and photo capture.
 - Listing factory today: automatic media category routing, live eBay Taxonomy fields, readiness validation, an exception queue with Save & Next, package guardrails, photo capture, pricing, eBay staging, publishing, and sold sync.
 - Still pending: real user authentication, per-user account ownership, deeper eBay category-aspect discovery, and broader automated test coverage.
 

@@ -97,9 +97,10 @@ export default function QuickGuide() {
         <section><div className="guideNumber">8</div><div><h3>Track price changes and the sale</h3><ol>
           <li>Edit Current Price whenever a listing is reduced and enter a reason. FlipTracker preserves the price history.</li>
           <li>When sold, change the listing status to <strong>Sold</strong>.</li>
-          <li>Use the dollar button on a listing to record where it sold, sale price/date, what you paid, shipping income/cost, fees, buyer, order reference, and notes.</li>
+          <li>Use the dollar button on a listing to record where it sold, sale price/date, what you paid, shipping income/cost, fees, buyer, order reference, and notes. Imported sold records open this same closeout directly and do not require eBay category, photo, or shipping details.</li>
           <li>Open Fulfillment from the Today queue to pick by bin, confirm the package profile, flag insurance, and mark the order Packed or Shipped.</li>
           <li>Save carrier and tracking details in FlipTracker, or hand off to eBay Labels for the connected order.</li>
+          <li>Select <strong>Mark completed / archived</strong> when no fulfillment work remains. The record stays Sold so revenue and profit reporting remain accurate.</li>
           <li>FlipTracker updates inventory status, sales history, revenue, net profit, and fulfillment state.</li>
         </ol></div></section>
 

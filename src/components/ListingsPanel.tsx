@@ -14,6 +14,7 @@ import { applyListingSpeedPreset, listingFamily, listingSpeedPresetFor, loadList
 import { ebaySpecificsStepForError, readableActionError } from '../utils/actionErrors';
 import { assessMarkdownListing, isFlipTrackerManagedActiveListing, listingAgeDays } from '../utils/listingBulkMarkdown';
 import { buildTodayOperations } from '../utils/todayOperations';
+import { listingOperationsIssue, shouldArchiveSaleByDefault } from '../utils/listingOperations';
 import {
   EBAY_CATEGORY_CHOICES,
   EBAY_SHIPPING_PROFILES,
@@ -350,15 +351,6 @@ function ebayListingOrigin(listing: Listing) {
   return 'FlipTracker draft';
 }
 
-function operationsIssue(listing: Listing) {
-  if (listing.platform !== 'eBay') return '';
-  if (listing.ebayLastError) return listing.ebayLastError;
-  if (listing.status === 'Active' && !listing.externalListingId) return 'Active locally but missing its eBay item ID.';
-  if (listing.ebayDraftStatus === 'Imported eBay sale' && listing.assetType === 'General Merchandise') return 'Imported sale needs its inventory category and cost reviewed.';
-  if (listing.ebayOfferId && !listing.externalListingId && listing.ebayDraftCreatedAt && Date.now() - listing.ebayDraftCreatedAt > 14 * 86_400_000) return 'Staged offer is more than 14 days old and should be reviewed or refreshed.';
-  return '';
-}
-
 function isNewCondition(condition?: string) {
   return ['new', 'brand new', 'sealed'].includes(condition?.trim().toLowerCase() || '');
 }
@@ -453,6 +445,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [exceptionQueueExpanded, setExceptionQueueExpanded] = useState(false);
   const [operationsExpanded, setOperationsExpanded] = useState(false);
   const [saleEditing, setSaleEditing] = useState<Listing | null>(null);
+  const [archiveSale, setArchiveSale] = useState(false);
   const [endListingPrompt, setEndListingPrompt] = useState<Listing | null>(null);
   const [endListingBusy, setEndListingBusy] = useState(false);
   const [endListingError, setEndListingError] = useState('');
@@ -630,7 +623,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId)
   )), [selectedListings]);
   const selectedBlockedCount = selectedListings.filter((listing) => (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking)).length;
-  const editingReadinessIssues = useMemo(() => editing ? validateListingReadiness({ ...listingReadinessInput(editing), missingCategoryAspects: taxonomyMissingAspects }, sellerReadinessDefaults) : [], [editing, listingReadinessInput, sellerReadinessDefaults, taxonomyMissingAspects]);
+  const editingReadinessIssues = useMemo(() => editing && editing.status !== 'Sold' ? validateListingReadiness({ ...listingReadinessInput(editing), missingCategoryAspects: taxonomyMissingAspects }, sellerReadinessDefaults) : [], [editing, listingReadinessInput, sellerReadinessDefaults, taxonomyMissingAspects]);
   const fastReviewIssues = useMemo(() => fastReviewing ? validateListingReadiness(listingReadinessInput(fastReviewing), sellerReadinessDefaults) : [], [fastReviewing, listingReadinessInput, sellerReadinessDefaults]);
   const fastReviewNet = useMemo(() => {
     if (!fastReviewing) return 0;
@@ -643,12 +636,12 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     return (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field));
   }), [listings, readinessByListingId]);
   const operationsListings = useMemo(() => (listings || [])
-    .map((listing) => ({ listing, issue: operationsIssue(listing) }))
+    .map((listing) => ({ listing, issue: listingOperationsIssue(listing) }))
     .filter((entry) => Boolean(entry.issue)), [listings]);
   const todayOperations = useMemo(() => buildTodayOperations(listings || [], (listing) => ({
     blockingIssues: (readinessByListingId.get(listing._id) || []).filter((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field)).length,
     queueStage: queueStatus(listing),
-    operationsIssue: operationsIssue(listing) || undefined,
+    operationsIssue: listingOperationsIssue(listing) || undefined,
   })), [listings, readinessByListingId]);
   const todayCounts = useMemo(() => ({
     fulfillment: todayOperations.filter((operation) => operation.kind === 'fulfillment').length,
@@ -740,6 +733,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   }
 
   function openListingEditor(listing: Listing, initialStep: ListingEditorStep = 'details', fromExceptionQueue = false) {
+    if (listing.status === 'Sold') {
+      openSaleEditor(listing);
+      return;
+    }
     setSaleEditing(null);
     setFastReviewing(null);
     setExceptionWorkflow(fromExceptionQueue);
@@ -806,7 +803,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       else openFastReview(listing);
       return;
     }
-    openListingEditor(listing);
+    if (listing.status === 'Sold') openSaleEditor(listing);
+    else openListingEditor(listing);
   }
 
   function openFastReview(listing?: Listing) {
@@ -1010,6 +1008,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
   function openSaleEditor(listing: Listing) {
     setEditing(null);
+    setArchiveSale(shouldArchiveSaleByDefault(listing));
     setSaleEditing({
       ...listing,
       status: 'Sold',
@@ -1079,7 +1078,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       fees: saleEditing.fees,
       buyer: saleEditing.buyer?.trim() || undefined,
       notes: saleEditing.notes?.trim() || undefined,
+      fulfillmentStatus: archiveSale ? 'Completed' : saleEditing.fulfillmentStatus === 'Completed' ? 'Shipped' : saleEditing.fulfillmentStatus,
     });
+    setEbayNotice(`${saleEditing.title} sale updated${archiveSale ? ' and archived' : ''}.`);
     setSaleEditing(null);
   }
 
@@ -1944,7 +1945,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <div><p className="eyebrow">eBay operations</p><h2>{operationsListings.length ? `${operationsListings.length} item${operationsListings.length === 1 ? '' : 's'} need reconciliation` : 'Operations inbox is clear'}</h2><p>{operationsListings.length ? 'Review sync failures, imported sales, and stale or incomplete eBay links.' : 'No known eBay lifecycle or synchronization problems need attention.'}</p></div>
           {operationsListings.length ? <button className="secondary" onClick={() => setOperationsExpanded((expanded) => !expanded)}><AlertTriangle size={16}/>{operationsExpanded ? 'Collapse' : 'Review Inbox'}</button> : <span className="statusPill ebayConnected"><CheckCircle2 size={14}/> Healthy</span>}
         </div>
-        {operationsListings.length && operationsExpanded ? <div className="operationsInboxList">{operationsListings.slice(0, 12).map(({ listing, issue }) => <button key={listing._id} className="operationsInboxRow" onClick={() => openListingEditor(listing)}><div><strong>{listing.title}</strong><small>{[listing.status, listing.externalListingId ? `eBay ${listing.externalListingId}` : undefined, listing.sku ? `SKU ${listing.sku}` : undefined].filter(Boolean).join(' · ')}</small></div><span>{issue}</span><b>Review</b></button>)}</div> : null}
+        {operationsListings.length && operationsExpanded ? <div className="operationsInboxList">{operationsListings.slice(0, 12).map(({ listing, issue }) => <button key={listing._id} className="operationsInboxRow" onClick={() => listing.status === 'Sold' ? openSaleEditor(listing) : openListingEditor(listing)}><div><strong>{listing.title}</strong><small>{[listing.status, listing.externalListingId ? `eBay ${listing.externalListingId}` : undefined, listing.sku ? `SKU ${listing.sku}` : undefined].filter(Boolean).join(' · ')}</small></div><span>{issue}</span><b>{listing.status === 'Sold' ? 'Add Cost' : 'Review'}</b></button>)}</div> : null}
       </section>
 
       <section className="panel listingControls">
@@ -1968,7 +1969,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                   <td><span className="consoleTag">{listing.platform}</span></td>
                   <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
                   <td><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
-                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.fulfillmentStatus ? <small className="fulfillmentStatus">Fulfillment: {listing.fulfillmentStatus}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
+                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions">
@@ -2151,6 +2152,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <label>Marketplace Fees<input type="number" min="0" step="0.01" value={saleEditing.fees ?? ''} onChange={(event) => patchSale({ fees: optionalNumber(event.target.value) })}/></label>
             <label className="span2">Buyer / Customer<input value={saleEditing.buyer || ''} onChange={(event) => patchSale({ buyer: event.target.value })} placeholder="Optional name or username"/></label>
             <label className="span2">Sale Notes<textarea value={saleEditing.notes || ''} onChange={(event) => patchSale({ notes: event.target.value })} placeholder="Pickup details, payment method, bundle notes, returns, or anything useful later."/></label>
+            <label className="span2 saleArchiveOption"><input type="checkbox" checked={archiveSale} onChange={(event) => setArchiveSale(event.target.checked)}/><span><strong>Mark completed / archived</strong><small>Keeps the record Sold for revenue and profit reporting while removing it from operational follow-up.</small></span></label>
           </div>
           <div className="saleProfitSummary"><span>Net Profit</span><strong className={netProfit(saleEditing) < 0 ? 'lossValue' : 'profitValue'}>{money(netProfit(saleEditing))}</strong><small>Sale + shipping charged − item cost − fees − shipping cost</small></div>
           <div className="actions right"><button className="secondary" onClick={() => setSaleEditing(null)}>Cancel</button><button disabled={saleEditing.soldPrice === undefined || saleEditing.soldPrice < 0} onClick={saveSale}><Save size={16}/> Save Sale</button></div>
