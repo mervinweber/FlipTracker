@@ -39,9 +39,11 @@ export function calculateMarkdownPrice(currentPrice: number, percentage: number,
   if (!Number.isFinite(currentPrice) || currentPrice < 0.99) return undefined;
   if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 90) return undefined;
   const discounted = currentPrice * (1 - percentage / 100);
-  const nextPrice = charmPricing
-    ? Math.max(0.99, Math.ceil(discounted) - 0.01)
-    : Math.max(0.99, Math.round(discounted * 100) / 100);
+  const exactPrice = Math.max(0.99, Math.round(discounted * 100) / 100);
+  const charmPrice = Math.max(0.99, Math.ceil(discounted) - 0.01);
+  // A listing already ending in .99 can round back to its current price.
+  // Keep the requested percentage reduction in that case instead of excluding it.
+  const nextPrice = charmPricing && charmPrice < currentPrice ? charmPrice : exactPrice;
   return nextPrice < currentPrice ? nextPrice : undefined;
 }
 

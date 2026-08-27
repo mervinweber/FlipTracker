@@ -323,7 +323,7 @@ function markdownStatusLabel(status: 'eligible' | 'too-new' | 'missing-date' | '
   if (status === 'too-new') return 'Too new';
   if (status === 'missing-date') return 'Missing date';
   if (status === 'profit-protected') return 'Profit protected';
-  return 'Invalid price';
+  return 'No lower price';
 }
 
 function priceEndingAt99(value: number) {
@@ -2090,9 +2090,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <label>Price reduction<div className="percentInput"><input type="number" inputMode="decimal" min="0.1" max="90" step="0.1" value={bulkMarkdownPercent} onChange={(event) => { setBulkMarkdownStrategy('custom'); setBulkMarkdownPercent(event.target.value); }}/><span>%</span></div></label>
             <label>Estimated eBay fee %<input type="number" inputMode="decimal" min="0" max="50" step="0.1" value={bulkMarkdownFeePercent} onChange={(event) => setBulkMarkdownFeePercent(event.target.value)}/></label>
             <label>Minimum estimated profit<input type="number" inputMode="decimal" min="0" step="0.01" value={bulkMarkdownMinimumProfit} onChange={(event) => setBulkMarkdownMinimumProfit(event.target.value)}/></label>
-            <label className="repriceCharm"><input type="checkbox" checked={bulkMarkdownCharm} onChange={(event) => setBulkMarkdownCharm(event.target.checked)}/><span>Round each result up to a .99 price</span></label>
+            <label className="repriceCharm"><input type="checkbox" checked={bulkMarkdownCharm} onChange={(event) => setBulkMarkdownCharm(event.target.checked)}/><span>Use a .99 price when it still lowers the listing</span></label>
           </div>
-          <div className="bulkMarkdownSummary"><div><span>Eligible</span><strong>{bulkMarkdownRows.length}</strong></div><div><span>Profit Protected</span><strong>{bulkMarkdownExcluded.protected}</strong></div><div><span>Too New</span><strong>{bulkMarkdownExcluded.tooNew}</strong></div><div><span>Missing Date</span><strong>{bulkMarkdownExcluded.missingDate}</strong></div><div><span>Current Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.currentPrice, 0))}</strong></div><div><span>New Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.newPrice, 0))}</strong></div></div>
+          <div className="bulkMarkdownSummary"><div><span>Eligible</span><strong>{bulkMarkdownRows.length}</strong></div><div><span>Profit Protected</span><strong>{bulkMarkdownExcluded.protected}</strong></div><div><span>Too New</span><strong>{bulkMarkdownExcluded.tooNew}</strong></div><div><span>Missing Date</span><strong>{bulkMarkdownExcluded.missingDate}</strong></div><div><span>No Lower Price</span><strong>{bulkMarkdownExcluded.invalid}</strong></div><div><span>Current Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.currentPrice, 0))}</strong></div><div><span>New Total</span><strong>{money(bulkMarkdownRows.reduce((sum, row) => sum + row.newPrice, 0))}</strong></div></div>
           <div className="bulkMarkdownPreview" aria-label="Bulk markdown preview">
             {bulkMarkdownPreviewRows.slice(0, 20).map((row) => <div key={row.listing._id} className={`markdownPreviewRow ${row.status}`}><span><strong>{row.listing.title}</strong><small>{row.ageDays === undefined ? 'No listed date' : `${row.ageDays} days active`} · eBay {row.listing.externalListingId}</small></span><span className="markdownOutcome"><em>{markdownStatusLabel(row.status)}</em><b>{row.newPrice === undefined ? money(row.currentPrice) : `${money(row.currentPrice)} → ${money(row.newPrice)}`}</b>{row.estimatedProfit !== undefined ? <small>Est. profit {money(row.estimatedProfit)}</small> : null}</span></div>)}
             {bulkMarkdownPreviewRows.length > 20 ? <p>Showing 20 of {bulkMarkdownPreviewRows.length} managed active listings.</p> : null}

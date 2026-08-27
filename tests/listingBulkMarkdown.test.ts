@@ -12,6 +12,8 @@ describe('bulk eBay markdown', () => {
   it('calculates exact and charm-price markdowns', () => {
     assert.equal(calculateMarkdownPrice(24.99, 10, false), 22.49);
     assert.equal(calculateMarkdownPrice(24.99, 10, true), 22.99);
+    assert.equal(calculateMarkdownPrice(13.99, 5, true), 13.29);
+    assert.equal(calculateMarkdownPrice(3.99, 5, true), 3.79);
   });
 
   it('rejects invalid or unchanged markdowns', () => {

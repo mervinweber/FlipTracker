@@ -160,6 +160,7 @@ Prototype snapshot:
 - [x] Calculate sold net profit from sale, shipping income, item cost, fees, and shipping cost
 - [x] Add a dedicated Record Sale closeout for eBay, other marketplaces, and local sales
 - [x] Route sold-record reconciliation directly to sale closeout, bypass eBay publishing requirements, and archive completed sales without removing them from reporting
+- [x] Preserve percentage markdowns when .99 charm pricing would otherwise round back to the unchanged listing price
 - [x] Synchronize corrected listing closeouts with linked sale records
 - [x] Default unsaved custom listing packages to 32 oz
 - [x] Update inventory status and add a sale record when a listing becomes Sold
