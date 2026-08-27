@@ -63,6 +63,8 @@ For eBay, `language` is a structured item specific and defaults new media drafts
 
 `ebayOrderId` and `ebayOrderLineItemId` identify seller-order reconciliation results. Together they prevent duplicate generic records when a paid eBay order line did not originate in FlipTracker. An imported order line still creates the normal asset, marketplace listing, and sale records, so it participates in the same Sold lifecycle and reports as a native listing.
 
+`fulfillmentStatus` carries a sold listing through Awaiting Shipment, Packed, Shipped, or Completed. `packedAt` and `shippedAt` preserve lifecycle timestamps; `shippingCarrier`, `trackingNumber`, `insuranceRequired`, and `fulfillmentNotes` preserve the seller's fulfillment handoff. eBay order synchronization updates this state when the Fulfillment API reports a shipped order.
+
 ## ebayConnections
 
 The single-seller beta's server-only eBay OAuth record. It stores environment, access/refresh tokens, scopes, expiry times, and connection timestamps. No public query returns the tokens.
@@ -83,7 +85,7 @@ For live eBay repricing, `listedPrice` remains the original baseline while `curr
 
 ## sourcingAnalyses
 
-One saved acquisition decision. It stores exact item identity, acquisition and fulfillment assumptions, active and 90-day sold counts, calculated market metrics, confidence, recommendation, and explanatory notes. `isDemo` and `demoKey` keep illustrative examples identifiable and make seeding repeatable.
+One saved acquisition decision. It stores exact item identity, acquisition and fulfillment assumptions, active and 90-day sold counts, calculated market metrics, confidence, recommendation, and explanatory notes. `targetProfit`, `targetRoiPercent`, and `minimumLiquidity` capture the seller's acquisition rules; `maximumBuyPrice` is the highest purchase cost that satisfies both profit and ROI targets. `isDemo` and `demoKey` keep illustrative examples identifiable and make seeding repeatable.
 
 Rarity is derived from active supply. Liquidity combines sell-through and recent sold velocity. They are intentionally separate because a scarce item is not necessarily fast-selling.
 

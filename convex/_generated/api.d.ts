@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as intake from "../intake.js";
 import type * as intakeBatches from "../intakeBatches.js";
 import type * as lib_ebayNativeRevision from "../lib/ebayNativeRevision.js";
+import type * as lib_sourcingRules from "../lib/sourcingRules.js";
 import type * as linkedAccounts from "../linkedAccounts.js";
 import type * as listings from "../listings.js";
 import type * as mediaLookup from "../mediaLookup.js";
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   intake: typeof intake;
   intakeBatches: typeof intakeBatches;
   "lib/ebayNativeRevision": typeof lib_ebayNativeRevision;
+  "lib/sourcingRules": typeof lib_sourcingRules;
   linkedAccounts: typeof linkedAccounts;
   listings: typeof listings;
   mediaLookup: typeof mediaLookup;

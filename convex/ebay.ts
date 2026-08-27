@@ -52,6 +52,7 @@ type EbayOrder = {
   orderId?: string;
   creationDate?: string;
   orderPaymentStatus?: string;
+  orderFulfillmentStatus?: string;
   cancelStatus?: { cancelState?: string };
   buyer?: { username?: string };
   lineItems?: EbayOrderLineItem[];
@@ -877,8 +878,10 @@ export const reconcileSoldOrderLine = internalMutation({
     shippingCharged: v.optional(v.number()),
     fees: v.optional(v.number()),
     buyer: v.optional(v.string()),
+    orderFulfillmentStatus: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const fulfillmentStatus = args.orderFulfillmentStatus === "FULFILLED" ? "Shipped" : "Awaiting Shipment";
     const previouslyImported = (await ctx.db
       .query("marketplaceListings")
       .withIndex("by_ebayOrderId_and_ebayOrderLineItemId", (q) => q
@@ -886,7 +889,11 @@ export const reconcileSoldOrderLine = internalMutation({
         .eq("ebayOrderLineItemId", args.orderLineItemKey))
       .collect()).find((candidate) => !args.ownerId || candidate.ownerId === args.ownerId);
     if (previouslyImported) {
-      return { matched: true, updated: false, imported: false };
+      const nextStatus = fulfillmentStatus === "Shipped" ? "Shipped" : previouslyImported.fulfillmentStatus || fulfillmentStatus;
+      if (nextStatus !== previouslyImported.fulfillmentStatus) {
+        await ctx.db.patch(previouslyImported._id, { fulfillmentStatus: nextStatus, ebayLastSyncedAt: Date.now(), updatedAt: Date.now() });
+      }
+      return { matched: true, updated: nextStatus !== previouslyImported.fulfillmentStatus, imported: false };
     }
     const listingById = args.externalListingId
       ? (await ctx.db.query("marketplaceListings").withIndex("by_externalListingId", (q) => q.eq("externalListingId", args.externalListingId)).collect())
@@ -941,6 +948,7 @@ export const reconcileSoldOrderLine = internalMutation({
         ebayOrderLineItemId: args.orderLineItemKey,
         ebayLastSyncedAt: now,
         ebayDraftStatus: "Imported eBay sale",
+        fulfillmentStatus,
         pricingStatus: "Sold",
         notes,
         createdAt: now,
@@ -965,6 +973,7 @@ export const reconcileSoldOrderLine = internalMutation({
     }
 
     const now = Date.now();
+    const nextFulfillmentStatus = fulfillmentStatus === "Shipped" ? "Shipped" : listing.fulfillmentStatus || fulfillmentStatus;
     const alreadyCurrent = listing.status === "Sold"
       && listing.ebayOrderId === args.orderId
       && listing.soldPrice === args.soldPrice
@@ -975,6 +984,7 @@ export const reconcileSoldOrderLine = internalMutation({
         salePlatform: "eBay",
         saleReference: args.orderId,
         ebayLastSyncedAt: now,
+        fulfillmentStatus: nextFulfillmentStatus,
         updatedAt: now,
       });
       await ctx.db.patch(listing.assetId, {
@@ -1000,6 +1010,7 @@ export const reconcileSoldOrderLine = internalMutation({
       ebayOrderId: args.orderId,
       ebayLastSyncedAt: now,
       ebayDraftStatus: "Sold on eBay",
+      fulfillmentStatus: nextFulfillmentStatus,
       ebayLastError: undefined,
       updatedAt: now,
     });
@@ -1379,6 +1390,7 @@ export const syncSoldOrders = action({
               shippingCharged: Number.isFinite(shippingTotal) ? Math.round(shippingTotal * share * 100) / 100 : undefined,
               fees: Number.isFinite(feeTotal) ? Math.round(feeTotal * share * 100) / 100 : undefined,
               buyer: order.buyer?.username,
+              orderFulfillmentStatus: order.orderFulfillmentStatus,
             });
             if (result.matched) matched += 1;
             else if (result.imported) imported += 1;

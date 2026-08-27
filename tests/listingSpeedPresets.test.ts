@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { applyListingSpeedPreset, listingFamily, loadListingSpeedPresets, saveListingSpeedPreset } from '../src/utils/listingSpeedPresets.ts';
+import { applyListingSpeedPreset, listingFamily, loadListingSpeedPresets, renderListingTemplate, saveListingSpeedPreset } from '../src/utils/listingSpeedPresets.ts';
 
 function memoryStorage(seed = '') {
   let value = seed;
@@ -36,5 +36,19 @@ describe('listing speed presets', () => {
     );
     assert.equal(listing.condition, 'Acceptable');
     assert.equal(listing.shippingPreset, 'single-book');
+  });
+
+  it('renders description tokens and keeps listing-specific copy authoritative', () => {
+    assert.equal(renderListingTemplate('{title}\nCondition: {condition}\nSKU {sku}', {
+      title: 'Example Book', condition: 'Good', sku: 'BIN-4',
+    }), 'Example Book\nCondition: Good\nSKU BIN-4');
+    const listing = applyListingSpeedPreset({ assetType: 'Book', title: 'Example Book', condition: '', description: '' }, {
+      book: { condition: 'Good', completeness: 'Complete', descriptionTemplate: '{title} - {condition}' },
+    });
+    assert.equal(listing.completeness, 'Complete');
+    assert.equal(listing.description, 'Example Book - Good');
+    assert.equal(applyListingSpeedPreset({ assetType: 'Book', title: 'Example', description: 'Seller copy' }, {
+      book: { descriptionTemplate: 'Template copy' },
+    }).description, 'Seller copy');
   });
 });

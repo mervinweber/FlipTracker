@@ -50,6 +50,13 @@ const listingFields = {
   packageWidthIn: v.optional(v.number()),
   packageHeightIn: v.optional(v.number()),
   imageMode: v.optional(v.string()),
+  fulfillmentStatus: v.optional(v.string()),
+  packedAt: v.optional(v.number()),
+  shippedAt: v.optional(v.number()),
+  shippingCarrier: v.optional(v.string()),
+  trackingNumber: v.optional(v.string()),
+  insuranceRequired: v.optional(v.boolean()),
+  fulfillmentNotes: v.optional(v.string()),
   pricingStatus: v.optional(v.string()),
   pricingSource: v.optional(v.string()),
 };
@@ -97,6 +104,13 @@ const listingPatch = {
   packageWidthIn: v.optional(v.number()),
   packageHeightIn: v.optional(v.number()),
   imageMode: v.optional(v.string()),
+  fulfillmentStatus: v.optional(v.string()),
+  packedAt: v.optional(v.number()),
+  shippedAt: v.optional(v.number()),
+  shippingCarrier: v.optional(v.string()),
+  trackingNumber: v.optional(v.string()),
+  insuranceRequired: v.optional(v.boolean()),
+  fulfillmentNotes: v.optional(v.string()),
   pricingStatus: v.optional(v.string()),
   pricingSource: v.optional(v.string()),
 };
@@ -117,6 +131,7 @@ export const list = query({
           assetTitle: asset?.title ?? "Missing inventory item",
           assetType: asset?.type,
           purchasePrice: asset?.purchasePrice,
+          completeness: asset?.completeness,
           storageLocation: asset?.storageLocation,
           photoUrl: primaryPhotoUrl || asset?.photoDataUrl || asset?.coverImageUrl,
           hasActualPhoto: Boolean(primaryPhoto || asset?.photoDataUrl),
@@ -249,6 +264,7 @@ export const create = mutation({
     const listingId = await ctx.db.insert("marketplaceListings", {
       ownerId,
       ...args,
+      fulfillmentStatus: args.fulfillmentStatus ?? (args.status === "Sold" ? (args.platform.toLowerCase() === "ebay" ? "Awaiting Shipment" : "Completed") : undefined),
       currentPrice: args.currentPrice ?? args.listedPrice,
       pricingStatus: args.pricingStatus ?? (args.currentPrice !== undefined || args.listedPrice !== undefined ? "Ready for eBay" : "Ready for Pricing"),
       pricingUpdatedAt: args.currentPrice !== undefined || args.listedPrice !== undefined ? now : undefined,
@@ -319,9 +335,10 @@ export const update = mutation({
     id: v.id("marketplaceListings"),
     priceChangeReason: v.optional(v.string()),
     purchasePrice: v.optional(v.number()),
+    completeness: v.optional(v.string()),
     ...listingPatch,
   },
-  handler: async (ctx, { id, priceChangeReason, purchasePrice, ...patch }) => {
+  handler: async (ctx, { id, priceChangeReason, purchasePrice, completeness, ...patch }) => {
     const existing = await ctx.db.get(id);
     const ownerId = await currentOwnerId(ctx);
     assertOwner(existing, ownerId, "Listing");
@@ -346,7 +363,10 @@ export const update = mutation({
     const pricingPatch = patch.currentPrice !== undefined && patch.currentPrice > 0 && ["Draft", "Pending"].includes(patch.status ?? existing.status)
       ? { pricingStatus: "Ready for eBay", pricingSource: patch.pricingSource ?? "Manual listing edit", pricingUpdatedAt: now }
       : {};
-    await ctx.db.patch(id, { ...patch, ...pricingPatch, updatedAt: now });
+    const fulfillmentPatch = (patch.status ?? existing.status) === "Sold" && !patch.fulfillmentStatus && !existing.fulfillmentStatus
+      ? { fulfillmentStatus: (patch.salePlatform ?? existing.salePlatform ?? existing.platform).toLowerCase() === "ebay" ? "Awaiting Shipment" : "Completed" }
+      : {};
+    await ctx.db.patch(id, { ...patch, ...pricingPatch, ...fulfillmentPatch, updatedAt: now });
     if (patch.status !== undefined && patch.status !== existing.status) {
       await ctx.db.insert("listingEvents", {
         ownerId: existing.ownerId,
@@ -372,8 +392,20 @@ export const update = mutation({
         createdAt: now,
       });
     }
-    if (purchasePrice !== undefined) {
-      await ctx.db.patch(existing.assetId, { purchasePrice, updatedAt: now });
+    if (patch.fulfillmentStatus !== undefined && patch.fulfillmentStatus !== existing.fulfillmentStatus) {
+      await ctx.db.insert("listingEvents", {
+        ownerId: existing.ownerId,
+        listingId: id,
+        assetId: existing.assetId,
+        eventType: "fulfillment_changed",
+        source: "FlipTracker",
+        message: `Fulfillment moved from ${existing.fulfillmentStatus || "Not started"} to ${patch.fulfillmentStatus}.`,
+        metadata: JSON.stringify({ carrier: patch.shippingCarrier, trackingNumber: patch.trackingNumber }),
+        createdAt: now,
+      });
+    }
+    if (purchasePrice !== undefined || completeness !== undefined) {
+      await ctx.db.patch(existing.assetId, { ...(purchasePrice !== undefined ? { purchasePrice } : {}), ...(completeness !== undefined ? { completeness } : {}), updatedAt: now });
     }
     const nextStatus = patch.status ?? existing.status;
     if (nextStatus === "Active") {

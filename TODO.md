@@ -32,12 +32,16 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Validate desktop and 390px mobile layouts without overlap or horizontal clipping
 - [ ] Production-smoke a two-listing strategy after deployment and verify both eBay prices and local price history
 
-## v0.9.4 Daily Operations - Next
+## v0.9.4 Daily Operations
 
-- [ ] Build one Today queue for ready-to-list, listing exceptions, stale inventory, unmatched sales, and orders awaiting shipment
-- [ ] Add reusable item-family listing templates for description, condition, shipping profile, photo checklist, and pricing assumptions
+- [x] Build one Today queue for ready-to-list, listing exceptions, eBay reconciliation, stale inventory, and orders awaiting shipment
+- [x] Make Today actions open the fulfillment, blocker, reconciliation, review, publish, or stale-price workflow directly
+- [x] Add reusable browser-local item-family templates for description, condition, completeness, shipping profile/policy, photo source, and pricing assumptions
+- [x] Add profit-first sourcing rules with seller-defined minimum profit, ROI, liquidity, and maximum-buy calculations
 - [ ] Add listing-quality scoring for title, required/recommended specifics, photo coverage, and estimated profit
-- [ ] Add a post-sale pick/pack queue with bin location, package profile, insurance prompt, and eBay label handoff
+- [x] Add a first post-sale pick/pack workflow with bin location, package profile, insurance prompt, carrier, tracking, and eBay label handoff
+- [ ] Purchase eBay labels in-app and synchronize tracking without leaving FlipTracker
+- [ ] Add template photo checklists and category-specific item-specific defaults
 - [ ] Add card batches that preserve front/back pairing through identify, review, price, and publish
 - [ ] Add throughput metrics for scanned, ready, published, sold, and shipped items per work session
 

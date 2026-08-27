@@ -17,6 +17,9 @@ type Draft = {
   shippingCost: string;
   packagingCost: string;
   feePercent: string;
+  targetProfit: string;
+  targetRoiPercent: string;
+  minimumLiquidity: string;
   activeCount: string;
   soldCount90: string;
   soldPrices: string;
@@ -34,6 +37,9 @@ const blankDraft: Draft = {
   shippingCost: '4.63',
   packagingCost: '0.50',
   feePercent: '13.25',
+  targetProfit: '10.00',
+  targetRoiPercent: '50',
+  minimumLiquidity: '40',
   activeCount: '',
   soldCount90: '',
   soldPrices: '',
@@ -63,6 +69,15 @@ function recommendationClass(value: string) {
   return `decisionBadge ${value.toLowerCase()}`;
 }
 
+function maximumBuyFor(analysis: Analysis) {
+  if (analysis.maximumBuyPrice !== undefined) return analysis.maximumBuyPrice;
+  const contribution = analysis.expectedSalePrice - analysis.expectedFees - analysis.shippingCost - analysis.packagingCost;
+  const profitLimit = contribution - (analysis.targetProfit ?? 10);
+  const roiTarget = analysis.targetRoiPercent ?? 50;
+  const roiLimit = roiTarget > 0 ? contribution / (1 + roiTarget / 100) : contribution;
+  return Math.max(0, Math.round(Math.min(profitLimit, roiLimit) * 100) / 100);
+}
+
 function ebaySoldUrl(analysis: Analysis) {
   const query = [analysis.title, analysis.edition, analysis.format].filter(Boolean).join(' ');
   return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1`;
@@ -85,6 +100,7 @@ function AnalysisDetails({ id, onClose }: { id: Id<'sourcingAnalyses'>; onClose:
           <div><span>Recommendation</span><strong className={recommendationClass(analysis.recommendation)}>{analysis.recommendation}</strong></div>
           <div><span>Expected sale</span><strong>{money(analysis.expectedSalePrice)}</strong></div>
           <div><span>Expected profit</span><strong>{money(analysis.expectedProfit)}</strong></div>
+          <div><span>Maximum buy</span><strong>{money(maximumBuyFor(analysis))}</strong></div>
           <div><span>ROI</span><strong>{analysis.roiPercent >= 999 ? '999%+' : `${analysis.roiPercent.toFixed(0)}%`}</strong></div>
           <div><span>Sell-through proxy</span><strong>{analysis.sellThroughPercent >= 999 ? '999%+' : `${analysis.sellThroughPercent.toFixed(0)}%`}</strong></div>
           <div><span>Days to sell</span><strong>{analysis.estimatedDaysToSell ? `~${analysis.estimatedDaysToSell.toFixed(0)}` : 'Unknown'}</strong></div>
@@ -99,6 +115,8 @@ function AnalysisDetails({ id, onClose }: { id: Id<'sourcingAnalyses'>; onClose:
             <div><dt>Expected marketplace fees</dt><dd>{money(analysis.expectedFees)}</dd></div>
             <div><dt>Expected shipping</dt><dd>{money(analysis.shippingCost)}</dd></div>
             <div><dt>Packaging</dt><dd>{money(analysis.packagingCost)}</dd></div>
+            <div><dt>Profit / ROI targets</dt><dd>{money(analysis.targetProfit ?? 10)} / {analysis.targetRoiPercent ?? 50}%</dd></div>
+            <div><dt>Minimum liquidity</dt><dd>{analysis.minimumLiquidity ?? 40}/100</dd></div>
             <div><dt>Active / sold in 90 days</dt><dd>{analysis.activeCount} / {analysis.soldCount90}</dd></div>
             <div><dt>Confidence</dt><dd>{analysis.confidence}</dd></div>
           </dl></section>
@@ -153,6 +171,9 @@ export default function SourcingPanel() {
         shippingCost: number(draft.shippingCost),
         packagingCost: number(draft.packagingCost),
         feePercent: number(draft.feePercent),
+        targetProfit: number(draft.targetProfit),
+        targetRoiPercent: number(draft.targetRoiPercent),
+        minimumLiquidity: number(draft.minimumLiquidity),
         activeCount: number(draft.activeCount),
         soldCount90: number(draft.soldCount90),
         soldPrices,
@@ -206,7 +227,7 @@ export default function SourcingPanel() {
           <td><strong>{money(row.medianSold)} median</strong><small>{money(row.averageSold)} average</small></td>
           <td><strong>{row.sellThroughPercent >= 999 ? '999%+' : `${row.sellThroughPercent.toFixed(0)}%`} STR</strong><small>{row.estimatedDaysToSell ? `~${row.estimatedDaysToSell.toFixed(0)} days` : 'No velocity'}</small></td>
           <td><strong>Rarity {row.rarityScore}</strong><small>Liquidity {row.liquidityScore}</small><small>{row.confidence} confidence</small></td>
-          <td><strong className={row.expectedProfit >= 0 ? 'profitValue' : 'lossValue'}>{money(row.expectedProfit)} profit</strong><small>{row.roiPercent >= 999 ? '999%+' : `${row.roiPercent.toFixed(0)}%`} ROI</small><small>{money(row.purchaseCost)} buy cost</small></td>
+          <td><strong className={row.expectedProfit >= 0 ? 'profitValue' : 'lossValue'}>{money(row.expectedProfit)} profit</strong><small>{row.roiPercent >= 999 ? '999%+' : `${row.roiPercent.toFixed(0)}%`} ROI</small><small>Pay up to {money(maximumBuyFor(row))}</small></td>
           <td><span className={recommendationClass(row.recommendation)}>{row.recommendation}</span></td>
           <td className="rowActions"><button onClick={() => setSelectedId(row._id)}><Search size={14}/> Details</button><button className="secondary" onClick={async () => { await convertToInventory({ id: row._id }); }}><Plus size={14}/> Inventory</button><button className="danger iconButton" aria-label={`Delete ${row.title}`} onClick={() => deleteAnalysis(row)}><Trash2 size={14}/></button></td>
         </tr>)}</tbody></table></div>}
@@ -215,7 +236,7 @@ export default function SourcingPanel() {
       {editorOpen ? <div className="modalBackdrop"><section className="modal wideModal"><header className="modalHeader"><div><p className="eyebrow">Manual market sample</p><h2>New Sourcing Analysis</h2></div><button className="iconButton secondary" aria-label="Close" onClick={() => setEditorOpen(false)}><X size={18}/></button></header>
         <form onSubmit={save} className="formGrid">
           <section className="formSection span2"><h3>Identify the exact item</h3><div className="sectionGrid"><label>Title<input required value={draft.title} onChange={(e) => field('title', e.target.value)}/></label><label>Format<select value={draft.format} onChange={(e) => field('format', e.target.value)}>{['Video Game','DVD','Blu-ray','CD','Book','Other Media'].map((value) => <option key={value}>{value}</option>)}</select></label><label>Edition<input value={draft.edition} onChange={(e) => field('edition', e.target.value)} placeholder="Distributor, release, greatest hits..."/></label><label>UPC / ISBN<input value={draft.upc} onChange={(e) => field('upc', e.target.value)}/></label><label>Condition<select value={draft.condition} onChange={(e) => field('condition', e.target.value)}>{['New','Like New','Very Good','Good','Acceptable','For Parts'].map((value) => <option key={value}>{value}</option>)}</select></label><label>Completeness<select value={draft.completeness} onChange={(e) => field('completeness', e.target.value)}>{['Complete','Disc Only','Case Only','Case + Disc','No Manual','Sealed','Loose','Incomplete'].map((value) => <option key={value}>{value}</option>)}</select></label></div></section>
-          <section className="formSection"><h3>Costs and supply</h3><div className="sectionGrid"><label>Purchase cost<input type="number" min="0" step="0.01" value={draft.purchaseCost} onChange={(e) => field('purchaseCost', e.target.value)}/></label><label>Shipping cost<input type="number" min="0" step="0.01" value={draft.shippingCost} onChange={(e) => field('shippingCost', e.target.value)}/></label><label>Packaging cost<input type="number" min="0" step="0.01" value={draft.packagingCost} onChange={(e) => field('packagingCost', e.target.value)}/></label><label>Fee estimate %<input type="number" min="0" step="0.01" value={draft.feePercent} onChange={(e) => field('feePercent', e.target.value)}/></label><label>Active listings<input required type="number" min="0" step="1" value={draft.activeCount} onChange={(e) => field('activeCount', e.target.value)}/></label><label>Sold in last 90 days<input required type="number" min="0" step="1" value={draft.soldCount90} onChange={(e) => field('soldCount90', e.target.value)}/></label></div></section>
+          <section className="formSection"><h3>Costs and supply</h3><div className="sectionGrid"><label>Purchase cost<input type="number" min="0" step="0.01" value={draft.purchaseCost} onChange={(e) => field('purchaseCost', e.target.value)}/></label><label>Shipping cost<input type="number" min="0" step="0.01" value={draft.shippingCost} onChange={(e) => field('shippingCost', e.target.value)}/></label><label>Packaging cost<input type="number" min="0" step="0.01" value={draft.packagingCost} onChange={(e) => field('packagingCost', e.target.value)}/></label><label>Fee estimate %<input type="number" min="0" max="50" step="0.01" value={draft.feePercent} onChange={(e) => field('feePercent', e.target.value)}/></label><label>Minimum profit<input type="number" min="0" step="0.01" value={draft.targetProfit} onChange={(e) => field('targetProfit', e.target.value)}/></label><label>Minimum ROI %<input type="number" min="0" step="1" value={draft.targetRoiPercent} onChange={(e) => field('targetRoiPercent', e.target.value)}/></label><label>Minimum liquidity<input type="number" min="0" max="100" step="1" value={draft.minimumLiquidity} onChange={(e) => field('minimumLiquidity', e.target.value)}/></label><label>Active listings<input required type="number" min="0" step="1" value={draft.activeCount} onChange={(e) => field('activeCount', e.target.value)}/></label><label>Sold in last 90 days<input required type="number" min="0" step="1" value={draft.soldCount90} onChange={(e) => field('soldCount90', e.target.value)}/></label></div></section>
           <section className="formSection"><h3>Sold observations</h3><label>Sold prices, one per line<textarea required className="compInput" value={draft.soldPrices} onChange={(e) => field('soldPrices', e.target.value)} placeholder={'24.99\n22.50 + 4.50\n27.00'}/><small>Use price alone or price + shipping. The engine compares delivered totals.</small></label><label>Notes<textarea value={draft.notes} onChange={(e) => field('notes', e.target.value)} placeholder="Edition checks, red flags, source details..."/></label></section>
           {error ? <p className="warningText span2">{error}</p> : null}<div className="actions right span2"><button type="button" className="secondary" onClick={() => setEditorOpen(false)}>Cancel</button><button type="submit" disabled={saving}>{saving ? 'Calculating...' : 'Calculate & Save'}</button></div>
         </form>

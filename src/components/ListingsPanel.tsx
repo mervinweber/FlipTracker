@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, LogOut, MapPin, Package, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, Package, PackageCheck, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -8,10 +8,12 @@ import EbayCategoryFinder from './EbayCategoryFinder';
 import ListingReadinessPanel from './ListingReadinessPanel';
 import EbayCategoryAspects from './EbayCategoryAspects';
 import EbayPayloadPreview from './EbayPayloadPreview';
+import ListingTemplatesModal from './ListingTemplatesModal';
 import { validateListingReadiness, type ListingReadinessStep } from '../utils/listingReadiness';
-import { applyListingSpeedPreset, listingFamily, loadListingSpeedPresets, saveListingSpeedPreset } from '../utils/listingSpeedPresets';
+import { applyListingSpeedPreset, listingFamily, listingSpeedPresetFor, loadListingSpeedPresets, saveListingSpeedPreset } from '../utils/listingSpeedPresets';
 import { ebaySpecificsStepForError, readableActionError } from '../utils/actionErrors';
 import { assessMarkdownListing, isFlipTrackerManagedActiveListing, listingAgeDays } from '../utils/listingBulkMarkdown';
+import { buildTodayOperations } from '../utils/todayOperations';
 import {
   EBAY_CATEGORY_CHOICES,
   EBAY_SHIPPING_PROFILES,
@@ -82,6 +84,13 @@ type Listing = {
   pricingUpdatedAt?: number;
   ebayOrderId?: string;
   ebayLastSyncedAt?: number;
+  fulfillmentStatus?: string;
+  packedAt?: number;
+  shippedAt?: number;
+  shippingCarrier?: string;
+  trackingNumber?: string;
+  insuranceRequired?: boolean;
+  fulfillmentNotes?: string;
   updatedAt: number;
   assetTitle: string;
   assetType?: string;
@@ -97,6 +106,7 @@ type Listing = {
   photoUrl?: string;
   hasActualPhoto?: boolean;
   hasCatalogIdentifier?: boolean;
+  completeness?: string;
 };
 
 type PricingRow = {
@@ -431,13 +441,17 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [fastReviewing, setFastReviewing] = useState<Listing | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [fulfillmentEditing, setFulfillmentEditing] = useState<Listing | null>(null);
+  const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
+  const [fulfillmentError, setFulfillmentError] = useState('');
   const [rememberFastDefaults, setRememberFastDefaults] = useState(true);
   const listingActivity = useQuery(api.listings.activity, editing ? { listingId: editing._id } : 'skip');
   const [editorStep, setEditorStep] = useState<ListingEditorStep>('details');
   const [taxonomyMissingAspects, setTaxonomyMissingAspects] = useState<string[]>([]);
   const [exceptionWorkflow, setExceptionWorkflow] = useState(false);
-  const [exceptionQueueExpanded, setExceptionQueueExpanded] = useState(true);
-  const [operationsExpanded, setOperationsExpanded] = useState(true);
+  const [exceptionQueueExpanded, setExceptionQueueExpanded] = useState(false);
+  const [operationsExpanded, setOperationsExpanded] = useState(false);
   const [saleEditing, setSaleEditing] = useState<Listing | null>(null);
   const [endListingPrompt, setEndListingPrompt] = useState<Listing | null>(null);
   const [endListingBusy, setEndListingBusy] = useState(false);
@@ -498,10 +512,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen) return;
+    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !templatesOpen && !fulfillmentEditing) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkMarkdownOpen, editing, endListingPrompt, fastReviewing, pricingRows, repricing, saleEditing]);
+  }, [bulkMarkdownOpen, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, templatesOpen]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -621,7 +635,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const fastReviewNet = useMemo(() => {
     if (!fastReviewing) return 0;
     const price = fastReviewing.currentPrice ?? fastReviewing.listedPrice ?? 0;
-    return price - (price * 0.15) - (fastReviewing.purchasePrice ?? 0) - (fastReviewing.shippingCost ?? 0);
+    const feeRate = (listingSpeedPresetFor(fastReviewing)?.feePercent ?? 15) / 100;
+    return price - (price * feeRate) - (fastReviewing.purchasePrice ?? 0) - (fastReviewing.shippingCost ?? 0);
   }, [fastReviewing]);
   const exceptionListings = useMemo(() => (listings || []).filter((listing) => {
     if (listing.platform !== 'eBay' || !['Draft', 'Pending'].includes(listing.status)) return false;
@@ -630,6 +645,18 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const operationsListings = useMemo(() => (listings || [])
     .map((listing) => ({ listing, issue: operationsIssue(listing) }))
     .filter((entry) => Boolean(entry.issue)), [listings]);
+  const todayOperations = useMemo(() => buildTodayOperations(listings || [], (listing) => ({
+    blockingIssues: (readinessByListingId.get(listing._id) || []).filter((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field)).length,
+    queueStage: queueStatus(listing),
+    operationsIssue: operationsIssue(listing) || undefined,
+  })), [listings, readinessByListingId]);
+  const todayCounts = useMemo(() => ({
+    fulfillment: todayOperations.filter((operation) => operation.kind === 'fulfillment').length,
+    exception: todayOperations.filter((operation) => operation.kind === 'exception').length,
+    ready: todayOperations.filter((operation) => operation.kind === 'ready').length,
+    stale: todayOperations.filter((operation) => operation.kind === 'stale').length,
+    reconcile: todayOperations.filter((operation) => operation.kind === 'reconcile').length,
+  }), [todayOperations]);
   const batchCompletion = useMemo(() => {
     const draftRows = (listings || []).filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status));
     return {
@@ -723,6 +750,65 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setEditing(listingWithWorkflowDefaults(listing));
   }
 
+  function openFulfillmentEditor(listing: Listing) {
+    setEditing(null);
+    setSaleEditing(null);
+    setFulfillmentError('');
+    setFulfillmentEditing({
+      ...listing,
+      fulfillmentStatus: listing.fulfillmentStatus || 'Awaiting Shipment',
+      insuranceRequired: listing.insuranceRequired ?? (listing.soldPrice ?? 0) >= 100,
+    });
+  }
+
+  async function saveFulfillment() {
+    if (!fulfillmentEditing) return;
+    const now = Date.now();
+    setFulfillmentBusy(true);
+    setFulfillmentError('');
+    try {
+      await updateListing({
+        id: fulfillmentEditing._id,
+        fulfillmentStatus: fulfillmentEditing.fulfillmentStatus || 'Awaiting Shipment',
+        packedAt: fulfillmentEditing.fulfillmentStatus === 'Packed' ? fulfillmentEditing.packedAt || now : fulfillmentEditing.packedAt,
+        shippedAt: fulfillmentEditing.fulfillmentStatus === 'Shipped' ? fulfillmentEditing.shippedAt || now : fulfillmentEditing.shippedAt,
+        shippingCarrier: fulfillmentEditing.shippingCarrier?.trim() || undefined,
+        trackingNumber: fulfillmentEditing.trackingNumber?.trim() || undefined,
+        insuranceRequired: Boolean(fulfillmentEditing.insuranceRequired),
+        fulfillmentNotes: fulfillmentEditing.fulfillmentNotes?.trim() || undefined,
+      });
+      setEbayNotice(`${fulfillmentEditing.title} marked ${fulfillmentEditing.fulfillmentStatus || 'Awaiting Shipment'}.`);
+      setFulfillmentEditing(null);
+    } catch (error) {
+      setFulfillmentError(readableActionError(error, 'Could not update fulfillment.'));
+    } finally {
+      setFulfillmentBusy(false);
+    }
+  }
+
+  function openTodayOperation(operation: typeof todayOperations[number]) {
+    const listing = operation.listing;
+    if (operation.kind === 'fulfillment') {
+      openFulfillmentEditor(listing);
+      return;
+    }
+    if (operation.kind === 'stale') {
+      openActiveListingManager('standard-60');
+      return;
+    }
+    if (operation.kind === 'exception') {
+      const step = (readinessByListingId.get(listing._id) || []).find((issue) => issue.blocking)?.step || 'details';
+      openListingEditor(listing, step, true);
+      return;
+    }
+    if (operation.kind === 'ready') {
+      if (listing.ebayOfferId) openListingEditor(listing, 'preview');
+      else openFastReview(listing);
+      return;
+    }
+    openListingEditor(listing);
+  }
+
   function openFastReview(listing?: Listing) {
     const target = listing || queueListings[0];
     if (!target) {
@@ -754,16 +840,17 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
   function openRepriceEditor(listing: Listing) {
     const currentPrice = listing.currentPrice ?? listing.listedPrice ?? 0;
+    const template = listingSpeedPresetFor(listing);
     setEditing(null);
     setSaleEditing(null);
     setRepricing(listing);
     setRepriceMode('percentage');
     setRepricePercent('10');
     setRepriceExact(currentPrice.toFixed(2));
-    setRepriceFeePercent('15');
+    setRepriceFeePercent(String(template?.feePercent ?? 15));
     setRepriceShippingCost((listing.shippingCost ?? 5).toFixed(2));
     setRepriceShippingCharged((listing.shippingCharged ?? 0).toFixed(2));
-    setRepriceTargetProfit('5.00');
+    setRepriceTargetProfit((template?.minimumProfit ?? 5).toFixed(2));
     setRepriceCharm(true);
     setRepriceError('');
   }
@@ -1450,6 +1537,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         title: fastReviewing.title.trim(),
         description: fastReviewing.description || undefined,
         condition: fastReviewing.condition || undefined,
+        completeness: fastReviewing.completeness || undefined,
         language: fastReviewing.language || undefined,
         bookTitle: fastReviewing.bookTitle || undefined,
         author: fastReviewing.author || undefined,
@@ -1468,6 +1556,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       if (rememberFastDefaults) {
         saveListingSpeedPreset(listingFamily(fastReviewing), {
           condition: fastReviewing.condition,
+          completeness: fastReviewing.completeness,
           shippingPreset: fastReviewing.shippingPreset,
           fulfillmentPolicyId: fastReviewing.fulfillmentPolicyId,
           imageMode: fastReviewing.imageMode,
@@ -1710,6 +1799,22 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className="metric"><span>Avg. Days To Sell</span><strong>{stats ? stats.averageDaysToSell.toFixed(1) : '-'}</strong></div>
       </section>
 
+      <section className={`panel todayOperationsPanel ${todayOperations.length ? 'hasWork' : ''}`}>
+        <div className="todayOperationsHeader">
+          <div><p className="eyebrow">Today</p><h2>{todayOperations.length ? `${todayOperations.length} action${todayOperations.length === 1 ? '' : 's'} move the business forward` : 'Today queue is clear'}</h2><p>Finish sold orders first, then clear listing blockers, publish ready work, and review aging inventory.</p></div>
+          <button className="secondary" onClick={() => setTemplatesOpen(true)}><Settings size={16}/> Listing Templates</button>
+        </div>
+        <div className="todayOperationMetrics" aria-label="Today's seller work">
+          <div className={todayCounts.fulfillment ? 'attention' : ''}><span>Ship</span><strong>{todayCounts.fulfillment}</strong></div>
+          <div className={todayCounts.exception ? 'attention' : ''}><span>Fix</span><strong>{todayCounts.exception}</strong></div>
+          <div><span>Reconcile</span><strong>{todayCounts.reconcile}</strong></div>
+          <div className={todayCounts.ready ? 'ready' : ''}><span>Stage / Publish</span><strong>{todayCounts.ready}</strong></div>
+          <div><span>Stale</span><strong>{todayCounts.stale}</strong></div>
+        </div>
+        {todayOperations.length ? <div className="todayOperationList">{todayOperations.slice(0, 6).map((operation) => <button key={`${operation.kind}-${operation.listing._id}`} className={`todayOperationRow ${operation.kind}`} onClick={() => openTodayOperation(operation)}><span className="todayOperationIcon">{operation.kind === 'fulfillment' ? <PackageCheck size={17}/> : operation.kind === 'stale' ? <Clock3 size={17}/> : operation.kind === 'ready' ? <Rocket size={17}/> : operation.kind === 'reconcile' ? <RefreshCw size={17}/> : <ListTodo size={17}/>}</span><span><strong>{operation.label}</strong><small>{operation.listing.title}</small></span><span>{operation.detail}</span><b>Open</b></button>)}</div> : <p className="todayClear"><CheckCircle2 size={18}/> No known listing, reconciliation, pricing, or fulfillment work is waiting.</p>}
+        {todayOperations.length > 6 ? <p className="compactText">Showing the first 6 actions in priority order. Complete one to reveal the next.</p> : null}
+      </section>
+
       <section className="panel listingQueueBar">
         <div className="queueSummary">
           <div><p className="eyebrow">Listing queue</p><h2>Scan, review exceptions, then publish</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} ready · {selectedStagedForEbay.length} staged</p></div>
@@ -1863,7 +1968,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                   <td><span className="consoleTag">{listing.platform}</span></td>
                   <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
                   <td><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
-                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
+                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.fulfillmentStatus ? <small className="fulfillmentStatus">Fulfillment: {listing.fulfillmentStatus}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions">
@@ -1872,6 +1977,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.externalListingId) ? <button className="iconButton ebayRepriceButton" disabled={repriceBusy} aria-label={`Update live eBay price for ${listing.title}`} title={`Update live eBay price through ${listing.ebayOfferId ? 'Inventory API' : 'eBay Trading API'}`} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={16}/></button> : null}
                     {listing.platform === 'eBay' && listing.status === 'Active' && Boolean(listing.externalListingId) ? <button className="iconButton ebayEndButton" disabled={endListingBusy || !adminKey} aria-label={`End ${listing.title} on eBay`} title="End live eBay listing" onClick={() => { setEndListingError(''); setEndListingPrompt(listing); }}><CircleStop size={16}/></button> : null}
                     <button className="iconButton saleCloseButton" aria-label={`${listing.status === 'Sold' ? 'Edit sale for' : 'Record sale for'} ${listing.title}`} title={listing.status === 'Sold' ? 'Edit sale details' : 'Record sale'} onClick={() => requestSaleEditor(listing)}><DollarSign size={15}/></button>
+                    {listing.status === 'Sold' ? <button className="iconButton fulfillmentButton" aria-label={`Fulfill ${listing.title}`} title="Pick, pack, and ship" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/></button> : null}
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <button className="iconButton fastReviewRowButton" aria-label={`Fast review ${listing.title}`} title="Fast review" onClick={() => openFastReview(listing)}><WandSparkles size={15}/></button> : null}
                     <button className="iconButton" aria-label={`Edit ${listing.title}`} title="Edit listing" onClick={() => openListingEditor(listing)}><Pencil size={15}/></button>
                     {listing.listingUrl ? <a className="button iconButton secondary" href={listing.listingUrl} target="_blank" rel="noreferrer" aria-label="View marketplace listing" title={listing.platform === 'eBay' && listing.ebayOfferId ? 'View on eBay. Inventory API listings must be edited in FlipTracker.' : 'Open marketplace listing'}><ExternalLink size={15}/></a> : null}
@@ -1883,6 +1989,27 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           </div>
         )}
       </section>
+
+      {templatesOpen ? <ListingTemplatesModal fulfillmentPolicies={ebaySetup?.policies.fulfillment || []} onClose={() => setTemplatesOpen(false)}/> : null}
+
+      {fulfillmentEditing ? <div className="modalBackdrop"><section className="modal fulfillmentModal">
+        <header className="modalHeader"><div><p className="eyebrow">Pick, pack, ship</p><h2>{fulfillmentEditing.title}</h2><p>{[fulfillmentEditing.storageLocation ? `Location ${fulfillmentEditing.storageLocation}` : undefined, fulfillmentEditing.sku ? `SKU ${fulfillmentEditing.sku}` : undefined, fulfillmentEditing.ebayOrderId ? `Order ${fulfillmentEditing.ebayOrderId}` : undefined].filter(Boolean).join(' · ')}</p></div><button className="iconButton secondary" aria-label="Close fulfillment" disabled={fulfillmentBusy} onClick={() => setFulfillmentEditing(null)}><X size={18}/></button></header>
+        <div className="fulfillmentStatusPicker" role="group" aria-label="Fulfillment status">{['Awaiting Shipment', 'Packed', 'Shipped', 'Completed'].map((value) => <button key={value} className={fulfillmentEditing.fulfillmentStatus === value ? 'active' : 'secondary'} onClick={() => setFulfillmentEditing((current) => current ? { ...current, fulfillmentStatus: value } : current)}>{value === 'Awaiting Shipment' ? <ListTodo size={16}/> : value === 'Packed' ? <Package size={16}/> : value === 'Shipped' ? <Truck size={16}/> : <CheckCircle2 size={16}/>} {value}</button>)}</div>
+        <div className="fulfillmentSummary">
+          <div><span>Sold for</span><strong>{money(fulfillmentEditing.soldPrice)}</strong></div>
+          <div><span>Package</span><strong>{fulfillmentEditing.packageWeightOz ? `${fulfillmentEditing.packageWeightOz} oz` : 'Confirm weight'}</strong><small>{[fulfillmentEditing.packageLengthIn, fulfillmentEditing.packageWidthIn, fulfillmentEditing.packageHeightIn].every(Boolean) ? `${fulfillmentEditing.packageLengthIn} × ${fulfillmentEditing.packageWidthIn} × ${fulfillmentEditing.packageHeightIn} in` : fulfillmentEditing.shippingPreset || 'No saved profile'}</small></div>
+          <div><span>Buyer shipping</span><strong>{money(fulfillmentEditing.shippingCharged)}</strong></div>
+        </div>
+        <div className="fulfillmentFormGrid">
+          <label>Carrier<select value={fulfillmentEditing.shippingCarrier || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, shippingCarrier: event.target.value || undefined } : current)}><option value="">Choose after label purchase</option>{['USPS','UPS','FedEx','Other'].map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label>Tracking Number<input value={fulfillmentEditing.trackingNumber || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, trackingNumber: event.target.value } : current)} placeholder="Optional until shipped"/></label>
+          <label className="checkRow fulfillmentInsurance"><input type="checkbox" checked={Boolean(fulfillmentEditing.insuranceRequired)} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, insuranceRequired: event.target.checked } : current)}/><span><strong>Insurance or additional coverage needed</strong><small>Automatically suggested at $100 or more. Confirm carrier limits before purchase.</small></span></label>
+          <label className="fulfillmentNotes">Packing Notes<textarea value={fulfillmentEditing.fulfillmentNotes || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, fulfillmentNotes: event.target.value } : current)} placeholder="Box, padding, signature, damage protection, or handoff notes..."/></label>
+        </div>
+        <p className="ebaySafetyNote">Purchase the label in eBay so buyer address, service eligibility, postage, and tracking remain authoritative. FlipTracker records the physical workflow and package context.</p>
+        {fulfillmentError ? <p className="formError">{fulfillmentError}</p> : null}
+        <div className="actions modalActions"><a className="button secondary" href={`${ebaySetup?.environment === 'sandbox' ? 'https://www.sandbox.ebay.com' : 'https://www.ebay.com'}/sh/ord/?filter=status:AWAITING_SHIPMENT`} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Open eBay Labels</a><button className="secondary" disabled={fulfillmentBusy} onClick={() => setFulfillmentEditing(null)}>Cancel</button><button disabled={fulfillmentBusy} onClick={saveFulfillment}><Save size={16}/>{fulfillmentBusy ? 'Saving...' : `Save ${fulfillmentEditing.fulfillmentStatus}`}</button></div>
+      </section></div> : null}
 
       {fastReviewing ? (
         <div className="modalBackdrop"><section className="modal wideModal fastReviewModal">
@@ -1899,6 +2026,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                 <label>Condition<select value={fastReviewing.condition || ''} onChange={(event) => patchFastReview({ condition: event.target.value })}><option value="">Choose condition</option>{['New','Like New','Very Good','Good','Acceptable','For Parts'].map((value) => <option key={value}>{value}</option>)}</select></label>
                 <label>Price<input type="number" inputMode="decimal" min="0.99" step="0.01" value={fastReviewing.currentPrice ?? fastReviewing.listedPrice ?? ''} onChange={(event) => patchFastReview({ currentPrice: optionalNumber(event.target.value) })}/></label>
               </div>
+              <label>Completeness<select value={fastReviewing.completeness || ''} onChange={(event) => patchFastReview({ completeness: event.target.value || undefined })}><option value="">No completeness value</option>{['Complete','Disc Only','Case Only','Case + Disc','No Manual','Sealed','Loose','Incomplete'].map((value) => <option key={value}>{value}</option>)}</select></label>
               <div className="fastReviewFieldRow">
                 <label>Shipping Profile<select value={fastReviewing.shippingPreset || 'custom'} onChange={(event) => selectFastShippingPreset(event.target.value)}>{EBAY_SHIPPING_PROFILES.map((profile) => <option key={profile.key} value={profile.key}>{profile.label}</option>)}</select></label>
                 <label>eBay Shipping Policy<select value={fastReviewing.fulfillmentPolicyId || ''} onChange={(event) => patchFastReview({ fulfillmentPolicyId: event.target.value || undefined })}><option value="">Use seller default</option>{ebaySetup?.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
@@ -1906,9 +2034,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               <div className="fastReviewSummary">
                 <div><span>Package</span><strong>{fastReviewing.packageWeightOz ?? '—'} oz</strong></div>
                 <div><span>Item cost</span><strong>{money(fastReviewing.purchasePrice)}</strong></div>
-                <div><span>Estimated net</span><strong className={fastReviewNet < 0 ? 'lossValue' : 'profitValue'}>{money(fastReviewNet)}</strong><small>after 15% fee estimate{fastReviewing.shippingCost ? ' and saved shipping cost' : ''}</small></div>
+                <div><span>Estimated net</span><strong className={fastReviewNet < 0 ? 'lossValue' : 'profitValue'}>{money(fastReviewNet)}</strong><small>after {listingSpeedPresetFor(fastReviewing)?.feePercent ?? 15}% fee estimate{fastReviewing.shippingCost ? ' and saved shipping cost' : ''}</small></div>
               </div>
-              <label className="checkRow fastPresetToggle"><input type="checkbox" checked={rememberFastDefaults} onChange={(event) => setRememberFastDefaults(event.target.checked)}/><span><strong>Remember these defaults for {listingFamily(fastReviewing)} items</strong><small>Condition, shipping profile, policy, and image source stay on this browser.</small></span></label>
+              <label className="checkRow fastPresetToggle"><input type="checkbox" checked={rememberFastDefaults} onChange={(event) => setRememberFastDefaults(event.target.checked)}/><span><strong>Remember these defaults for {listingFamily(fastReviewing)} items</strong><small>Condition, completeness, shipping profile, policy, and image source stay on this browser.</small></span></label>
             </section>
           </div>
           <section className={`fastReviewReadiness ${fastReviewIssues.some((issue) => issue.blocking) ? 'blocked' : 'ready'}`}>

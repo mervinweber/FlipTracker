@@ -304,6 +304,13 @@ export default defineSchema({
     ebayOrderId: v.optional(v.string()),
     ebayOrderLineItemId: v.optional(v.string()),
     ebayLastSyncedAt: v.optional(v.number()),
+    fulfillmentStatus: v.optional(v.string()),
+    packedAt: v.optional(v.number()),
+    shippedAt: v.optional(v.number()),
+    shippingCarrier: v.optional(v.string()),
+    trackingNumber: v.optional(v.string()),
+    insuranceRequired: v.optional(v.boolean()),
+    fulfillmentNotes: v.optional(v.string()),
     pricingStatus: v.optional(v.string()),
     pricingSource: v.optional(v.string()),
     pricingUpdatedAt: v.optional(v.number()),
@@ -319,6 +326,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_platform", ["platform"])
     .index("by_platform_and_status", ["platform", "status"])
+    .index("by_fulfillmentStatus", ["fulfillmentStatus"])
     .index("by_listedDate", ["listedDate"])
     .index("by_soldDate", ["soldDate"]),
 
@@ -428,6 +436,9 @@ export default defineSchema({
     shippingCost: v.number(),
     packagingCost: v.number(),
     feePercent: v.number(),
+    targetProfit: v.optional(v.number()),
+    targetRoiPercent: v.optional(v.number()),
+    minimumLiquidity: v.optional(v.number()),
     activeCount: v.number(),
     soldCount90: v.number(),
     compCount: v.number(),
@@ -443,6 +454,7 @@ export default defineSchema({
     expectedFees: v.number(),
     expectedProfit: v.number(),
     roiPercent: v.number(),
+    maximumBuyPrice: v.optional(v.number()),
     recommendation: v.string(),
     recommendationReason: v.string(),
     notes: v.optional(v.string()),

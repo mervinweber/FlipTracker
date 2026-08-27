@@ -57,6 +57,10 @@ The product should feel like a serious tool for making buying, listing, and coll
 - Listings include a dedicated Record Sale closeout for eBay and non-eBay channels. It captures sale price/date, acquisition cost, shipping income/cost, fees, buyer, order reference, custom channel details, and notes; shows net profit before saving; and keeps the linked sale record synchronized when corrected.
 - Active eBay listings have a confirmation-protected live repricing workflow. Sellers can reduce by percentage, enter an exact price, or calculate a conservative profit floor from item cost, fee percentage, shipping income/cost, and target net profit. Local current price and immutable price history update only after eBay confirms success; ordinary repricing changes the public price but does not create a crossed-out Discounts Manager sale.
 - The Listings dashboard includes a Stale Listing Manager for active Inventory API listings created by FlipTracker. It shows 30/60/90-day age buckets, offers reusable or custom markdown strategies, excludes missing-date/invalid/too-new/profit-protected rows, previews old/new values, and never runs automatically.
+- Listings now starts the workday with a deterministic Today queue. Each record contributes only its highest-priority action: ship a sold order, fix a blocked draft, reconcile an eBay mismatch, stage/publish a ready item, or review a stale FlipTracker-managed listing. Selecting a row opens the corrective workflow directly.
+- Browser-local listing templates cover books, movies, games, cards, clothing, and general merchandise. They remember condition, completeness, description tokens, shipping profile/policy, photo source, fee percentage, and minimum profit while preserving any listing-specific value already entered.
+- Sold marketplace listings carry a fulfillment lifecycle of Awaiting Shipment, Packed, Shipped, or Completed. The fulfillment editor exposes bin, package profile, insurance, carrier, tracking, notes, and a handoff to eBay Labels. eBay sold-order synchronization backfills Awaiting Shipment or Shipped from the order state.
+- Sourcing decisions now accept seller rules for minimum profit, target ROI, and minimum liquidity. FlipTracker calculates and stores the most the seller can pay while satisfying both profit and ROI targets.
 - eBay explicitly prevents Inventory API listings from being revised in its mobile app, Seller Hub, or another listing tool. FlipTracker's active-listing editor therefore replaces the complete Inventory Item and updates the published Offer through the Inventory API; its final action is labeled `Save & Update eBay`. Price-only changes still use the dedicated repricing action, and status changes use End Listing or Record Sale.
 - Listings show whether an eBay record originated as a FlipTracker draft/API offer or an eBay app/Seller Hub listing. `Sync Active Listings` imports or refreshes live native listings through `GetMyeBaySelling`, deduplicated by eBay item ID. Native fixed-price listings can be repriced through Trading API `ReviseInventoryStatus` and ended through `EndFixedPriceItem`; broader native listing field revisions remain local-only until FlipTracker can safely merge the current `GetItem` payload into `ReviseFixedPriceItem`. eBay app drafts are not available through `GetMyeBaySelling` before they become active or scheduled.
 - The Listings view shows an account-wide eBay active count plus scheduled listings using `GetMyeBaySelling`, so manual and FlipTracker-created listings are both included. The default planning target is 200 and can be changed in Seller Connection. This meter is not the monthly zero-insertion-fee allowance counter; Seller Hub remains authoritative for allowance usage and billing-period renewals.
@@ -119,7 +123,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Card catalog reference prices must remain visibly separate from verified eBay sold comps. Actual front/back photos remain required before publishing a card listing.
 - Finish v0.6.1 lifecycle reliability and production smoke testing before expanding listing automation.
 - Borrow continuous scanning and profit-rule ideas from book-scanning tools, front/back batch discipline and human-confirmed identification from card-listing tools, and templates/daily exception views from reseller inventory suites without rebuilding their cross-listing scope.
-- After v0.9.3, prioritize one daily operations queue, item-family templates, listing-quality scoring, and fulfillment handoff. These shorten the eBay workday more directly than adding another marketplace.
+- Continue tightening the Today queue, templates, fulfillment handoff, and profit-first sourcing rules before adding another marketplace. The next operational gains are listing-quality scoring, session throughput metrics, category-aware templates, and direct label/tracking integration.
 - Use eBay Product Research as the authoritative seller-facing sold-data workflow when equivalent data is not available through approved APIs; do not present active asking prices as sold comps.
 
 ## Coding Conventions
@@ -164,8 +168,8 @@ Convex is the current application backend. Excel import/export remains a portabi
 ## Next Practical Steps
 
 1. Production-smoke the Stale Listing Manager on two low-risk FlipTracker-created listings.
-2. Build one Today queue spanning listing exceptions, stale inventory, unmatched sales, and orders awaiting shipment.
-3. Add reusable listing templates by item family.
-4. Add listing-quality and estimated-profit scoring before publish.
-5. Add a pick/pack queue with bin, package, insurance, label, tracking, and shipped status.
+2. Production-smoke Today actions with one blocked draft, one staged offer, and one sold order.
+3. Add listing-quality and estimated-profit scoring before publish.
+4. Add category-specific aspects and photo checklists to item-family templates.
+5. Add direct eBay label purchase and tracking synchronization when the approved API workflow is confirmed.
 6. Complete card front/back batch handling and duplicate/variation review.

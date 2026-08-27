@@ -53,7 +53,9 @@ export default function QuickGuide() {
           <li>Open <strong>Sourcing</strong> and select <strong>New Analysis</strong>.</li>
           <li>Enter the exact title, edition, condition, purchase cost, active listing count, and 90-day sold count.</li>
           <li>Enter several comparable sold prices, including shipping when it was charged separately.</li>
+          <li>Set your minimum profit, target ROI, and minimum liquidity rules.</li>
           <li>Review median price, expected profit, ROI, sell-through, estimated days to sell, rarity, liquidity, and confidence.</li>
+          <li>Use <strong>Pay up to</strong> as the maximum acquisition cost that still meets both profit and ROI targets.</li>
           <li>Treat Buy, Maybe, or Pass as a decision aid and verify the exact item on eBay before purchasing.</li>
         </ol><p className="guideNote"><Gauge size={15}/> Rarity means low supply. Liquidity means likely speed of sale. A rare item can still be slow and uncertain.</p></div></section>
 
@@ -66,6 +68,8 @@ export default function QuickGuide() {
         </ol><p className="guideNote">Changing the title, UPC, edition, condition, or completeness marks the item for another value check.</p></div></section>
 
         <section><div className="guideNumber">6</div><div><h3>Create the listing draft</h3><ol>
+          <li>Start in the <strong>Today</strong> queue to work the highest-priority shipping, exception, reconciliation, ready, and stale-listing actions.</li>
+          <li>Use <strong>Listing Templates</strong> to remember family defaults for books, movies, games, cards, clothing, and general items.</li>
           <li>Find the item in Inventory and select <strong>Draft</strong>.</li>
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
           <li>Open <strong>Listings</strong>, select the drafts you want to process, and choose <strong>Update Pricing</strong>.</li>
@@ -94,7 +98,9 @@ export default function QuickGuide() {
           <li>Edit Current Price whenever a listing is reduced and enter a reason. FlipTracker preserves the price history.</li>
           <li>When sold, change the listing status to <strong>Sold</strong>.</li>
           <li>Use the dollar button on a listing to record where it sold, sale price/date, what you paid, shipping income/cost, fees, buyer, order reference, and notes.</li>
-          <li>Save the listing. FlipTracker updates inventory status, sales history, revenue, and net profit.</li>
+          <li>Open Fulfillment from the Today queue to pick by bin, confirm the package profile, flag insurance, and mark the order Packed or Shipped.</li>
+          <li>Save carrier and tracking details in FlipTracker, or hand off to eBay Labels for the connected order.</li>
+          <li>FlipTracker updates inventory status, sales history, revenue, net profit, and fulfillment state.</li>
         </ol></div></section>
 
         <section><div className="guideNumber">9</div><div><h3>Back up and migrate data</h3><ol>

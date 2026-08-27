@@ -4,10 +4,10 @@ FlipTracker should grow deliberately from a focused personal resale tracker into
 
 ## Current Delivery Sequence
 
-1. `v0.9.3` - guarded stale-listing strategies and active-price maintenance
-2. `v0.9.4` - one daily operations queue across listing, inventory, sales, and shipping
-3. `v0.9.5` - reusable item-family templates and listing-quality scoring
-4. `v0.9.6` - pick/pack fulfillment, package economics, and eBay label handoff
+1. `v0.9.4` - daily operations queue, first item-family templates, fulfillment handoff, and profit-first sourcing rules
+2. `v0.9.5` - listing-quality scoring and deeper category-aware templates
+3. `v0.9.6` - in-app label purchase, package economics, and tracking synchronization
+4. `v0.9.7` - throughput metrics and session planning
 5. `v0.10` - specialized card batches and deeper vertical listing intelligence
 
 See `docs/PRODUCT_BENCHMARKS.md` for the product research behind this sequence.
@@ -359,16 +359,17 @@ Goal: make aging eBay inventory visible and safely actionable without opening li
 
 Goal: replace navigation between separate modules with one prioritized seller work queue.
 
-- [ ] Combine ready-to-list, listing exceptions, stale inventory, unmatched sales, and awaiting-shipment orders
-- [ ] Make every queue item open directly at the corrective action instead of a generic detail view
+- [x] Combine ready-to-list, listing exceptions, stale inventory, eBay reconciliation, and awaiting-shipment orders
+- [x] Make every queue item open directly at the corrective action instead of a generic detail view
 - [ ] Add session completion counts and elapsed-time metrics
-- [ ] Preserve per-item outcomes so one API failure never blocks the rest of a batch
+- [x] Preserve the existing per-item batch outcomes so one API failure never blocks the rest of a batch
 
 ## v0.9.5 Templates And Listing Quality
 
 Goal: reduce repeated decisions while keeping seller review authoritative.
 
-- [ ] Save item-family templates for condition, description, shipping, photos, pricing assumptions, and specifics
+- [x] Save browser-local item-family templates for condition, completeness, description, shipping, photo source, and pricing assumptions
+- [ ] Add category-specific aspect bundles and explicit photo checklists to templates
 - [ ] Score title length, required/recommended specifics, photo coverage, package readiness, and estimated profit
 - [ ] Add compact warnings and recommended fixes without silently rewriting seller data
 - [ ] Add bulk validation with clean rows separated from an exception queue
@@ -377,10 +378,11 @@ Goal: reduce repeated decisions while keeping seller review authoritative.
 
 Goal: carry the same inventory record from sale through packing and shipment.
 
-- [ ] Build a pick/pack queue with bin location and buyer/order context
-- [ ] Suggest the saved package profile and require measured exceptions
-- [ ] Prompt for insurance/signature on high-value items
-- [ ] Hand off to eBay label purchase and retain tracking/shipped state when supported
+- [x] Build a first pick/pack workflow with bin location, package profile, and sale context
+- [x] Retain the reviewed package profile from the listing workflow
+- [x] Prompt for insurance on high-value items
+- [x] Hand off to eBay's label workspace and retain manual carrier/tracking/shipped state
+- [ ] Purchase labels and synchronize tracking/shipment state directly through approved eBay APIs
 
 ## v0.10 Card Batches And Vertical Intelligence
 

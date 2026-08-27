@@ -2,9 +2,13 @@ export type ListingFamily = 'book' | 'movie' | 'game' | 'card' | 'clothing' | 'g
 
 export type ListingSpeedPreset = {
   condition?: string;
+  completeness?: string;
   shippingPreset?: string;
   fulfillmentPolicyId?: string;
   imageMode?: string;
+  descriptionTemplate?: string;
+  feePercent?: number;
+  minimumProfit?: number;
 };
 
 export type ListingSpeedPresets = Partial<Record<ListingFamily, ListingSpeedPreset>>;
@@ -45,23 +49,58 @@ export function saveListingSpeedPreset(
   return next;
 }
 
+export function listingSpeedPresetFor(
+  item: { assetType?: string | null; mediaFormat?: string | null; title?: string | null },
+  presets = loadListingSpeedPresets(),
+) {
+  return presets[listingFamily(item)];
+}
+
+export function renderListingTemplate(
+  template: string | undefined,
+  listing: {
+    title?: string | null;
+    condition?: string | null;
+    mediaFormat?: string | null;
+    assetType?: string | null;
+    sku?: string | null;
+    completeness?: string | null;
+  },
+) {
+  if (!template?.trim()) return undefined;
+  const values: Record<string, string> = {
+    title: listing.title?.trim() || '',
+    condition: listing.condition?.trim() || '',
+    format: listing.mediaFormat?.trim() || listing.assetType?.trim() || '',
+    sku: listing.sku?.trim() || '',
+    completeness: listing.completeness?.trim() || '',
+  };
+  return template.replace(/\{(title|condition|format|sku|completeness)\}/gi, (_match, token: string) => values[token.toLowerCase()] || '').replace(/[ \t]+\n/g, '\n').trim();
+}
+
 export function applyListingSpeedPreset<T extends {
   assetType?: string | null;
   mediaFormat?: string | null;
   title?: string | null;
   condition?: string;
+  completeness?: string;
+  description?: string;
   shippingPreset?: string;
   fulfillmentPolicyId?: string;
   imageMode?: string;
 }>(listing: T, presets: ListingSpeedPresets): T {
   const preset = presets[listingFamily(listing)];
   if (!preset) return listing;
+  const condition = listing.condition || preset.condition;
+  const completeness = listing.completeness || preset.completeness;
+  const templateContext = { ...listing, condition, completeness };
   return {
     ...listing,
-    condition: listing.condition || preset.condition,
+    condition,
+    completeness,
+    description: listing.description || renderListingTemplate(preset.descriptionTemplate, templateContext),
     shippingPreset: listing.shippingPreset || preset.shippingPreset,
     fulfillmentPolicyId: listing.fulfillmentPolicyId || preset.fulfillmentPolicyId,
     imageMode: listing.imageMode || preset.imageMode,
   };
 }
-
