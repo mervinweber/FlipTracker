@@ -68,11 +68,11 @@ export default function QuickGuide() {
         </ol><p className="guideNote">Changing the title, UPC, edition, condition, or completeness marks the item for another value check.</p></div></section>
 
         <section><div className="guideNumber">6</div><div><h3>Create the listing draft</h3><ol>
-          <li>Start in the <strong>Today</strong> queue to work the highest-priority shipping, exception, reconciliation, ready, and stale-listing actions.</li>
+          <li>Open <strong>Listings</strong> and use its lifecycle views: Queue for draft work, Active for live-listing maintenance, Sold for closeout and fulfillment, and Needs Attention for exceptions.</li>
           <li>Use <strong>Listing Templates</strong> to remember family defaults for books, movies, games, cards, clothing, and general items.</li>
           <li>Find the item in Inventory and select <strong>Draft</strong>.</li>
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
-          <li>Open <strong>Listings</strong>, select the drafts you want to process, and choose <strong>Update Pricing</strong>.</li>
+          <li>In the <strong>Queue</strong> view, select the drafts you want to process and choose <strong>Update Pricing</strong>.</li>
           <li>Check sold comps, enter each approved price, and apply the updates. Blank rows stay in Ready for Pricing.</li>
           <li>In eBay Seller Connection, enter the private seller key, connect the seller account, and save its location and business policies.</li>
           <li>Start with <strong>Fast Review</strong> to confirm the title, condition, price, shipping, photo status, and estimated net. Use Advanced only for category-specific exceptions.</li>

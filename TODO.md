@@ -45,6 +45,16 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [ ] Add card batches that preserve front/back pairing through identify, review, price, and publish
 - [ ] Add throughput metrics for scanned, ready, published, sold, and shipped items per work session
 
+## v0.9.5 Listings Workspace
+
+- [x] Organize Listings into Queue, Active, Sold, and Needs Attention lifecycle views
+- [x] Replace the always-visible dashboard stack with compact, stage-aware summary metrics
+- [x] Show pricing, staging, publishing, synchronization, and maintenance controls only where they apply
+- [x] Reduce each listing row to one primary next action plus a secondary actions menu
+- [x] Keep Seller Connection available in a collapsed settings panel instead of occupying the daily workspace
+- [x] Verify the simplified workspace at desktop and 390px mobile widths without horizontal overflow
+- [ ] Measure the revised Queue workflow against a real 20-item listing batch and tune any remaining friction
+
 Prototype snapshot:
 
 - Functional today: inventory, eBay seller linking, draft staging, sold sync, photo capture, and the Cross Listings queue shell.
