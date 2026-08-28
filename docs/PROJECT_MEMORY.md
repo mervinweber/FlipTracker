@@ -20,8 +20,8 @@ The product should feel like a serious tool for making buying, listing, and coll
 
 ## Built So Far
 
-- A dedicated Vinted Wardrobe workspace links existing FlipTracker assets to direct Vinted item URLs. It supports category chips, category/status filters, search, price/title sorting, compact inventory context, and one-click item access. Profile setup stores only an account label, username, and wardrobe URL; authentication remains in the user's browser session and no Vinted password is stored.
-- Standard Vinted accounts are intentionally not scraped or automated. Official inventory synchronization is reserved for a future allowlisted Vinted Pro Integrations API connection; until then, the Vinted tab is a seller-maintained link index over the shared inventory model.
+- A category-filtered Vinted Wardrobe prototype was built, then removed from navigation after confirming that Vinted Pro integrations are not available for this US seller workflow. Its component, URL helpers, tests, and backend-compatible platform value remain dormant for a future approved integration.
+- Standard Vinted accounts are intentionally not scraped or automated. The manual browser-handoff tab did not deliver enough value without inventory synchronization, so it is not part of the active product.
 - FlipTracker is now explicitly eBay-first. The primary navigation emphasizes Inventory, Listings, Bulk Intake, Photos, Sourcing, and Guide; the earlier cross-listing prototype remains in the codebase but is no longer promoted in the core listing path.
 - Listings uses a five-step eBay Listing Factory: Item, Category, Shipping & Photos, Price & Description, then Preview. A readiness strip keeps title, category, shipping, image, and price blockers visible without displaying every field at once.
 - Books, DVDs/Blu-rays, CDs, video games, and cards receive deterministic eBay category routing from item type and product identifiers. Clothing and general merchandise intentionally require a leaf-category choice through the eBay category finder.
@@ -130,7 +130,7 @@ Convex is the current application backend. Excel import/export remains a portabi
 - Finish v0.6.1 lifecycle reliability and production smoke testing before expanding listing automation.
 - Borrow continuous scanning and profit-rule ideas from book-scanning tools, front/back batch discipline and human-confirmed identification from card-listing tools, and templates/daily exception views from reseller inventory suites without rebuilding their cross-listing scope.
 - Continue tightening the Today queue, templates, fulfillment handoff, and profit-first sourcing rules before adding another marketplace. The next operational gains are listing-quality scoring, session throughput metrics, category-aware templates, and direct label/tracking integration.
-- Keep Vinted standard-account support human-directed: store inventory associations and direct listing URLs, open Vinted in the browser, and never scrape or store account passwords. Use only the official Vinted Pro Integrations API if the account is allowlisted later.
+- Keep Vinted deferred and hidden unless an approved US integration with inventory-read access becomes available. Never scrape or store Vinted account passwords.
 - Use eBay Product Research as the authoritative seller-facing sold-data workflow when equivalent data is not available through approved APIs; do not present active asking prices as sold comps.
 
 ## Coding Conventions

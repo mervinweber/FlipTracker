@@ -56,18 +56,13 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Verify the simplified workspace at desktop and 390px mobile widths without horizontal overflow
 - [ ] Measure the revised Queue workflow against a real 20-item listing batch and tune any remaining friction
 
-## v0.9.6 Vinted Wardrobe
+## Deferred - Vinted Wardrobe
 
-- [x] Add a dedicated Vinted tab with category, status, search, and price/title sort controls
-- [x] Save a Vinted profile label and wardrobe URL without storing marketplace credentials
-- [x] Open Vinted through the browser's existing authenticated session
-- [x] Link existing FlipTracker inventory records to their direct Vinted item URLs
-- [x] Show listing status, category, price, barcode, bin, notes, and inventory photo in a compact workspace
-- [x] Add direct Open on Vinted actions for filtered wardrobe maintenance
-- [x] Validate desktop and 390px mobile layouts without page overflow
-- [ ] Test the workflow against a representative batch of real Vinted books and refine category assignments
-- [ ] Apply for Vinted Pro Integrations API access if the seller account becomes eligible and automated synchronization is still valuable
-- [ ] Add official Vinted Pro inventory import and status synchronization only after API allowlisting; do not scrape standard accounts
+- [x] Prototype a category-filtered Vinted link workspace over existing FlipTracker inventory
+- [x] Preserve the dormant component, URL helpers, tests, and backend-compatible platform value for future use
+- [x] Remove Vinted from primary navigation, account setup, cross-listing options, and the Quick Guide
+- [ ] Reassess only when Vinted offers an approved US integration with inventory-read access
+- [ ] If official access becomes available, add inventory import and status synchronization without scraping standard accounts
 
 Prototype snapshot:
 

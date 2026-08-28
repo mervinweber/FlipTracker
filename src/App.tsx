@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, ShoppingBag, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
@@ -13,20 +13,18 @@ import { EBAY_CATEGORY_CHOICES, categoryChoiceForKey, resolveEbayCategory, resol
 const ListingsPanel = lazy(() => import('./components/ListingsPanel'));
 const CrossListingsPanel = lazy(() => import('./components/CrossListingsPanel'));
 const LinkedAccountsPanel = lazy(() => import('./components/LinkedAccountsPanel'));
-const VintedPanel = lazy(() => import('./components/VintedPanel'));
 const QuickGuide = lazy(() => import('./components/QuickGuide'));
 const BulkIntakePanel = lazy(() => import('./components/BulkIntakePanel'));
 const SourcingPanel = lazy(() => import('./components/SourcingPanel'));
 const PhotoQueuePanel = lazy(() => import('./components/PhotoQueuePanel'));
 const CardScannerPanel = lazy(() => import('./components/CardScannerPanel'));
 
-type AppView = 'Inventory' | 'Listings' | 'Vinted' | 'Cross' | 'Accounts' | 'Bulk' | 'Cards' | 'Photos' | 'Sourcing' | 'Guide';
+type AppView = 'Inventory' | 'Listings' | 'Cross' | 'Accounts' | 'Bulk' | 'Cards' | 'Photos' | 'Sourcing' | 'Guide';
 
 function viewFromHash(): AppView {
   if (window.location.hash.toLowerCase() === '#guide') return 'Guide';
   if (window.location.hash.toLowerCase() === '#cross') return 'Cross';
   if (window.location.hash.toLowerCase() === '#accounts') return 'Accounts';
-  if (window.location.hash.toLowerCase() === '#vinted') return 'Vinted';
   if (window.location.hash.toLowerCase() === '#sourcing') return 'Sourcing';
   if (window.location.hash.toLowerCase() === '#photos') return 'Photos';
   if (window.location.hash.toLowerCase() === '#bulk') return 'Bulk';
@@ -1121,7 +1119,6 @@ export default function App() {
       <nav className="viewTabs" aria-label="Primary views">
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
-        <button className={activeView === 'Vinted' ? 'active' : 'secondary'} onClick={() => changeView('Vinted')}><ShoppingBag size={17}/> Vinted</button>
         <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
         <button className={activeView === 'Cards' ? 'active' : 'secondary'} onClick={() => changeView('Cards')}><GalleryVerticalEnd size={17}/> Card Scanner</button>
         <button className={activeView === 'Photos' ? 'active' : 'secondary'} onClick={() => changeView('Photos')}><Camera size={17}/> Photos</button>
@@ -1189,7 +1186,7 @@ export default function App() {
             </table>
           </div>
         )}
-      </section></> : <Suspense fallback={<section className="panel"><p className="panelMessage">Loading workspace...</p></section>}>{activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Vinted' ? <VintedPanel/> : activeView === 'Cross' ? <CrossListingsPanel/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Cards' ? <CardScannerPanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}</Suspense>}
+      </section></> : <Suspense fallback={<section className="panel"><p className="panelMessage">Loading workspace...</p></section>}>{activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Cross' ? <CrossListingsPanel/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Cards' ? <CardScannerPanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}</Suspense>}
 
       {bulkCostOpen ? (
         <div className="modalBackdrop"><section className="modal bulkCostModal">

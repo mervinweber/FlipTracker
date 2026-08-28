@@ -1,8 +1,10 @@
-# Vinted Wardrobe
+# Vinted Wardrobe - Deferred Prototype
 
-FlipTracker's Vinted tab is a category-filtered index of Vinted listings linked to existing inventory records. It is designed for quickly finding a group such as Books, opening the exact marketplace item, making the change on Vinted, and returning to the same filtered FlipTracker view.
+FlipTracker briefly shipped a category-filtered index of Vinted links associated with existing inventory records. The tab has been removed from application navigation and routing because browser login does not provide wardrobe data and Vinted Pro integration is not available for this US workflow.
 
-## Standard Account Setup
+The dormant implementation remains in `src/components/VintedPanel.tsx`, with URL helpers in `src/utils/vinted.ts`. Convex continues accepting the Vinted platform value so previously saved records are not destroyed.
+
+## Prototype Workflow
 
 1. Open the Vinted tab and select **Set Up Vinted**.
 2. Save an account label, optional username, and Vinted wardrobe/profile URL.
@@ -12,13 +14,13 @@ FlipTracker's Vinted tab is a category-filtered index of Vinted listings linked 
 6. Confirm its category, status, price, condition, and private workflow notes.
 7. Use the category chips, filters, search, and sorting controls to maintain the wardrobe.
 
-FlipTracker does not request or store the Vinted password. The saved account record is a browser handoff and profile reference, not an OAuth connection.
+This workflow required each listing link to be registered manually. FlipTracker did not request or store the Vinted password; the saved account record was a browser handoff and profile reference, not an OAuth connection.
 
 ## Integration Boundary
 
 Vinted's standard-account terms prohibit unauthorized bots, scraping, crawling, and external software tools. FlipTracker therefore does not automatically read or modify a standard wardrobe.
 
-Vinted provides an official Pro Integrations API for allowlisted Vinted Pro businesses. If the seller account becomes eligible and Vinted grants access, FlipTracker can add server-side catalog import and status synchronization while retaining the same inventory and cross-listing records.
+Vinted provides an official Pro Integrations API for allowlisted Vinted Pro businesses, but that route is not available for this US seller workflow. Reconsider the feature only if Vinted introduces approved US inventory-read access. At that point FlipTracker can add server-side catalog import and status synchronization while retaining the same inventory and cross-listing records.
 
 Official references:
 
