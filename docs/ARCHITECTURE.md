@@ -92,6 +92,18 @@ Desktop USB intake -> internal eBay draft -> phone Photos queue -> SKU/UPC match
 
 The browser resizes new captures before requesting a Convex upload URL. Single-item scan review can stage up to 12 photos before the asset exists; immediately after the inventory record is created, those photos are uploaded and attached in their reviewed order. The listing editor and mobile queue can add or manage the same stored photo set later. Users can rotate images clockwise, choose the primary image, delete mistakes, and move directly to the next queued item. Rotating a stored image replaces its Convex file and clears its cached eBay Picture Services reference. During eBay draft creation, stored images are uploaded in order and the resulting eBay URLs are cached for safe retries. Legacy inline `photoDataUrl` records remain readable until a separate migration removes them.
 
+## Vinted Wardrobe Workflow
+
+```text
+Existing Inventory Asset -> crossListings(platform=Vinted) -> filtered wardrobe workspace -> direct Vinted item URL
+```
+
+The Vinted workspace is a focused index over the shared inventory model. `linkedAccounts` stores an optional account label, username, browser login URL, and wardrobe/profile URL. It never stores a Vinted password. `crossListings` associates one physical `assets` record with its Vinted title, category, status, price, condition, notes, external item ID, and normalized direct listing URL.
+
+The frontend derives category counts and filtered views from the saved Vinted cross-list records. Opening Vinted or a wardrobe item hands off to a new browser tab and relies on the user's existing Vinted session. This gives standard-account sellers fast category navigation without automating marketplace actions.
+
+Standard Vinted accounts are not scraped, crawled, or controlled by FlipTracker. Vinted's official Pro Integrations API uses allowlisted business access and server-side signed requests rather than consumer OAuth. If FlipTracker receives Pro access later, a Convex integration may import catalog items and reconcile statuses into the same `crossListings` records; the manual URL workflow remains the fallback.
+
 ## eBay Seller Workflow
 
 ```text

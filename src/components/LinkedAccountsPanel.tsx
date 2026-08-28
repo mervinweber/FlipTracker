@@ -26,7 +26,7 @@ type Draft = {
   notes: string;
 };
 
-const PLATFORM_OPTIONS = ['eBay', 'Poshmark', 'Mercari', 'Depop', 'Facebook Marketplace', 'OfferUp', 'Craigslist', 'Other'];
+const PLATFORM_OPTIONS = ['eBay', 'Vinted', 'Poshmark', 'Mercari', 'Depop', 'Facebook Marketplace', 'OfferUp', 'Craigslist', 'Other'];
 const STATUS_OPTIONS = ['Linked', 'Needs Login', 'Paused', 'Disconnected'];
 
 function emptyDraft(): Draft {

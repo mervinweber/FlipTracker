@@ -159,6 +159,44 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .linkedAccountNotice small { margin-top:4px; color:var(--muted); line-height:1.35; }
 .accountLinks { display:flex; flex-wrap:wrap; gap:8px; }
 .soldListingModal { width:min(720px, calc(100vw - 32px)); }
+.vintedPage { display:grid; gap:14px; }
+.vintedHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin:0; }
+.vintedHeader h2 { margin:0; font-size:24px; }
+.vintedHeader p:not(.eyebrow) { max-width:680px; margin:5px 0 0; color:var(--muted); font-size:13px; }
+.vintedAccountBar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0; padding:12px 16px; }
+.vintedAccountIdentity { display:flex; align-items:center; gap:10px; min-width:0; }
+.vintedAccountIdentity strong, .vintedAccountIdentity small { display:block; }
+.vintedAccountIdentity small { margin-top:2px; color:var(--muted); }
+.vintedAccountMark { display:grid; width:36px; height:36px; flex:0 0 auto; place-items:center; border:1px solid var(--border-strong); border-radius:50%; color:var(--muted); background:var(--surface-3); }
+.vintedAccountMark.connected { border-color:rgba(20,184,166,.5); color:#99f6e4; background:rgba(20,184,166,.1); }
+.vintedMetrics { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
+.vintedMetrics > div { min-height:58px; padding:10px 13px; background:var(--surface); }
+.vintedMetrics span, .vintedMetrics strong { display:block; }
+.vintedMetrics span { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
+.vintedMetrics strong { margin-top:2px; font-size:21px; }
+.vintedFilters { display:grid; grid-template-columns:minmax(220px, 1fr) repeat(3, minmax(140px, 180px)); gap:10px; margin:0; padding:12px; }
+.vintedCategoryTabs { display:flex; gap:6px; overflow-x:auto; padding:0 0 2px; scrollbar-width:thin; }
+.vintedCategoryTabs button { flex:0 0 auto; min-height:36px; padding:7px 10px; color:var(--muted); background:var(--surface); }
+.vintedCategoryTabs button.active { color:#ecfeff; border-color:#2dd4bf; background:rgba(13,148,136,.22); }
+.vintedCategoryTabs b { display:inline-grid; min-width:20px; height:20px; margin-left:3px; place-items:center; border-radius:10px; background:rgba(148,163,184,.14); font-size:10px; }
+.vintedInventoryPanel { padding:0; overflow:hidden; }
+.vintedInventoryPanel .panelHeader { padding:16px 18px 0; }
+.vintedListingList { border-top:1px solid var(--border); }
+.vintedListingRow { display:grid; grid-template-columns:64px minmax(0, 1fr) 90px auto; gap:14px; align-items:center; min-height:88px; padding:11px 16px; border-bottom:1px solid var(--border); }
+.vintedListingRow:last-child { border-bottom:0; }
+.vintedThumb { display:grid; width:58px; height:72px; place-items:center; overflow:hidden; border:1px solid var(--border); border-radius:6px; color:var(--muted); background:#020617; }
+.vintedThumb img { width:100%; height:100%; object-fit:cover; }
+.vintedListingInfo { min-width:0; }
+.vintedListingInfo h3 { margin:5px 0 0; font-size:15px; line-height:1.25; overflow-wrap:anywhere; }
+.vintedListingInfo p, .vintedListingInfo small { display:block; margin:3px 0 0; color:var(--muted); font-size:12px; line-height:1.3; overflow-wrap:anywhere; }
+.vintedListingBadges { display:flex; flex-wrap:wrap; gap:5px; }
+.vintedCategoryBadge { display:inline-flex; align-items:center; min-height:22px; padding:2px 7px; border:1px solid rgba(45,212,191,.38); border-radius:999px; color:#99f6e4; background:rgba(13,148,136,.09); font-size:10px; font-weight:800; }
+.vintedPrice { white-space:nowrap; font-size:16px; text-align:right; }
+.vintedRowActions { display:flex; align-items:center; justify-content:flex-end; gap:7px; }
+.vintedRowActions .button { white-space:nowrap; }
+.vintedModal { width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); }
+.vintedSecurityNote { display:flex; align-items:flex-start; gap:9px; margin-bottom:14px; padding:11px 13px; border:1px solid rgba(20,184,166,.42); border-radius:7px; color:#ccfbf1; background:rgba(13,148,136,.08); font-size:12px; line-height:1.4; }
+.vintedSecurityNote svg { flex:0 0 auto; }
 .categorySuggestionRow { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; padding:12px 14px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-3); }
 .categorySuggestionRow strong, .categorySuggestionRow small { display:block; }
 .categorySuggestionRow small { margin-top:4px; color:var(--muted); line-height:1.35; }
@@ -637,7 +675,7 @@ textarea { min-height:92px; resize:vertical; }
 .secondary { background:#475569; }
 .right { justify-content:flex-end; }
 @media (max-width:800px) { .formGrid, .sectionGrid, .checkGroup, .collectionGrid { grid-template-columns:1fr; } .span2 { grid-column:auto; } .collectionCard { grid-template-columns:1fr; } .collectionStats { text-align:left; } }
-@media (max-width:800px) { .linkedAccountGrid { grid-template-columns:1fr; } .prototypeLegend { justify-content:flex-start; } }
+@media (max-width:800px) { .linkedAccountGrid { grid-template-columns:1fr; } .prototypeLegend { justify-content:flex-start; } .vintedHeader, .vintedAccountBar { align-items:stretch; flex-direction:column; } .vintedFilters { grid-template-columns:1fr 1fr; } .vintedFilters .searchWrap { grid-column:1 / -1; } .vintedListingRow { grid-template-columns:58px minmax(0, 1fr) auto; } .vintedPrice { grid-column:3; grid-row:1; align-self:start; } .vintedRowActions { grid-column:2 / -1; justify-content:flex-start; } }
 @media (max-width:560px) { .aiCopyToolbar, .categoryFinderToolbar { align-items:stretch; flex-direction:column; } .aiCopyToolbar button, .categoryFinderToolbar button { width:100%; justify-content:center; } .categorySuggestionList > button { align-items:flex-start; flex-direction:column; } }
 @media (max-width:560px) { .categorySuggestionRow { align-items:stretch; flex-direction:column; } .categorySuggestionRow button { width:100%; justify-content:center; } }
 
@@ -724,7 +762,7 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 @media (max-width:1050px) { .listingCards, .listingControls { grid-template-columns:1fr 1fr; } .listingControls .searchWrap, .listingTools { grid-column:1 / -1; } }
 @media (max-width:1050px) { .ebaySettingsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:1050px) { .pricingReviewRow { grid-template-columns:minmax(220px, 1fr) minmax(180px, .8fr); } }
-@media (max-width:560px) { .viewTabs, .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } }
+@media (max-width:560px) { .viewTabs { display:flex; overflow-x:auto; scroll-snap-type:x proximity; } .viewTabs button { flex:0 0 auto; scroll-snap-align:start; } .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } .vintedMetrics { grid-template-columns:repeat(2, minmax(0, 1fr)); } .vintedFilters { grid-template-columns:1fr; } .vintedFilters .searchWrap { grid-column:auto; } .vintedListingRow { grid-template-columns:52px minmax(0, 1fr); gap:10px; padding:10px 12px; } .vintedThumb { width:48px; height:62px; } .vintedPrice { grid-column:2; grid-row:auto; justify-self:start; text-align:left; } .vintedRowActions { grid-column:1 / -1; } .vintedRowActions .button:not(.iconButton), .vintedRowActions > button:not(.iconButton) { flex:1 1 auto; justify-content:center; } }
 @media (max-width:560px) { .bulkCostModes { grid-template-columns:1fr; } }
 @media (max-width:700px) { .ebayUnlockRow, .ebaySettingsGrid { grid-template-columns:1fr; } .ebaySetupActions { grid-column:auto; } .forgetDeviceButton { margin-left:0; } }
 @media (max-width:700px) { .ebayPayloadPreviewSections { grid-template-columns:1fr; } .ebayPayloadPreviewSections > section { grid-column:1; } }

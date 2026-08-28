@@ -104,7 +104,16 @@ export default function QuickGuide() {
           <li>FlipTracker updates inventory status, sales history, revenue, net profit, and fulfillment state.</li>
         </ol></div></section>
 
-        <section><div className="guideNumber">9</div><div><h3>Back up and migrate data</h3><ol>
+        <section><div className="guideNumber">9</div><div><h3>Manage your Vinted wardrobe</h3><ol>
+          <li>Open <strong>Vinted</strong>, then use <strong>Profile Settings</strong> to save an account label, username, and wardrobe URL.</li>
+          <li>Select <strong>Open Vinted</strong> and sign in directly on Vinted. FlipTracker never stores the Vinted password.</li>
+          <li>Select <strong>Add Vinted Link</strong>, choose the matching FlipTracker inventory item, and paste its Vinted item URL.</li>
+          <li>Confirm the category, status, price, condition, and private workflow notes.</li>
+          <li>Use the category chips, search, status filter, and sort options to narrow the wardrobe without scrolling through every listing.</li>
+          <li>Select <strong>Open on Vinted</strong> to go directly to the item for editing or other marketplace actions.</li>
+        </ol><p className="guideNote"><ShoppingBag size={15}/> Standard Vinted accounts do not provide an approved automatic wardrobe sync. FlipTracker stores direct links and uses your browser login session; official synchronization can be added later for an allowlisted Vinted Pro account.</p></div></section>
+
+        <section><div className="guideNumber">10</div><div><h3>Back up and migrate data</h3><ol>
           <li>Use <strong>Export Excel</strong> from Inventory for an inventory backup.</li>
           <li>Use <strong>Export CSV</strong> from Listings for listing and sales records.</li>
           <li>Use <strong>Import Old JSON</strong> only for a Sales Tracker JSON export. It creates new records and does not deduplicate.</li>

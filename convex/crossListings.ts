@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { assertOwner, currentOwnerId } from "./ownership";
 
-const platforms = ["Poshmark", "Mercari", "Depop", "Facebook Marketplace", "OfferUp", "Craigslist", "Other"];
+const platforms = ["Vinted", "Poshmark", "Mercari", "Depop", "Facebook Marketplace", "OfferUp", "Craigslist", "Other"];
 const statuses = ["Ready", "Listed", "Sold", "Ended", "Needs Review"];
 
 export const list = query({
@@ -56,6 +56,7 @@ export const create = mutation({
     soldPrice: v.optional(v.number()),
     saleChannelDetail: v.optional(v.string()),
     notes: v.optional(v.string()),
+    listedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const asset = await ctx.db.get(args.assetId);

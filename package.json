@@ -27,5 +27,5 @@
     "@types/react": "latest",
     "@types/react-dom": "latest"
   },
-  "version": "0.9.5-beta.1"
+  "version": "0.9.6-beta.0"
 }

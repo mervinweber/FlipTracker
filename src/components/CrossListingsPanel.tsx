@@ -80,11 +80,12 @@ type SoldDraft = {
   notes: string;
 };
 
-const PLATFORM_OPTIONS = ['Poshmark', 'Mercari', 'Depop', 'Facebook Marketplace', 'OfferUp', 'Craigslist', 'Other'];
+const PLATFORM_OPTIONS = ['Vinted', 'Poshmark', 'Mercari', 'Depop', 'Facebook Marketplace', 'OfferUp', 'Craigslist', 'Other'];
 const STATUS_OPTIONS = ['Ready', 'Listed', 'Sold', 'Ended', 'Needs Review'];
 type ItemFamily = 'media' | 'book' | 'videoGame' | 'card' | 'toy' | 'general';
 
 const CATEGORY_MAP: Record<string, string[]> = {
+  Vinted: ['Books', 'Movies & TV', 'Music', 'Video Games', "Women's Clothing", "Men's Clothing", "Kids' Clothing", 'Shoes', 'Accessories', 'Home', 'Electronics', 'Collectibles', 'Toys & Games', 'Other'],
   Poshmark: [
     'Women > Tops & Blouses',
     'Women > Dresses',
@@ -127,6 +128,14 @@ const CATEGORY_MAP: Record<string, string[]> = {
 };
 
 const TYPE_DEFAULT_CATEGORY: Record<string, Record<ItemFamily, string>> = {
+  Vinted: {
+    media: 'Movies & TV',
+    book: 'Books',
+    videoGame: 'Video Games',
+    card: 'Collectibles',
+    toy: 'Toys & Games',
+    general: 'Other',
+  },
   Poshmark: {
     media: 'Electronics > Media',
     book: 'Books',
@@ -568,7 +577,7 @@ export default function CrossListingsPanel({ initialAssetId, onSeedConsumed }: {
               <label>Shipping<input type="number" inputMode="decimal" value={draft.shippingPrice} onChange={(event) => setDraft((current) => ({ ...current, shippingPrice: event.target.value }))}/></label>
               <label>Fees<input type="number" inputMode="decimal" value={draft.fees} onChange={(event) => setDraft((current) => ({ ...current, fees: event.target.value }))}/></label>
               <label>Sold Price<input type="number" inputMode="decimal" value={draft.soldPrice} onChange={(event) => setDraft((current) => ({ ...current, soldPrice: event.target.value }))}/></label>
-              <label>Sold Elsewhere<select value={draft.saleChannelDetail} onChange={(event) => setDraft((current) => ({ ...current, saleChannelDetail: event.target.value }))}><option value="">Use platform name</option><option>Poshmark</option><option>Mercari</option><option>Depop</option><option>Facebook Marketplace</option><option>OfferUp</option><option>Craigslist</option><option>eBay</option><option>Whatnot</option><option>Shopify</option><option>Other</option></select></label>
+              <label>Sold Elsewhere<select value={draft.saleChannelDetail} onChange={(event) => setDraft((current) => ({ ...current, saleChannelDetail: event.target.value }))}><option value="">Use platform name</option><option>Vinted</option><option>Poshmark</option><option>Mercari</option><option>Depop</option><option>Facebook Marketplace</option><option>OfferUp</option><option>Craigslist</option><option>eBay</option><option>Whatnot</option><option>Shopify</option><option>Other</option></select></label>
               <label className="span2">Notes<textarea value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}/></label>
             </div>
             <datalist id="cross-listing-categories">{categoryOptions(draft.platform).map((value) => <option key={value} value={value} />)}</datalist>
@@ -594,7 +603,7 @@ export default function CrossListingsPanel({ initialAssetId, onSeedConsumed }: {
             <div className="formGrid">
               <label>Sold Price<input type="number" inputMode="decimal" value={soldDraft.soldPrice} onChange={(event) => setSoldDraft((current) => current ? { ...current, soldPrice: event.target.value } : current)} /></label>
               <label>Sold At<input type="date" value={soldDraft.soldAt} onChange={(event) => setSoldDraft((current) => current ? { ...current, soldAt: event.target.value } : current)} /></label>
-              <label>Sold Channel<select value={soldDraft.saleChannelDetail} onChange={(event) => setSoldDraft((current) => current ? { ...current, saleChannelDetail: event.target.value } : current)}><option value="">Use platform</option><option>Poshmark</option><option>Mercari</option><option>Depop</option><option>Facebook Marketplace</option><option>OfferUp</option><option>Craigslist</option><option>eBay</option><option>Whatnot</option><option>Shopify</option><option>Other</option></select></label>
+              <label>Sold Channel<select value={soldDraft.saleChannelDetail} onChange={(event) => setSoldDraft((current) => current ? { ...current, saleChannelDetail: event.target.value } : current)}><option value="">Use platform</option><option>Vinted</option><option>Poshmark</option><option>Mercari</option><option>Depop</option><option>Facebook Marketplace</option><option>OfferUp</option><option>Craigslist</option><option>eBay</option><option>Whatnot</option><option>Shopify</option><option>Other</option></select></label>
               <label>Fees<input type="number" inputMode="decimal" value={soldDraft.fees} onChange={(event) => setSoldDraft((current) => current ? { ...current, fees: event.target.value } : current)} /></label>
               <label>Shipping<input type="number" inputMode="decimal" value={soldDraft.shippingPrice} onChange={(event) => setSoldDraft((current) => current ? { ...current, shippingPrice: event.target.value } : current)} /></label>
               <label className="span2">Notes<textarea value={soldDraft.notes} onChange={(event) => setSoldDraft((current) => current ? { ...current, notes: event.target.value } : current)} placeholder="Sold elsewhere, buyer notes, package details, etc."/></label>

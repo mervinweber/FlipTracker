@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { assertOwner, currentOwnerId } from "./ownership";
 
-const platforms = ["eBay", "Poshmark", "Mercari", "Depop", "Facebook Marketplace", "OfferUp", "Craigslist", "Other"];
+const platforms = ["eBay", "Vinted", "Poshmark", "Mercari", "Depop", "Facebook Marketplace", "OfferUp", "Craigslist", "Other"];
 const statuses = ["Linked", "Needs Login", "Paused", "Disconnected"];
 
 export const list = query({
