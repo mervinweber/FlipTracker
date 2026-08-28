@@ -51,6 +51,7 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Replace the always-visible dashboard stack with compact, stage-aware summary metrics
 - [x] Show pricing, staging, publishing, synchronization, and maintenance controls only where they apply
 - [x] Reduce each listing row to one primary next action plus a secondary actions menu
+- [x] Collapse verbose eBay API errors into a compact row indicator with tap-open details
 - [x] Keep Seller Connection available in a collapsed settings panel instead of occupying the daily workspace
 - [x] Verify the simplified workspace at desktop and 390px mobile widths without horizontal overflow
 - [ ] Measure the revised Queue workflow against a real 20-item listing batch and tune any remaining friction

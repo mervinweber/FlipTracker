@@ -436,6 +436,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [fastReviewing, setFastReviewing] = useState<Listing | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [fulfillmentEditing, setFulfillmentEditing] = useState<Listing | null>(null);
+  const [ebayErrorListing, setEbayErrorListing] = useState<Listing | null>(null);
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [fulfillmentError, setFulfillmentError] = useState('');
   const [rememberFastDefaults, setRememberFastDefaults] = useState(true);
@@ -507,10 +508,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !templatesOpen && !fulfillmentEditing) return;
+    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !templatesOpen && !fulfillmentEditing && !ebayErrorListing) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkMarkdownOpen, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, templatesOpen]);
+  }, [bulkMarkdownOpen, ebayErrorListing, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, templatesOpen]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1999,7 +2000,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                   <td><span className="consoleTag">{listing.platform}</span></td>
                   <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
                   <td><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
-                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <small className="ebayDraftError">{listing.ebayLastError}</small> : null}</td>
+                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
                   <td className="tableActionsCell"><div className="rowActions simplifiedRowActions">
@@ -2019,6 +2020,12 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           </div>
         )}
       </section>
+
+      {ebayErrorListing ? <div className="modalBackdrop"><section className="modal ebayErrorModal" role="dialog" aria-modal="true" aria-labelledby="ebay-error-title">
+        <header className="modalHeader"><div><p className="eyebrow">eBay listing issue</p><h2 id="ebay-error-title">{ebayErrorListing.title}</h2></div><button className="iconButton secondary" aria-label="Close eBay error" onClick={() => setEbayErrorListing(null)}><X size={18}/></button></header>
+        <div className="ebayErrorMessage"><AlertTriangle size={20}/><p>{ebayErrorListing.ebayLastError}</p></div>
+        <div className="modalActions"><button className="secondary" onClick={() => setEbayErrorListing(null)}>Close</button><button onClick={() => { const listing = ebayErrorListing; setEbayErrorListing(null); openListingEditor(listing); }}><Pencil size={16}/> Review listing</button></div>
+      </section></div> : null}
 
       {templatesOpen ? <ListingTemplatesModal fulfillmentPolicies={ebaySetup?.policies.fulfillment || []} onClose={() => setTemplatesOpen(false)}/> : null}
 

@@ -259,7 +259,12 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .endListingQuestion p { margin:0; color:var(--muted); line-height:1.5; }
 .ebayDraftMeta { color:#5eead4; }
 .listingOrigin { color:#93c5fd; font-weight:700; }
-.ebayDraftError { max-width:220px; color:#fca5a5; line-height:1.35; }
+.ebayErrorTrigger { display:inline-flex; min-height:28px; margin-top:6px; padding:5px 8px; border:1px solid rgba(239,68,68,.5); color:#fecaca; background:rgba(127,29,29,.2); font-size:11px; white-space:nowrap; }
+.ebayErrorModal { max-width:620px; }
+.ebayErrorMessage { display:grid; grid-template-columns:auto minmax(0, 1fr); gap:12px; align-items:start; padding:14px; border:1px solid rgba(239,68,68,.42); border-radius:8px; color:#fecaca; background:rgba(127,29,29,.15); }
+.ebayErrorMessage > svg { margin-top:2px; }
+.ebayErrorMessage p { max-height:42vh; margin:0; overflow:auto; overflow-wrap:anywhere; white-space:pre-wrap; line-height:1.5; }
+.ebayErrorModal .modalActions { margin-top:16px; }
 .listingQueueBar { display:grid; gap:16px; margin-bottom:18px; border-left:3px solid var(--accent); }
 .todayOperationsPanel { display:grid; gap:14px; margin-bottom:18px; border-left:3px solid var(--success); }
 .todayOperationsPanel.hasWork { border-left-color:#38bdf8; }
