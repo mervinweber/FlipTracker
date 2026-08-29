@@ -36,10 +36,11 @@ export default function QuickGuide() {
         <section><div className="guideNumber">2</div><div><h3>Scan a stack with a USB scanner</h3><ol>
           <li>Open <strong>Bulk Intake</strong> or select <strong>Scan Stack</strong>.</li>
           <li>Set the condition, completeness, collection, storage bin, cost, SKU prefix, and shipping defaults.</li>
+          <li>For a small game lot without visible barcodes, use <strong>Photo Lot</strong>: choose one clear group photo, enter the item count and total paid, then review the AI-proposed title, platform, cost allocation, price, and description for every game.</li>
           <li>Leave <strong>Create eBay draft</strong> enabled, then scan each UPC. Most USB scanners type the code and press Enter automatically.</li>
           <li>Continue scanning while the queue processes. Every physical copy receives its own inventory record and unique SKU.</li>
           <li>Review amber rows, then use the Photos queue on your phone before finishing pricing in Listings.</li>
-        </ol><p className="guideNote"><Keyboard size={15}/> Configure the scanner suffix as Enter or Tab. These are internal drafts until you send them to the connected eBay account from Listings.</p></div></section>
+        </ol><p className="guideNote"><Keyboard size={15}/> Photo identification and prices are editable working estimates, not verified sold comps. All records remain internal drafts until you review photos and send them to eBay.</p></div></section>
 
         <section><div className="guideNumber">3</div><div><h3>Add listing photos from your phone</h3><ol>
           <li>Open the same FlipTracker deployment on your phone and select <strong>Photos</strong>.</li>

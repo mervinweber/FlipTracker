@@ -21,6 +21,31 @@
 .bulkDefaultsGrid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:13px; align-items:end; }
 .bulkDraftToggle { min-height:44px; margin:0; }
 .bulkIntakeCards { margin:0; }
+.photoLotPanel { box-shadow:none; }
+.photoLotStart { display:grid; grid-template-columns:minmax(260px, .8fr) minmax(280px, 1.2fr); gap:18px; align-items:stretch; }
+.photoLotImage { display:grid; place-items:center; min-height:250px; overflow:hidden; border:1px solid var(--border); border-radius:var(--radius); background:#020617; position:relative; }
+.photoLotImage > img { width:100%; height:100%; max-height:380px; object-fit:contain; }
+.photoLotImage > div { display:grid; justify-items:center; gap:6px; padding:28px; color:var(--muted); text-align:center; }
+.photoLotImage > div strong, .photoLotImage > div small { display:block; }
+.photoLotImage > div strong { color:var(--text); }
+.photoLotImage > label { position:absolute; right:10px; bottom:10px; }
+.photoLotInputs { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:13px; align-content:start; }
+.photoLotInputs > p, .photoLotInputs > button { grid-column:1 / -1; }
+.photoLotInputs > p { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
+.photoLotNotice { margin:14px 0 0; padding:11px 13px; border-left:3px solid #14b8a6; background:rgba(20,184,166,.08); color:#ccfbf1; font-size:13px; }
+.photoLotReview { display:grid; gap:12px; margin-top:18px; padding-top:18px; border-top:1px solid var(--border); }
+.photoLotReviewHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.photoLotReviewHeader h3, .photoLotReviewHeader p { margin:0; }
+.photoLotReviewHeader p { margin-top:4px; color:var(--muted); font-size:13px; }
+.photoLotRow { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; background:#0b1423; }
+.photoLotRow > header { display:grid; grid-template-columns:30px minmax(0, 1fr) auto; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--border); background:#0d1828; }
+.photoLotRow > header > span { display:grid; place-items:center; width:26px; height:26px; border:1px solid #38bdf8; border-radius:50%; color:#bae6fd; font-weight:900; }
+.photoLotRow > header strong, .photoLotRow > header small { display:block; min-width:0; overflow-wrap:anywhere; }
+.photoLotRow > header small { margin-top:2px; color:var(--muted); }
+.photoLotFields { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; padding:13px; }
+.photoLotFields .span2 { grid-column:span 2; }
+.photoLotFields label > span { float:right; color:var(--muted); font-size:11px; }
+.photoLotFields textarea { min-height:92px; }
 .bulkQueuePanel { padding:0; overflow:hidden; }
 .bulkQueuePanel .panelHeader { padding:18px 18px 0; }
 .queueStatus { display:inline-flex; align-items:center; gap:6px; min-height:26px; padding:2px 8px; border:1px solid var(--border); border-radius:999px; color:#cbd5e1; background:#020617; font-size:12px; font-weight:900; white-space:nowrap; }
@@ -30,9 +55,9 @@
 .directPublishNotice { display:flex; align-items:flex-start; gap:8px; margin:0; padding:12px 14px; border-left:3px solid var(--warning); background:rgba(245,158,11,.07); color:#fde68a; font-size:13px; line-height:1.45; }
 .directPublishNotice svg { flex:0 0 auto; margin-top:1px; }
 @keyframes queueSpin { to { transform:rotate(360deg); } }
-@media (max-width:1000px) { .bulkDefaultsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } .intakeBatchGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-@media (max-width:760px) { .bulkScannerBand { grid-template-columns:1fr; } .bulkDefaultsGrid, .intakeBatchGrid { grid-template-columns:1fr; } }
-@media (max-width:520px) { .bulkScanForm { grid-template-columns:auto minmax(0, 1fr); } .bulkScanForm button { grid-column:1 / -1; justify-content:center; } }
+@media (max-width:1000px) { .bulkDefaultsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } .intakeBatchGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } .photoLotFields { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media (max-width:760px) { .bulkScannerBand, .photoLotStart { grid-template-columns:1fr; } .bulkDefaultsGrid, .intakeBatchGrid { grid-template-columns:1fr; } .photoLotReviewHeader { align-items:stretch; flex-direction:column; } }
+@media (max-width:520px) { .bulkScanForm { grid-template-columns:auto minmax(0, 1fr); } .bulkScanForm button { grid-column:1 / -1; justify-content:center; } .photoLotInputs, .photoLotFields { grid-template-columns:1fr; } .photoLotFields .span2 { grid-column:1; } .photoLotImage { min-height:220px; } }
 .batchCompletionPanel {
   border-color: #1f8a62;
 }

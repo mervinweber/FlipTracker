@@ -11,6 +11,8 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add a completed-intake handoff to Photos and Fast Review
 - [x] Add confirmation-protected bulk publishing for selected staged offers with per-item failures left selected
 - [ ] Measure scan-to-ready time across a real DVD/book batch and tune the remaining high-friction steps
+- [x] Add reviewed group-photo game intake with exact lot-cost allocation, AI listing copy/working prices, and transactional inventory-plus-draft creation
+- [ ] Test Photo Lot against real 3-, 6-, and 12-game photos and tune identification confidence thresholds
 
 ## v0.9.2 Active Listing Maintenance
 

@@ -288,3 +288,101 @@ export const lookupByBarcode = action({
     };
   },
 });
+
+type PhotoLotItem = {
+  title: string;
+  console?: string;
+  edition?: string;
+  releaseYear?: string;
+  visibleBarcode?: string;
+  ebayTitle: string;
+  ebayDescription: string;
+  estimatedLow?: number;
+  estimatedHigh?: number;
+  suggestedListPrice?: number;
+  confidence: number;
+  reviewNotes?: string;
+};
+
+function requirePhotoLotAccess(adminKey: string) {
+  const expected = process.env.FLIPTRACKER_ADMIN_KEY;
+  if (!expected || adminKey !== expected) throw new Error("Seller access key is incorrect.");
+}
+
+function optionalString(value: unknown, maxLength = 500) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text ? text.slice(0, maxLength) : undefined;
+}
+
+function optionalMoney(value: unknown) {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) / 100 : undefined;
+}
+
+export const identifyVideoGameLot = action({
+  args: {
+    adminKey: v.string(),
+    imageDataUrl: v.string(),
+    expectedCount: v.number(),
+    condition: v.string(),
+    completeness: v.string(),
+  },
+  handler: async (_ctx, args): Promise<{ items: PhotoLotItem[]; notes?: string }> => {
+    requirePhotoLotAccess(args.adminKey);
+    const expectedCount = Math.max(1, Math.min(12, Math.round(args.expectedCount)));
+    const match = args.imageDataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) throw new Error("Use a JPEG, PNG, or WebP lot photo.");
+    if (match[2].length > 8_000_000) throw new Error("The lot photo is too large. Choose a smaller image.");
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured in Convex.");
+    const model = process.env.GEMINI_MEDIA_MODEL || process.env.GEMINI_CARD_MODEL || "gemini-2.5-flash-lite";
+    const prompt = [
+      `Identify the ${expectedCount} physical video games visible in this reseller intake photo.`,
+      `The seller reports condition ${JSON.stringify(args.condition)} and completeness ${JSON.stringify(args.completeness)}.`,
+      "Return strict JSON with an items array in left-to-right, top-to-bottom photo order and an optional notes string.",
+      "Each item must contain title, console, edition, releaseYear, visibleBarcode, ebayTitle, ebayDescription, estimatedLow, estimatedHigh, suggestedListPrice, confidence, and reviewNotes.",
+      "Use null for facts that are not readable. Do not invent a barcode, edition, release year, included manual, testing result, or condition detail.",
+      "ebayTitle must be buyer-searchable and no more than 80 characters. ebayDescription must be concise plain text based only on visible/supplied facts and must tell the seller to add exact condition details after inspection.",
+      "Price fields are rough pre-comp US-dollar working estimates for a complete used copy, not verified sold comps. Use conservative whole-dollar values and lower confidence when the exact title or edition is uncertain.",
+      "If fewer items can be identified confidently, still return one row for each visible case and explain uncertainty in reviewNotes.",
+    ].join(" ");
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }, { inline_data: { mime_type: match[1], data: match[2] } }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2500, responseMimeType: "application/json" },
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error?.message || `Gemini lot request failed (${response.status}).`);
+    const text = payload?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("") || "";
+    let parsed: { items?: unknown[]; notes?: unknown };
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("AI returned an unreadable lot result. Retake a clearer photo and try again.");
+    }
+    if (!Array.isArray(parsed.items) || !parsed.items.length) throw new Error("No games were identified. Retake the photo with every front cover readable.");
+    const items = parsed.items.slice(0, 12).map((raw, index) => {
+      const item = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+      const title = optionalString(item.title, 160) || `Unidentified game ${index + 1}`;
+      const confidence = Math.max(0, Math.min(1, Number(item.confidence) || 0));
+      return {
+        title,
+        console: optionalString(item.console, 80),
+        edition: optionalString(item.edition, 100),
+        releaseYear: optionalString(item.releaseYear, 12),
+        visibleBarcode: optionalString(item.visibleBarcode, 32)?.replace(/[^0-9X]/gi, ""),
+        ebayTitle: (optionalString(item.ebayTitle, 80) || [title, optionalString(item.console, 80)].filter(Boolean).join(" ")).slice(0, 80),
+        ebayDescription: optionalString(item.ebayDescription, 2_500) || `${title}. Condition: ${args.condition}. Completeness: ${args.completeness}. Review photos and add exact condition details before publishing.`,
+        estimatedLow: optionalMoney(item.estimatedLow),
+        estimatedHigh: optionalMoney(item.estimatedHigh),
+        suggestedListPrice: optionalMoney(item.suggestedListPrice),
+        confidence,
+        reviewNotes: optionalString(item.reviewNotes, 500),
+      };
+    });
+    return { items, notes: optionalString(parsed.notes, 800) };
+  },
+});

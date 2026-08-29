@@ -93,7 +93,8 @@ Underpriced is useful as a reference because it frames the reseller workflow aro
 
 ## Future Track - AI Photo Recognition
 - [ ] Photo/spine import workflow
-- [ ] Identify titles from shelf/spine photos
+- [x] Identify small video-game lots from a group front-cover photo and create reviewed inventory/listing drafts
+- [ ] Expand group-photo identification to shelf/spine photos and mixed-media lots
 - [ ] Confidence review queue
 - [ ] Analyze screenshots from marketplace listings as sourcing candidates
 - [ ] Keep AI identification editable with source/confidence metadata

@@ -21,6 +21,16 @@ FlipTracker tracks books, games, DVDs, Blu-rays, CDs, cards, clothing, and other
 
 A scan saves to inventory first. Staging and publishing are separate actions, and publishing requires a connected seller account plus an explicit confirmation.
 
+## Create several game drafts from one photo
+
+1. Open **Bulk Intake**, start an intake batch, and set the shared condition, completeness, bin, shipping, and SKU defaults.
+2. Under **Photo Lot**, take or choose one clear group photo with every front cover and platform banner readable.
+3. Enter the number of games and the total paid, then select **Identify & Build Drafts**.
+4. Review every proposed title, platform, edition, allocated cost, working list price, eBay title, and description. Correct uncertain matches before saving.
+5. Select **Create Inventory + Draft Records**, then open **Photos** on your phone to attach each game's actual listing photos.
+
+Photo-lot identification and price ranges are AI working estimates, not verified sold comps. FlipTracker marks the records for value review, uses exact penny-level lot-cost allocation, and never publishes them automatically.
+
 ## Add photos from a phone
 
 1. Open the same FlipTracker deployment on the phone and select **Photos**.

@@ -1,9 +1,10 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Barcode, Camera, CheckCircle2, CircleDashed, ExternalLink, Images, Keyboard, LayoutList, Pause, Play, Plus, RotateCcw, Save, Trash2, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, Barcode, Camera, CheckCircle2, CircleDashed, ExternalLink, ImagePlus, Images, Keyboard, LayoutList, Pause, Play, Plus, RotateCcw, Save, Trash2, WandSparkles, X } from 'lucide-react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
+import { splitPhotoLotTotal } from '../utils/photoLot';
 import '../bulk-intake.css';
 
 type LookupResult = {
@@ -38,10 +39,42 @@ type QueueRow = {
   message?: string;
 };
 
+type PhotoLotRow = {
+  id: string;
+  title: string;
+  console: string;
+  edition: string;
+  releaseYear: string;
+  upc: string;
+  condition: string;
+  completeness: string;
+  storageLocation: string;
+  purchasePrice: string;
+  estimatedLow?: number;
+  estimatedHigh?: number;
+  listingPrice: string;
+  ebayTitle: string;
+  ebayDescription: string;
+  confidence: number;
+  reviewNotes: string;
+};
+
 function optionalNumber(value: string) {
   if (!value.trim()) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+async function imageDataUrl(file: File) {
+  const bitmap = await createImageBitmap(file);
+  const maxEdge = 1600;
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL('image/jpeg', 0.82);
 }
 
 function categoryFor(type: string) {
@@ -74,7 +107,9 @@ export default function BulkIntakePanel() {
   const collections = useQuery(api.collections.list) || [];
   const batches = useQuery(api.intakeBatches.list) || [];
   const lookupByBarcode = useAction(api.mediaLookup.lookupByBarcode);
+  const identifyVideoGameLot = useAction(api.mediaLookup.identifyVideoGameLot);
   const createScannedItem = useMutation(api.intake.createScannedItem);
+  const createPhotoLot = useMutation(api.intake.createPhotoLot);
   const createBatch = useMutation(api.intakeBatches.create);
   const updateBatch = useMutation(api.intakeBatches.update);
   const setBatchStatus = useMutation(api.intakeBatches.setStatus);
@@ -102,6 +137,15 @@ export default function BulkIntakePanel() {
   const [shippingPlan, setShippingPlan] = useState('USPS Media Mail, buyer paid');
   const [skuPrefix, setSkuPrefix] = useState('FT-DVD');
   const [createDraft, setCreateDraft] = useState(true);
+  const [photoLotImage, setPhotoLotImage] = useState('');
+  const [photoLotExpectedCount, setPhotoLotExpectedCount] = useState('3');
+  const [photoLotTotal, setPhotoLotTotal] = useState('');
+  const [photoLotSkuPrefix, setPhotoLotSkuPrefix] = useState('FT-GAME');
+  const [photoLotShippingPlan, setPhotoLotShippingPlan] = useState('USPS Ground Advantage, buyer paid');
+  const [photoLotRows, setPhotoLotRows] = useState<PhotoLotRow[]>([]);
+  const [photoLotBusy, setPhotoLotBusy] = useState<'image' | 'identify' | 'save' | ''>('');
+  const [photoLotError, setPhotoLotError] = useState('');
+  const [photoLotNotice, setPhotoLotNotice] = useState('');
   const batchItems = useQuery(api.intakeBatches.getItems, { batchId: activeBatchId ? activeBatchId as Id<'intakeBatches'> : undefined }) || [];
 
   useEffect(() => {
@@ -283,6 +327,127 @@ export default function BulkIntakePanel() {
     pipelineRef.current = pipelineRef.current.then(() => processScan(row.id, row.barcode, activeBatchId));
   }
 
+  async function selectPhotoLotImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setPhotoLotBusy('image');
+    setPhotoLotError('');
+    setPhotoLotNotice('');
+    setPhotoLotRows([]);
+    try {
+      setPhotoLotImage(await imageDataUrl(file));
+    } catch {
+      setPhotoLotError('Could not read that photo. Use a JPEG, PNG, or WebP image.');
+    } finally {
+      setPhotoLotBusy('');
+    }
+  }
+
+  async function analyzePhotoLot() {
+    const expectedCount = Math.max(1, Math.min(12, Math.round(Number(photoLotExpectedCount) || 0)));
+    if (!photoLotImage) {
+      setPhotoLotError('Take or choose one clear group photo first.');
+      return;
+    }
+    const adminKey = localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey') || '';
+    if (!adminKey) {
+      setPhotoLotError('Load your private access key in Seller Connection before using AI photo identification.');
+      return;
+    }
+    setPhotoLotBusy('identify');
+    setPhotoLotError('');
+    setPhotoLotNotice('');
+    try {
+      const result = await identifyVideoGameLot({ adminKey, imageDataUrl: photoLotImage, expectedCount, condition, completeness });
+      const allocatedCosts = splitPhotoLotTotal(photoLotTotal, result.items.length);
+      const identified = result.items.map((item, index): PhotoLotRow => ({
+        id: crypto.randomUUID(),
+        title: item.title,
+        console: item.console || '',
+        edition: item.edition || '',
+        releaseYear: item.releaseYear || '',
+        upc: item.visibleBarcode || '',
+        condition,
+        completeness,
+        storageLocation,
+        purchasePrice: allocatedCosts[index],
+        estimatedLow: item.estimatedLow,
+        estimatedHigh: item.estimatedHigh,
+        listingPrice: item.suggestedListPrice === undefined ? '' : item.suggestedListPrice.toFixed(2),
+        ebayTitle: item.ebayTitle,
+        ebayDescription: item.ebayDescription,
+        confidence: item.confidence,
+        reviewNotes: item.reviewNotes || '',
+      }));
+      setPhotoLotRows(identified);
+      const countMessage = identified.length === expectedCount ? `${identified.length} games identified.` : `${identified.length} games identified; you expected ${expectedCount}.`;
+      setPhotoLotNotice(`${countMessage} Review every row before creating records.${result.notes ? ` ${result.notes}` : ''}`);
+    } catch (error) {
+      setPhotoLotError(error instanceof Error ? error.message : 'The games could not be identified from this photo.');
+    } finally {
+      setPhotoLotBusy('');
+    }
+  }
+
+  function updatePhotoLotRow(id: string, patch: Partial<PhotoLotRow>) {
+    setPhotoLotRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
+  }
+
+  function reallocatePhotoLotCost() {
+    const costs = splitPhotoLotTotal(photoLotTotal, photoLotRows.length);
+    setPhotoLotRows((current) => current.map((row, index) => ({ ...row, purchasePrice: costs[index] })));
+  }
+
+  async function savePhotoLot() {
+    if (!activeBatchId || !batchCanScan) {
+      setPhotoLotError('Start or select an active intake batch before creating the lot.');
+      return;
+    }
+    if (!photoLotRows.length || photoLotRows.some((row) => !row.title.trim() || !row.ebayTitle.trim())) {
+      setPhotoLotError('Every row needs an inventory title and eBay title.');
+      return;
+    }
+    setPhotoLotBusy('save');
+    setPhotoLotError('');
+    setPhotoLotNotice('');
+    try {
+      const result = await createPhotoLot({
+        batchId: activeBatchId as Id<'intakeBatches'>,
+        source: batchSource.trim() || undefined,
+        shippingPlan: photoLotShippingPlan.trim() || undefined,
+        skuPrefix: photoLotSkuPrefix.trim() || 'FT-GAME',
+        createDraft,
+        items: photoLotRows.map((row) => ({
+          scanToken: row.id,
+          title: row.title.trim(),
+          console: row.console.trim() || undefined,
+          edition: row.edition.trim() || undefined,
+          releaseYear: row.releaseYear.trim() || undefined,
+          upc: row.upc.trim() || undefined,
+          condition: row.condition,
+          completeness: row.completeness,
+          storageLocation: row.storageLocation.trim() || undefined,
+          purchasePrice: optionalNumber(row.purchasePrice),
+          estimatedLow: row.estimatedLow,
+          estimatedHigh: row.estimatedHigh,
+          ebayTitle: row.ebayTitle.trim(),
+          ebayDescription: row.ebayDescription.trim(),
+          ebayPrice: optionalNumber(row.listingPrice),
+          confidence: row.confidence,
+          reviewNotes: row.reviewNotes.trim() || undefined,
+        })),
+      });
+      setPhotoLotRows([]);
+      setPhotoLotImage('');
+      setPhotoLotNotice(`${result.count} inventory records and ${result.draftCount} eBay drafts created. Open Photos to add each game's listing photos.`);
+    } catch (error) {
+      setPhotoLotError(error instanceof Error ? error.message : 'The reviewed photo lot could not be saved.');
+    } finally {
+      setPhotoLotBusy('');
+    }
+  }
+
   const savedCount = rows.filter((row) => row.sku).length;
   const draftCount = rows.filter((row) => row.draftCreated).length;
   const reviewCount = rows.filter((row) => row.status === 'Review').length;
@@ -307,6 +472,46 @@ export default function BulkIntakePanel() {
           <div className="actions intakeBatchActions"><button onClick={startBatch}><Plus size={15}/> Start New</button>{activeBatchId ? <button className="secondary" onClick={saveBatchDefaults}><Save size={15}/> Save Defaults</button> : null}{selectedBatch?.status === 'Active' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Paused' })}><Pause size={15}/> Pause</button> : selectedBatch?.status === 'Paused' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Active' })}><Play size={15}/> Resume</button> : null}{selectedBatch && selectedBatch.status !== 'Completed' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Completed' })}><CheckCircle2 size={15}/> Complete</button> : null}</div>
         </div>
         {batchError ? <p className="warningText">{batchError}</p> : null}
+      </section>
+
+      <section className="panel photoLotPanel">
+        <div className="panelHeader"><div><p className="eyebrow">AI-assisted intake</p><h2>Photo Lot</h2><p>Photograph several game fronts together, review the proposed records, then create inventory and eBay drafts in one pass.</p></div><span className="badge draft">Up to 12 games</span></div>
+        <div className="photoLotStart">
+          <div className="photoLotImage">
+            {photoLotImage ? <img src={photoLotImage} alt="Game lot selected for identification"/> : <div><Images size={34}/><strong>One clear group photo</strong><small>Arrange front covers so every title and platform banner is readable.</small></div>}
+            <label className="button secondary"><ImagePlus size={16}/>{photoLotImage ? 'Replace Photo' : 'Choose Photo'}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden disabled={Boolean(photoLotBusy)} onChange={selectPhotoLotImage}/></label>
+          </div>
+          <div className="photoLotInputs">
+            <label>Number of games<input type="number" min="1" max="12" step="1" value={photoLotExpectedCount} onChange={(event) => setPhotoLotExpectedCount(event.target.value)}/></label>
+            <label>Total paid for lot<input type="number" min="0" step="0.01" value={photoLotTotal} onChange={(event) => setPhotoLotTotal(event.target.value)} placeholder="15.00"/></label>
+            <label>Game SKU prefix<input value={photoLotSkuPrefix} onChange={(event) => setPhotoLotSkuPrefix(event.target.value)} placeholder="FT-GAME"/></label>
+            <label>Game shipping plan<input value={photoLotShippingPlan} onChange={(event) => setPhotoLotShippingPlan(event.target.value)}/></label>
+            <p>Cost is split exactly across the identified games. You can adjust each row before saving.</p>
+            <button disabled={!photoLotImage || Boolean(photoLotBusy)} onClick={analyzePhotoLot}><WandSparkles size={16}/>{photoLotBusy === 'identify' ? 'Identifying Games...' : 'Identify & Build Drafts'}</button>
+          </div>
+        </div>
+        {photoLotError ? <p className="warningText">{photoLotError}</p> : null}
+        {photoLotNotice ? <p className="photoLotNotice">{photoLotNotice}</p> : null}
+        {photoLotRows.length ? <div className="photoLotReview">
+          <div className="photoLotReviewHeader"><div><h3>Review before creating</h3><p>AI identification and price ranges are working estimates, not verified sold comps.</p></div><button className="secondary" onClick={reallocatePhotoLotCost}>Split ${optionalNumber(photoLotTotal)?.toFixed(2) || '0.00'} Again</button></div>
+          {photoLotRows.map((row, index) => <article className="photoLotRow" key={row.id}>
+            <header><span>{index + 1}</span><div><strong>{row.title || 'Untitled game'}</strong><small>{Math.round(row.confidence * 100)}% visual confidence{row.reviewNotes ? ` · ${row.reviewNotes}` : ''}</small></div><button className="iconButton danger" aria-label={`Remove ${row.title || `game ${index + 1}`}`} onClick={() => setPhotoLotRows((current) => current.filter((item) => item.id !== row.id))}><Trash2 size={15}/></button></header>
+            <div className="photoLotFields">
+              <label>Game title<input value={row.title} onChange={(event) => updatePhotoLotRow(row.id, { title: event.target.value })}/></label>
+              <label>Platform<input value={row.console} onChange={(event) => updatePhotoLotRow(row.id, { console: event.target.value })} placeholder="PlayStation 2, Xbox 360..."/></label>
+              <label>Edition<input value={row.edition} onChange={(event) => updatePhotoLotRow(row.id, { edition: event.target.value })} placeholder="Greatest Hits, standard..."/></label>
+              <label>UPC if visible<input inputMode="numeric" value={row.upc} onChange={(event) => updatePhotoLotRow(row.id, { upc: event.target.value.replace(/[^0-9Xx]/g, '').toUpperCase() })}/></label>
+              <label>Condition<select value={row.condition} onChange={(event) => updatePhotoLotRow(row.id, { condition: event.target.value })}>{['New','Like New','Very Good','Good','Acceptable','For Parts'].map((value) => <option key={value}>{value}</option>)}</select></label>
+              <label>Completeness<select value={row.completeness} onChange={(event) => updatePhotoLotRow(row.id, { completeness: event.target.value })}>{['Complete','Disc Only','Case Only','Case + Disc','No Manual','Sealed','Loose','Incomplete'].map((value) => <option key={value}>{value}</option>)}</select></label>
+              <label>Allocated cost<input type="number" min="0" step="0.01" value={row.purchasePrice} onChange={(event) => updatePhotoLotRow(row.id, { purchasePrice: event.target.value })}/></label>
+              <label>Working list price<input type="number" min="0" step="0.01" value={row.listingPrice} onChange={(event) => updatePhotoLotRow(row.id, { listingPrice: event.target.value })}/><small>{row.estimatedLow !== undefined || row.estimatedHigh !== undefined ? `AI range: $${row.estimatedLow?.toFixed(2) || '?'}–$${row.estimatedHigh?.toFixed(2) || '?'}` : 'No AI range returned'}</small></label>
+              <label className="span2">eBay title <span>{row.ebayTitle.length}/80</span><input maxLength={80} value={row.ebayTitle} onChange={(event) => updatePhotoLotRow(row.id, { ebayTitle: event.target.value })}/></label>
+              <label className="span2">Description<textarea value={row.ebayDescription} onChange={(event) => updatePhotoLotRow(row.id, { ebayDescription: event.target.value })}/></label>
+              <label className="span2">Review notes<input value={row.reviewNotes} onChange={(event) => updatePhotoLotRow(row.id, { reviewNotes: event.target.value })} placeholder="Verify edition, inspect disc, missing manual..."/></label>
+            </div>
+          </article>)}
+          <div className="actions right"><button className="secondary" disabled={Boolean(photoLotBusy)} onClick={() => setPhotoLotRows([])}>Discard Results</button><button disabled={Boolean(photoLotBusy) || !batchCanScan} onClick={savePhotoLot}><Save size={16}/>{photoLotBusy === 'save' ? 'Creating Records...' : `Create ${photoLotRows.length} Inventory + Draft Records`}</button></div>
+        </div> : null}
       </section>
 
       {cameraOpen ? <section className="panel speedCameraPanel"><header><div><strong>Continuous camera scanning</strong><small>Keep the barcode centered. Each accepted code vibrates and enters the same persisted queue as a USB scan.</small></div><button className="iconButton secondary" aria-label="Close camera" onClick={() => setCameraOpen(false)}><X size={17}/></button></header><div className="cameraFrame"><video ref={videoRef} muted playsInline autoPlay/></div>{cameraError ? <div className="actions"><p className="warningText">{cameraError}</p><button className="secondary" onClick={() => setCameraAttempt((attempt) => attempt + 1)}><RotateCcw size={14}/> Retry</button></div> : null}</section> : null}
