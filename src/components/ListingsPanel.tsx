@@ -154,15 +154,19 @@ type ActivePricingResult = {
 
 type RepriceMode = 'percentage' | 'exact' | 'profit';
 type ListingWorkspaceView = 'Queue' | 'Active' | 'Sold' | 'Attention';
-type ListingEditorStep = ListingReadinessStep | 'preview';
+type ListingEditorStep = 'details' | 'shipping' | 'price';
 
 const LISTING_EDITOR_STEPS: Array<{ id: ListingEditorStep; label: string }> = [
-  { id: 'details', label: 'Item' },
-  { id: 'category', label: 'Category' },
+  { id: 'details', label: 'Item & category' },
   { id: 'shipping', label: 'Shipping & photos' },
-  { id: 'price', label: 'Price & description' },
-  { id: 'preview', label: 'Preview' },
+  { id: 'price', label: 'Review & publish' },
 ];
+
+function compactEditorStep(step: ListingReadinessStep | 'preview'): ListingEditorStep {
+  if (step === 'category') return 'details';
+  if (step === 'preview') return 'price';
+  return step;
+}
 
 type EbaySetup = {
   connected: boolean;
@@ -413,7 +417,6 @@ function PriceHistory({ listingId }: { listingId: Id<'marketplaceListings'> }) {
 
 export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () => void }) {
   const listings = useQuery(api.listings.list) as Listing[] | undefined;
-  const stats = useQuery(api.listings.stats);
   const updateListing = useMutation(api.listings.update);
   const removeListing = useMutation(api.listings.remove);
   const importSalesTracker = useMutation(api.listings.importSalesTracker);
@@ -636,6 +639,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId)
   )), [selectedListings]);
   const selectedBlockedCount = selectedListings.filter((listing) => (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking)).length;
+  const firstSelectedBlocked = selectedListings.find((listing) => (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking));
   const editingReadinessIssues = useMemo(() => editing && editing.status !== 'Sold' ? validateListingReadiness({ ...listingReadinessInput(editing), missingCategoryAspects: taxonomyMissingAspects }, sellerReadinessDefaults) : [], [editing, listingReadinessInput, sellerReadinessDefaults, taxonomyMissingAspects]);
   const editingQuality = useMemo(() => editing ? assessListingQuality(editing, editingReadinessIssues, listingSpeedPresetFor(editing)?.feePercent ?? 15) : undefined, [editing, editingReadinessIssues]);
   const fastReviewIssues = useMemo(() => fastReviewing ? validateListingReadiness(listingReadinessInput(fastReviewing), sellerReadinessDefaults) : [], [fastReviewing, listingReadinessInput, sellerReadinessDefaults]);
@@ -772,7 +776,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     } satisfies Listing);
   }
 
-  function openListingEditor(listing: Listing, initialStep: ListingEditorStep = 'details', fromExceptionQueue = false) {
+  function openListingEditor(listing: Listing, initialStep: ListingReadinessStep | 'preview' = 'details', fromExceptionQueue = false) {
     if (listing.status === 'Sold') {
       openSaleEditor(listing);
       return;
@@ -783,7 +787,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setTaxonomyMissingAspects([]);
     setDescriptionError('');
     setListingSaveError('');
-    setEditorStep(initialStep);
+    setEditorStep(compactEditorStep(initialStep));
     setEditing(listingWithWorkflowDefaults(listing));
   }
 
@@ -1768,7 +1772,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       const message = readableActionError(error, editing.ebayLastError || 'Could not update this listing. Check its required eBay details and try again.');
       setListingSaveError(message);
       const requiredStep = ebaySpecificsStepForError(message);
-      if (requiredStep) setEditorStep(requiredStep);
+      if (requiredStep) setEditorStep(compactEditorStep(requiredStep));
     } finally {
       setListingSaveBusy(false);
     }
@@ -1833,15 +1837,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       <section className="panel listingWorkspaceHeader">
         <div className="listingWorkspaceTitle"><div><p className="eyebrow">Selling workspace</p><h2>Listings</h2><p>Work one stage at a time. Setup and maintenance stay available without crowding the queue.</p></div><div className="listingWorkspaceActions">
           {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> eBay connected</span> : <span className="statusPill attention"><AlertTriangle size={14}/> eBay setup needed</span>}
-          <button className="secondary" onClick={() => setTemplatesOpen(true)}><Tags size={16}/> Templates</button>
-          <button className="secondary" aria-expanded={sellerSetupExpanded} onClick={() => setSellerSetupExpanded((expanded) => !expanded)}><Settings size={16}/> eBay Settings</button>
+          <details className="listingUtilityMenu listingWorkspaceMenu"><summary aria-label="Open listing workspace settings" title="Workspace settings"><MoreHorizontal size={18}/></summary><div><button className="secondary" onClick={() => setTemplatesOpen(true)}><Tags size={16}/> Listing templates</button><button className="secondary" aria-expanded={sellerSetupExpanded} onClick={() => setSellerSetupExpanded((expanded) => !expanded)}><Settings size={16}/> eBay settings</button></div></details>
         </div></div>
-        <div className="listingWorkspaceMetrics" aria-label="Listing summary">
-          <div><span>In queue</span><strong>{workspaceCounts.Queue}</strong></div>
-          <div><span>eBay live</span><strong>{sellerListingSummary?.activeCount ?? workspaceCounts.Active}</strong></div>
-          <div><span>Sold revenue</span><strong>{stats ? money(stats.soldRevenue) : '-'}</strong></div>
-          <div className={workspaceCounts.Attention ? 'attention' : ''}><span>Needs attention</span><strong>{workspaceCounts.Attention}</strong></div>
-        </div>
       </section>
 
       <nav className="listingWorkspaceTabs" aria-label="Listing lifecycle views">
@@ -1867,21 +1864,21 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       {workspaceView === 'Queue' ? <section className="panel listingQueueBar">
         <div className="queueSummary">
           <div><p className="eyebrow">Listing queue</p><h2>Scan, review exceptions, then publish</h2><p>{queueListings.length} Draft/Pending in this view · {selectedIds.size} selected · {selectedReadyForEbay.length} ready · {selectedStagedForEbay.length} staged</p></div>
-          <div className="queueSteps" aria-label="Listing queue stages"><span>1. Scan</span><span>2. Fast Review</span><span>3. Stage</span><span>4. Publish</span></div>
+          <div className="queueProgressStrip" aria-label="Listing batch completion">
+            <button onClick={() => setQueueType('All')}><strong>{batchCompletion.total}</strong><span>Total</span></button>
+            <button className={batchCompletion.needsPhotos ? 'attention' : ''} onClick={() => setQueueType('Needs Photo')}><strong>{batchCompletion.needsPhotos}</strong><span>Photos</span></button>
+            <button className={batchCompletion.needsPricing ? 'attention' : ''} onClick={() => setQueueType('Ready for Pricing')}><strong>{batchCompletion.needsPricing}</strong><span>Pricing</span></button>
+            <button className={batchCompletion.exceptions ? 'attention' : ''} onClick={() => setExceptionQueueExpanded(true)}><strong>{batchCompletion.exceptions}</strong><span>Fix</span></button>
+            <button className="ready" onClick={() => setQueueType('Ready for eBay')}><strong>{batchCompletion.ready}</strong><span>Ready</span></button>
+            <button className="staged" onClick={() => setQueueType('Staged for eBay')}><strong>{batchCompletion.staged}</strong><span>Staged</span></button>
+          </div>
         </div>
-        <div className="batchCompletionGrid" aria-label="Listing batch completion">
-          <button className="batchCompletionMetric" onClick={() => setQueueType('All')}><span>In progress</span><strong>{batchCompletion.total}</strong></button>
-          <button className="batchCompletionMetric attention" onClick={() => setQueueType('Needs Photo')}><span>Need photos</span><strong>{batchCompletion.needsPhotos}</strong></button>
-          <button className="batchCompletionMetric attention" onClick={() => setQueueType('Ready for Pricing')}><span>Need prices</span><strong>{batchCompletion.needsPricing}</strong></button>
-          <button className="batchCompletionMetric attention" onClick={() => setExceptionQueueExpanded(true)}><span>Exceptions</span><strong>{batchCompletion.exceptions}</strong></button>
-          <button className="batchCompletionMetric ready" onClick={() => setQueueType('Ready for eBay')}><span>Ready</span><strong>{batchCompletion.ready}</strong></button>
-          <button className="batchCompletionMetric staged" onClick={() => setQueueType('Staged for eBay')}><span>Staged</span><strong>{batchCompletion.staged}</strong></button>
-        </div>
-        <div className={`actions queueActions ${selectedIds.size ? 'hasSelection' : ''}`}>
-          <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={() => openFastReview()}><WandSparkles size={16}/> Fast Review</button>
-          <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear Selection' : 'Select All in View'}</button>
-          <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Validate Batch</button>
-          {selectedIds.size ? <><span className="selectionCount">{selectedIds.size} selected</span><button disabled={queueBusy} onClick={openPricingReview}><DollarSign size={16}/> {queueBusy ? 'Checking eBay...' : 'Find Fair Value'}</button><button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage (${selectedReadyForEbay.length})`}</button><button className="ebayPublishButton" disabled={!selectedStagedForEbay.length || queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish (${selectedStagedForEbay.length})`}</button></> : null}
+        <div className={`queueCommandBar ${selectedIds.size ? 'hasSelection' : ''}`}>
+          <span className="queueCommandStatus">{selectedIds.size ? `${selectedIds.size} selected · ${selectedBlockedCount ? `${selectedBlockedCount} need fixes` : 'validation passed'}` : `${batchCompletion.ready} ready · ${batchCompletion.exceptions} need fixes`}</span>
+          <div className="actions queueActions">
+            {!selectedIds.size ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={() => openFastReview()}><WandSparkles size={16}/> Fast Review</button> : firstSelectedBlocked ? <button disabled={queueBusy} onClick={() => openListingEditor(firstSelectedBlocked, (readinessByListingId.get(firstSelectedBlocked._id) || []).find((issue) => issue.blocking)?.step || 'details', true)}><ListChecks size={16}/> Fix {selectedBlockedCount}</button> : selectedReadyForEbay.length ? <button className="ebaySendButton" disabled={queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage ${selectedReadyForEbay.length}`}</button> : selectedStagedForEbay.length ? <button className="ebayPublishButton" disabled={queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish ${selectedStagedForEbay.length}`}</button> : <button onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Review Selection</button>}
+            <details className="listingUtilityMenu queueMoreMenu"><summary aria-label="More queue actions" title="More queue actions"><MoreHorizontal size={18}/></summary><div><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear selection' : 'Select all in view'}</button><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Quality report</button>{selectedIds.size ? <button className="secondary" disabled={queueBusy} onClick={openPricingReview}><DollarSign size={16}/> Find fair value</button> : null}</div></details>
+          </div>
         </div>
         {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
@@ -2014,17 +2011,15 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className="panelHeader"><div><h2>{workspaceView === 'Attention' ? 'Needs Attention' : `${workspaceView} Listings`}</h2><p>{listings === undefined ? 'Loading Convex data...' : `${filtered.length} listing${filtered.length === 1 ? '' : 's'} in this view`}</p></div><button className="secondary" onClick={onAddOtherItem}><Plus size={16}/> Add Item</button></div>
         {listings === undefined ? <p className="panelMessage">Loading listings...</p> : filtered.length === 0 ? <div className="empty"><h2>No listings found</h2><p>Create a draft from an item in Inventory, then track it through sale.</p></div> : (
           <div className="tableWrap">
-            <table>
-              <thead><tr><th className="selectColumn">{workspaceView === 'Queue' ? <input type="checkbox" aria-label="Select all eligible listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/> : null}</th><th>Platform</th><th>Title</th><th>Queue</th><th>Status</th><th>Price</th><th>Location</th><th>Action</th></tr></thead>
+            <table className="listingLifecycleTable">
+              <thead><tr><th className="selectColumn">{workspaceView === 'Queue' ? <input type="checkbox" aria-label="Select all eligible listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/> : null}</th><th>Item</th><th>Readiness</th><th>Price</th><th>Location</th><th>Action</th></tr></thead>
               <tbody>{filtered.map((listing) => (
                 <tr key={listing._id}>
                   <td className="selectColumn">{workspaceView === 'Queue' && listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <input type="checkbox" aria-label={`Select ${listing.title}`} checked={selectedIds.has(listing._id)} onChange={() => toggleSelected(listing._id)}/> : null}</td>
-                  <td><span className="consoleTag">{listing.platform}</span></td>
-                  <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
-                  <td><div className="queueQualityLine"><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
-                  <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</td>
-                  <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
-                  <td>{listing.storageLocation || ''}</td>
+                  <td className="listingIdentityCell"><div className="listingIdentityHeader"><span className="consoleTag">{listing.platform}</span><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span></div><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
+                  <td className="listingStateCell"><div className="queueQualityLine"><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</td>
+                  <td className="valueCell listingPriceCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
+                  <td className="listingLocationCell">{listing.storageLocation || <span className="mutedValue">—</span>}</td>
                   <td className="tableActionsCell"><div className="rowActions simplifiedRowActions">
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="rowPrimaryAction ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => publishToEbay(listing)}><Rocket size={15}/> Publish</button> : listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="rowPrimaryAction ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => sendToEbay(listing)}><CloudUpload size={15}/> Stage</button> : listing.status === 'Active' && listing.platform === 'eBay' && listing.externalListingId ? <button className="rowPrimaryAction ebayRepriceButton" disabled={repriceBusy} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={15}/> Price</button> : listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '') ? <button className="rowPrimaryAction fulfillmentButton" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/> Ship</button> : listing.status === 'Sold' ? <button className="rowPrimaryAction saleCloseButton" onClick={() => openSaleEditor(listing)}><DollarSign size={15}/> Sale</button> : <button className="rowPrimaryAction fastReviewRowButton" onClick={() => openFastReview(listing)}><WandSparkles size={15}/> Review</button>}
                     <details className="rowActionMenu"><summary aria-label={`More actions for ${listing.title}`} title="More actions"><MoreHorizontal size={17}/></summary><div>
@@ -2230,17 +2225,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <nav className="listingEditorSteps" aria-label="Listing editor sections">
             {LISTING_EDITOR_STEPS.map((step, index) => <button type="button" key={step.id} className={editorStep === step.id ? 'active' : 'secondary'} onClick={() => setEditorStep(step.id)}><span>{index + 1}</span>{step.label}</button>)}
           </nav>
-          <div className="listingReadinessBar">
-            <span className={editing.title.trim() ? 'ready' : 'missing'}>{editing.title.trim() ? 'Title ready' : 'Title needed'}</span>
-            <span className={editing.ebayCategoryId ? 'ready' : 'missing'}>{editing.ebayCategoryId ? 'Category routed' : 'Check category'}</span>
-            <span className={editing.fulfillmentPolicyId || ebaySettings.fulfillmentPolicyId ? 'ready' : 'missing'}>{editing.fulfillmentPolicyId || ebaySettings.fulfillmentPolicyId ? 'Shipping set' : 'Shipping needed'}</span>
-            <span className={editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}>{editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'Image ready' : 'Image needed' : editing.hasActualPhoto ? 'Photos ready' : 'Photo needed'}</span>
-            <span className={(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'ready' : 'missing'}>{(editing.currentPrice ?? editing.listedPrice ?? 0) > 0 ? 'Price ready' : 'Price needed'}</span>
-          </div>
           {editing.platform === 'eBay' && editing.status === 'Active' && editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with FlipTracker API:</strong> eBay's app and Seller Hub cannot revise this listing. Make changes here and use Save &amp; Update eBay. Use End Listing or Record Sale for status changes.</p> : null}
           {editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId && !editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with eBay app / Seller Hub:</strong> FlipTracker reads the live item first and preserves its eBay-managed values before updating the fields reviewed here.</p> : null}
           <div className="formGrid listingFactoryForm">
-            <div className="span2 listingReadinessPanelWrap"><ListingReadinessPanel issues={editingReadinessIssues} quality={editingQuality} onNavigate={setEditorStep}/></div>
+            <div className="span2 listingReadinessPanelWrap"><ListingReadinessPanel issues={editingReadinessIssues} quality={editingQuality} onNavigate={(step) => setEditorStep(compactEditorStep(step))}/></div>
             {editorStep === 'details' ? <>
             <label>Platform<select value={editing.platform} onChange={(event) => patchEditing({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
             <label>Status<select value={editing.status} disabled={editing.platform === 'eBay' && editing.status === 'Active' && Boolean(editing.externalListingId)} onChange={(event) => patchEditing({ status: event.target.value })}>{STATUSES.map((value) => <option key={value}>{value}</option>)}</select></label>
@@ -2252,7 +2240,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
             <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
             </> : null}
-            {editorStep === 'category' ? <>
+            {editorStep === 'details' ? <>
             <div className="categoryAutoRoute span2"><Tags size={20}/><div><strong>Automatic category</strong><span>{editing.category || editing.assetType || 'eBay will use the item type and product identifier'}</span><small>{editing.ebayCategoryId ? `Leaf category ${editing.ebayCategoryId}` : editing.assetBarcode ? `Routed from ${editing.assetBarcode}` : 'Confirm an exception below only when the automatic category is not right.'}</small></div></div>
             <label className="span2">Category Route<select value={selectedCategoryRoute(editing)} onChange={(event) => selectListingCategory(event.target.value)}><option value="auto">Automatic for this item</option>{EBAY_CATEGORY_CHOICES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}{choice.requiresLeafSelection ? ' — choose leaf category next' : ''}</option>)}</select><small>Books, movies, games, CDs, and cards route automatically. Clothing and general merchandise need a more specific leaf category.</small></label>
             <details className="advancedListingOptions span2"><summary>Choose a different eBay category</summary><div className="advancedListingBody"><EbayCategoryFinder query={[editing.title, editing.assetType, editing.mediaFormat].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => patchEditing({ category: suggestion.categoryPath, ebayCategoryId: suggestion.categoryId })}/></div></details>
@@ -2318,18 +2306,18 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <label className="span2">Editable Description<textarea value={editing.description || ''} onChange={(event) => patchEditing({ description: event.target.value })}/></label>
             <label className="span2">Internal Listing Notes<textarea value={editing.notes || ''} onChange={(event) => patchEditing({ notes: event.target.value })}/></label>
             <div className="formSection span2"><h3>Price History</h3><PriceHistory listingId={editing._id}/></div>
-            </> : null}
-            {editorStep === 'preview' ? <div className="span2"><EbayPayloadPreview listing={{
+            <details className="advancedListingOptions span2 payloadReview" open><summary>Review the exact eBay payload</summary><div className="advancedListingBody"><EbayPayloadPreview listing={{
               ...editing,
               paymentPolicyId: ebaySettings.paymentPolicyId,
               returnPolicyId: ebaySettings.returnPolicyId,
               inventoryLocationKey: ebaySettings.merchantLocationKey,
               photoUrls: [editing.photoUrl, editing.ebayImageUrl].filter(Boolean),
-            }}/></div> : null}
+            }}/></div></details>
+            </> : null}
           </div>
-          {editorStep === 'preview' ? <section className="listingActivity"><div><strong>Listing activity</strong><span>FlipTracker and eBay lifecycle changes</span></div>{listingActivity === undefined ? <p>Loading activity...</p> : listingActivity.length ? <ol>{listingActivity.slice(0, 8).map((event) => <li key={event._id}><span>{event.message || event.eventType}</span><small>{event.source} · {new Date(event.createdAt).toLocaleString()}</small></li>)}</ol> : <p>No activity has been recorded for this older listing yet.</p>}</section> : null}
+          {editorStep === 'price' ? <details className="listingActivity"><summary>Listing activity</summary><div><strong>FlipTracker and eBay lifecycle changes</strong></div>{listingActivity === undefined ? <p>Loading activity...</p> : listingActivity.length ? <ol>{listingActivity.slice(0, 8).map((event) => <li key={event._id}><span>{event.message || event.eventType}</span><small>{event.source} · {new Date(event.createdAt).toLocaleString()}</small></li>)}</ol> : <p>No activity has been recorded for this older listing yet.</p>}</details> : null}
           {listingSaveError ? <p className="formError listingSaveError">{listingSaveError}</p> : null}
-          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'preview' ? <button disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button disabled={listingSaveBusy} onClick={save}><Save size={16}/> {listingSaveBusy ? 'Updating...' : exceptionWorkflow ? 'Save & Next' : editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId ? 'Save & Update eBay' : 'Save Listing'}</button>}</div></div>
+          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => { setEditing(null); setExceptionWorkflow(false); }}>Cancel</button><div className="actions">{editorStep !== 'details' ? <button className="secondary" disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.max(0, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) - 1)].id)}>Back</button> : null}{editorStep !== 'price' ? <button disabled={listingSaveBusy} onClick={() => setEditorStep(LISTING_EDITOR_STEPS[Math.min(LISTING_EDITOR_STEPS.length - 1, LISTING_EDITOR_STEPS.findIndex((step) => step.id === editorStep) + 1)].id)}>Continue</button> : <button disabled={listingSaveBusy} onClick={save}><Save size={16}/> {listingSaveBusy ? 'Updating...' : exceptionWorkflow ? 'Save & Next' : editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId ? 'Save & Update eBay' : 'Save Listing'}</button>}</div></div>
         </section></div>
       ) : null}
     </>

@@ -58,10 +58,15 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Verify the simplified workspace at desktop and 390px mobile widths without horizontal overflow
 - [x] Add a compact 0-100 quality score covering blockers, title, description, category-aware photos, and estimated profit
 - [x] Add Queue batch validation that separates clean listings from exceptions and can select the clean set
+- [x] Replace overlapping Queue controls with one contextual Fast Review, Fix, Stage, or Publish action
+- [x] Consolidate Queue progress into one compact filter strip and move secondary commands into overflow menus
+- [x] Reduce the full listing editor from five sections to Item & Category, Shipping & Photos, and Review & Publish
+- [x] Render Listings as stable mobile cards with a fixed selected-item action bar
 - [x] Persist scan-to-ready timing when an intake item is first staged with eBay
 - [x] Show completed-batch session time, scan cadence, staged-ready count, and average scan-to-ready time
 - [x] Confirm production reconciliation aligned eBay live and FlipTracker tracked-active totals (43 / 43 on 2026-08-29)
 - [ ] Measure the revised Queue workflow against a real 20-item listing batch and tune any remaining friction
+- [ ] Add a seller session mode that restores USB-scanner focus after Save, Stage, or Publish and opens the next pending item automatically
 
 ## Deferred - Vinted Wardrobe
 
