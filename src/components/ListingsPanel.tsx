@@ -1216,7 +1216,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setEbayNotice('');
     try {
       const result = await syncActiveListings({ adminKey });
-      setEbayNotice(`Active eBay listings synced: ${result.checked} checked, ${result.imported} imported, and ${result.updated} refreshed.`);
+      setEbayNotice(`Active eBay listings synced: ${result.checked} live on eBay, ${result.imported} imported, ${result.updated} refreshed, and ${result.reconciled} moved to reconciliation.`);
       void refreshSellerListingCount();
     } catch (error) {
       setEbayError(error instanceof Error ? error.message : 'Could not sync active eBay listings.');
@@ -1817,14 +1817,14 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         </div></div>
         <div className="listingWorkspaceMetrics" aria-label="Listing summary">
           <div><span>In queue</span><strong>{workspaceCounts.Queue}</strong></div>
-          <div><span>Active</span><strong>{sellerListingSummary?.activeCount ?? workspaceCounts.Active}</strong></div>
+          <div><span>eBay live</span><strong>{sellerListingSummary?.activeCount ?? workspaceCounts.Active}</strong></div>
           <div><span>Sold revenue</span><strong>{stats ? money(stats.soldRevenue) : '-'}</strong></div>
           <div className={workspaceCounts.Attention ? 'attention' : ''}><span>Needs attention</span><strong>{workspaceCounts.Attention}</strong></div>
         </div>
       </section>
 
       <nav className="listingWorkspaceTabs" aria-label="Listing lifecycle views">
-        {(['Queue', 'Active', 'Sold', 'Attention'] as ListingWorkspaceView[]).map((view) => <button key={view} className={workspaceView === view ? 'active' : 'secondary'} onClick={() => { setWorkspaceView(view); setStatus('All'); setQueueType('All'); setSelectedIds(new Set()); }}><span>{view === 'Attention' ? 'Needs Attention' : view}</span><b>{workspaceCounts[view]}</b></button>)}
+        {(['Queue', 'Active', 'Sold', 'Attention'] as ListingWorkspaceView[]).map((view) => <button key={view} className={workspaceView === view ? 'active' : 'secondary'} onClick={() => { setWorkspaceView(view); setStatus('All'); setQueueType('All'); setSelectedIds(new Set()); }}><span>{view === 'Attention' ? 'Needs Attention' : view === 'Active' ? 'Tracked active' : view}</span><b>{workspaceCounts[view]}</b></button>)}
       </nav>
 
       {workspaceView === 'Attention' && todayOperations.length ? <section className={`panel todayOperationsPanel ${todayOperations.length ? 'hasWork' : ''}`}>
@@ -1868,7 +1868,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       {workspaceView === 'Active' ? <section className="panel activeMaintenancePanel">
         <div className="activeMaintenanceHeader"><div><p className="eyebrow">Active inventory</p><h2>Stale Listing Manager</h2><p>Review age-based price changes with a protected profit floor before updating eBay.</p></div><button className="bulkMarkdownButton" disabled={!flipTrackerManagedActiveListings.length} onClick={() => openActiveListingManager()}><Clock3 size={16}/> Review Active Listings</button></div>
         <div className="activeMaintenanceMetrics" aria-label="FlipTracker active listing age">
-          <div><span>Managed Active</span><strong>{flipTrackerManagedActiveListings.length}</strong></div>
+          <div><span>FlipTracker API</span><strong>{flipTrackerManagedActiveListings.length}</strong></div>
           <button onClick={() => openActiveListingManager('gentle-30')}><span>30+ Days</span><strong>{activeAgeCounts.days30}</strong></button>
           <button onClick={() => openActiveListingManager('standard-60')}><span>60+ Days</span><strong>{activeAgeCounts.days60}</strong></button>
           <button onClick={() => openActiveListingManager('clearance-90')}><span>90+ Days</span><strong>{activeAgeCounts.days90}</strong></button>

@@ -1238,6 +1238,92 @@ export const upsertActiveNativeListing = internalMutation({
   },
 });
 
+export const reconcileMissingActiveListings = internalMutation({
+  args: {
+    ownerId: v.optional(v.string()),
+    activeExternalListingIds: v.array(v.string()),
+    syncedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const activeIds = new Set(args.activeExternalListingIds);
+    const candidates = await ctx.db.query("marketplaceListings")
+      .withIndex("by_platform_and_status", (q) => q.eq("platform", "eBay").eq("status", "Active"))
+      .collect();
+    const ownedCandidates = candidates.filter((listing) => !args.ownerId || listing.ownerId === args.ownerId);
+    const candidatesByExternalId = new Map<string, typeof ownedCandidates>();
+    for (const listing of ownedCandidates) {
+      if (!listing.externalListingId) continue;
+      const matches = candidatesByExternalId.get(listing.externalListingId) ?? [];
+      matches.push(listing);
+      candidatesByExternalId.set(listing.externalListingId, matches);
+    }
+    let reconciled = 0;
+    for (const listing of ownedCandidates.filter((candidate) => !candidate.externalListingId)) {
+      const message = "Marked active in FlipTracker but missing an eBay item ID. Link or close this record.";
+      await ctx.db.patch(listing._id, {
+        status: "Unlinked",
+        ebayDraftStatus: "Active record missing eBay item ID",
+        ebayLastError: message,
+        ebayLastSyncedAt: args.syncedAt,
+        updatedAt: args.syncedAt,
+      });
+      await ctx.db.insert("listingEvents", {
+        ownerId: listing.ownerId,
+        listingId: listing._id,
+        assetId: listing.assetId,
+        eventType: "status_changed",
+        source: "eBay active listing sync",
+        fromStatus: "Active",
+        toStatus: "Unlinked",
+        message,
+        createdAt: args.syncedAt,
+      });
+      reconciled += 1;
+    }
+    for (const [externalListingId, matches] of candidatesByExternalId) {
+      const ordered = [...matches].sort((a, b) => (
+        Number(Boolean(b.ebayOfferId)) - Number(Boolean(a.ebayOfferId))
+        || (b.ebayLastSyncedAt ?? b.updatedAt) - (a.ebayLastSyncedAt ?? a.updatedAt)
+      ));
+      const changes = activeIds.has(externalListingId)
+        ? ordered.slice(1).map((listing) => ({
+          listing,
+          status: "Duplicate",
+          draftStatus: "Duplicate eBay item ID - reconcile",
+          message: `Another FlipTracker record tracks active eBay item ${externalListingId}. Review and remove the duplicate.`,
+        }))
+        : ordered.map((listing) => ({
+          listing,
+          status: "Ended",
+          draftStatus: "Not active on eBay - reconcile",
+          message: "Not found in the latest complete eBay active-listing sync. Confirm whether it sold or ended.",
+        }));
+      for (const change of changes) {
+        await ctx.db.patch(change.listing._id, {
+          status: change.status,
+          ebayDraftStatus: change.draftStatus,
+          ebayLastError: change.message,
+          ebayLastSyncedAt: args.syncedAt,
+          updatedAt: args.syncedAt,
+        });
+        await ctx.db.insert("listingEvents", {
+          ownerId: change.listing.ownerId,
+          listingId: change.listing._id,
+          assetId: change.listing.assetId,
+          eventType: "status_changed",
+          source: "eBay active listing sync",
+          fromStatus: "Active",
+          toStatus: change.status,
+          message: change.message,
+          createdAt: args.syncedAt,
+        });
+        reconciled += 1;
+      }
+    }
+    return { reconciled };
+  },
+});
+
 export const getSellerListingSummary = action({
   args: { adminKey: v.string() },
   handler: async (ctx, args): Promise<SellerListingSummary> => {
@@ -1279,7 +1365,7 @@ export const getSellerListingSummary = action({
 
 export const syncActiveListings = action({
   args: { adminKey: v.string() },
-  handler: async (ctx, args): Promise<{ checked: number; imported: number; updated: number }> => {
+  handler: async (ctx, args): Promise<{ checked: number; imported: number; updated: number; reconciled: number }> => {
     requireAdminKey(args.adminKey);
     try {
       const ownerId = await currentOwnerId(ctx);
@@ -1289,6 +1375,7 @@ export const syncActiveListings = action({
       let checked = 0;
       let imported = 0;
       let updated = 0;
+      const activeExternalListingIds: string[] = [];
       do {
         const response = await tradingApiFetch(accessToken, "GetMyeBaySelling", `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -1311,6 +1398,7 @@ export const syncActiveListings = action({
           const title = String(item.Title ?? "").trim();
           if (!/^\d+$/.test(externalListingId) || !title) continue;
           checked += 1;
+          activeExternalListingIds.push(externalListingId);
           const price = parsedAmount(item.SellingStatus?.CurrentPrice ?? item.StartPrice);
           const listedDate = String(item.ListingDetails?.StartTime ?? "").slice(0, 10) || undefined;
           const listingUrl = String(item.ListingDetails?.ViewItemURL ?? `${environment() === "production" ? "https://www.ebay.com" : "https://www.sandbox.ebay.com"}/itm/${externalListingId}`);
@@ -1331,7 +1419,18 @@ export const syncActiveListings = action({
         }
         pageNumber += 1;
       } while (pageNumber <= totalPages && pageNumber <= 25);
-      return { checked, imported, updated };
+      let reconciled = 0;
+      // Only reconcile after every page was read. This prevents a partial response
+      // or the safety page cap from incorrectly ending a valid local listing.
+      if (pageNumber > totalPages) {
+        const result = await ctx.runMutation(internal.ebay.reconcileMissingActiveListings, {
+          ownerId,
+          activeExternalListingIds,
+          syncedAt: Date.now(),
+        });
+        reconciled = result.reconciled;
+      }
+      return { checked, imported, updated, reconciled };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown eBay error.";
       throw new ConvexError(`eBay active-listing sync failed: ${message}`);
