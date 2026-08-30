@@ -30,6 +30,16 @@ export const list = query({
           saved: items.filter((item) => item.status === "Saved").length,
           review: items.filter((item) => item.status === "Review").length,
           drafts: items.filter((item) => Boolean(item.listingId)).length,
+          ready: items.filter((item) => Boolean(item.readyAt)).length,
+        },
+        timing: {
+          elapsedMs: Math.max(0, (batch.completedAt ?? Date.now()) - batch.startedAt),
+          averageScanMs: items.length > 1
+            ? Math.max(0, Math.max(...items.map((item) => item.createdAt)) - Math.min(...items.map((item) => item.createdAt))) / (items.length - 1)
+            : undefined,
+          averageScanToReadyMs: items.some((item) => item.readyAt)
+            ? items.filter((item) => item.readyAt).reduce((total, item) => total + (item.readyAt! - item.createdAt), 0) / items.filter((item) => item.readyAt).length
+            : undefined,
         },
       };
     }));

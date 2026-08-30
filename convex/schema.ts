@@ -53,6 +53,7 @@ export default defineSchema({
     sku: v.string(),
     copyNumber: v.number(),
     message: v.optional(v.string()),
+    readyAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

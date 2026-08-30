@@ -15,6 +15,7 @@ import { ebaySpecificsStepForError, readableActionError } from '../utils/actionE
 import { assessMarkdownListing, isFlipTrackerManagedActiveListing, listingAgeDays } from '../utils/listingBulkMarkdown';
 import { buildTodayOperations } from '../utils/todayOperations';
 import { listingOperationsIssue, shouldArchiveSaleByDefault } from '../utils/listingOperations';
+import { applySafeSpecificDefaults, assessListingQuality, photoChecklistFor } from '../utils/listingQuality';
 import {
   EBAY_CATEGORY_CHOICES,
   EBAY_SHIPPING_PROFILES,
@@ -106,6 +107,7 @@ type Listing = {
   storageLocation?: string;
   photoUrl?: string;
   hasActualPhoto?: boolean;
+  actualPhotoCount?: number;
   hasCatalogIdentifier?: boolean;
   completeness?: string;
 };
@@ -472,10 +474,11 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [bulkMarkdownBusy, setBulkMarkdownBusy] = useState(false);
   const [bulkMarkdownProgress, setBulkMarkdownProgress] = useState('');
   const [bulkMarkdownError, setBulkMarkdownError] = useState('');
+  const [bulkValidationOpen, setBulkValidationOpen] = useState(false);
   const [listingSaveBusy, setListingSaveBusy] = useState(false);
   const [listingSaveError, setListingSaveError] = useState('');
   const markEditingPhotoReady = useCallback(() => {
-    setEditing((current) => current && !current.hasActualPhoto ? { ...current, hasActualPhoto: true } : current);
+    setEditing((current) => current ? { ...current, hasActualPhoto: true, actualPhotoCount: (current.actualPhotoCount || 0) + 1 } : current);
   }, []);
   const [query, setQuery] = useState('');
   const [workspaceView, setWorkspaceView] = useState<ListingWorkspaceView>('Queue');
@@ -508,10 +511,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !templatesOpen && !fulfillmentEditing && !ebayErrorListing) return;
+    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !bulkValidationOpen && !templatesOpen && !fulfillmentEditing && !ebayErrorListing) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkMarkdownOpen, ebayErrorListing, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, templatesOpen]);
+  }, [bulkMarkdownOpen, bulkValidationOpen, ebayErrorListing, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, templatesOpen]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -616,6 +619,13 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       return [listing._id, validateListingReadiness(listingReadinessInput(prepared), sellerReadinessDefaults)];
     }),
   ), [ebaySetup?.policies.fulfillment, listingReadinessInput, listings, sellerReadinessDefaults]);
+  const qualityByListingId = useMemo(() => new Map(
+    (listings || []).map((listing) => [listing._id, assessListingQuality(
+      listingWithWorkflowDefaults(listing),
+      readinessByListingId.get(listing._id) || [],
+      listingSpeedPresetFor(listing)?.feePercent ?? 15,
+    )]),
+  ), [listings, readinessByListingId]);
   const blockingIssuesFor = useCallback((listing: Listing) => (
     readinessByListingId.get(listing._id) || validateListingReadiness(listingReadinessInput(listing), sellerReadinessDefaults)
   ).filter((issue) => issue.blocking), [listingReadinessInput, readinessByListingId, sellerReadinessDefaults]);
@@ -627,6 +637,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   )), [selectedListings]);
   const selectedBlockedCount = selectedListings.filter((listing) => (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking)).length;
   const editingReadinessIssues = useMemo(() => editing && editing.status !== 'Sold' ? validateListingReadiness({ ...listingReadinessInput(editing), missingCategoryAspects: taxonomyMissingAspects }, sellerReadinessDefaults) : [], [editing, listingReadinessInput, sellerReadinessDefaults, taxonomyMissingAspects]);
+  const editingQuality = useMemo(() => editing ? assessListingQuality(editing, editingReadinessIssues, listingSpeedPresetFor(editing)?.feePercent ?? 15) : undefined, [editing, editingReadinessIssues]);
   const fastReviewIssues = useMemo(() => fastReviewing ? validateListingReadiness(listingReadinessInput(fastReviewing), sellerReadinessDefaults) : [], [fastReviewing, listingReadinessInput, sellerReadinessDefaults]);
   const fastReviewNet = useMemo(() => {
     if (!fastReviewing) return 0;
@@ -680,6 +691,16 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       staged: draftRows.filter((listing) => Boolean(listing.ebayOfferId)).length,
     };
   }, [listings, readinessByListingId]);
+  const bulkValidationListings = useMemo(() => {
+    const selectedQueueListings = selectedListings.filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status));
+    return selectedQueueListings.length ? selectedQueueListings : queueListings;
+  }, [queueListings, selectedListings]);
+  const bulkValidationRows = useMemo(() => bulkValidationListings.map((listing) => ({
+    listing,
+    quality: qualityByListingId.get(listing._id)!,
+    blockers: (readinessByListingId.get(listing._id) || []).filter((issue) => issue.blocking),
+  })), [bulkValidationListings, qualityByListingId, readinessByListingId]);
+  const bulkValidationClean = bulkValidationRows.filter((row) => row.blockers.length === 0);
   const activeListingTarget = Math.max(1, Math.round(Number(ebaySettings.activeListingTarget) || 200));
   const projectedEbayListings = (sellerListingSummary?.activeCount ?? 0) + (sellerListingSummary?.scheduledCount ?? 0);
   const roomToListingTarget = Math.max(0, activeListingTarget - projectedEbayListings);
@@ -733,7 +754,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     const withPreset = applyListingSpeedPreset(listing, loadListingSpeedPresets());
     const presetProfile = EBAY_SHIPPING_PROFILES.find((profile) => profile.key === withPreset.shippingPreset || profile.label === withPreset.shippingPreset) || shippingProfile;
     const presetPolicy = withPreset.fulfillmentPolicyId || findSuggestedShippingPolicy(ebaySetup?.policies.fulfillment || [], presetProfile)?.id || suggestedPolicy?.id;
-    return {
+    return applySafeSpecificDefaults({
       ...withPreset,
       language: withPreset.language || itemSpecificValue(withPreset.itemSpecifics, 'Language') || 'English',
       bookTitle: (withPreset.bookTitle || itemSpecificValue(withPreset.itemSpecifics, 'Book Title') || (isBookListing(withPreset) ? withPreset.assetTitle : undefined))?.slice(0, 65),
@@ -748,7 +769,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       packageLengthIn: withPreset.packageLengthIn ?? presetProfile.dimensions.length,
       packageWidthIn: withPreset.packageWidthIn ?? presetProfile.dimensions.width,
       packageHeightIn: withPreset.packageHeightIn ?? presetProfile.dimensions.height,
-    } satisfies Listing;
+    } satisfies Listing);
   }
 
   function openListingEditor(listing: Listing, initialStep: ListingEditorStep = 'details', fromExceptionQueue = false) {
@@ -1859,6 +1880,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className={`actions queueActions ${selectedIds.size ? 'hasSelection' : ''}`}>
           <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={() => openFastReview()}><WandSparkles size={16}/> Fast Review</button>
           <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear Selection' : 'Select All in View'}</button>
+          <button className="secondary" disabled={!queueListings.length || queueBusy} onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Validate Batch</button>
           {selectedIds.size ? <><span className="selectionCount">{selectedIds.size} selected</span><button disabled={queueBusy} onClick={openPricingReview}><DollarSign size={16}/> {queueBusy ? 'Checking eBay...' : 'Find Fair Value'}</button><button className="ebaySendButton" disabled={!selectedReadyForEbay.length || queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage (${selectedReadyForEbay.length})`}</button><button className="ebayPublishButton" disabled={!selectedStagedForEbay.length || queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish (${selectedStagedForEbay.length})`}</button></> : null}
         </div>
         {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
@@ -1999,7 +2021,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                   <td className="selectColumn">{workspaceView === 'Queue' && listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <input type="checkbox" aria-label={`Select ${listing.title}`} checked={selectedIds.has(listing._id)} onChange={() => toggleSelected(listing._id)}/> : null}</td>
                   <td><span className="consoleTag">{listing.platform}</span></td>
                   <td><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
-                  <td><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
+                  <td><div className="queueQualityLine"><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}</td>
                   <td><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</td>
                   <td className="valueCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td>{listing.storageLocation || ''}</td>
@@ -2020,6 +2042,13 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           </div>
         )}
       </section>
+
+      {bulkValidationOpen ? <div className="modalBackdrop"><section className="modal bulkValidationModal" role="dialog" aria-modal="true" aria-labelledby="bulk-validation-title">
+        <header className="modalHeader"><div><p className="eyebrow">Batch quality review</p><h2 id="bulk-validation-title">{bulkValidationRows.length} listing{bulkValidationRows.length === 1 ? '' : 's'} validated</h2><p>{selectedListings.length ? 'Current Queue selection' : 'Current Queue view'}</p></div><button className="iconButton secondary" aria-label="Close batch validation" onClick={() => setBulkValidationOpen(false)}><X size={18}/></button></header>
+        <div className="bulkValidationSummary"><div className="ready"><span>Clean</span><strong>{bulkValidationClean.length}</strong></div><div className="attention"><span>Exceptions</span><strong>{bulkValidationRows.length - bulkValidationClean.length}</strong></div><div><span>Average quality</span><strong>{bulkValidationRows.length ? Math.round(bulkValidationRows.reduce((total, row) => total + row.quality.score, 0) / bulkValidationRows.length) : 0}</strong></div><div><span>Recommended photos</span><strong>{bulkValidationRows.reduce((total, row) => total + Math.max(0, row.quality.recommendedPhotoCount - (row.listing.actualPhotoCount || 0)), 0)}</strong></div></div>
+        <div className="bulkValidationList">{bulkValidationRows.map(({ listing, quality, blockers }) => <button key={listing._id} className={blockers.length ? 'exception' : 'clean'} onClick={() => { setBulkValidationOpen(false); openListingEditor(listing, blockers[0]?.step || 'preview', Boolean(blockers.length)); }}><span className={`qualityScore ${quality.grade.toLowerCase().replace(/\s+/g, '-')}`}><Gauge size={14}/>{quality.score}</span><span><strong>{listing.title}</strong><small>{quality.grade} · {listing.actualPhotoCount || 0}/{quality.recommendedPhotoCount} photos</small></span><span>{blockers.length ? blockers.slice(0, 2).map((issue) => issue.message).join(' ') : quality.checks.filter((check) => check.status === 'warning').slice(0, 2).map((check) => check.message).join(' ') || 'Ready for staging review.'}</span><b>{blockers.length ? 'Fix' : 'Review'}</b></button>)}</div>
+        <div className="modalActions"><button className="secondary" onClick={() => setBulkValidationOpen(false)}>Close</button><button disabled={!bulkValidationClean.length} onClick={() => { setSelectedIds(new Set(bulkValidationClean.map((row) => row.listing._id))); setBulkValidationOpen(false); }}><CheckCircle2 size={16}/> Select {bulkValidationClean.length} Clean</button></div>
+      </section></div> : null}
 
       {ebayErrorListing ? <div className="modalBackdrop"><section className="modal ebayErrorModal" role="dialog" aria-modal="true" aria-labelledby="ebay-error-title">
         <header className="modalHeader"><div><p className="eyebrow">eBay listing issue</p><h2 id="ebay-error-title">{ebayErrorListing.title}</h2></div><button className="iconButton secondary" aria-label="Close eBay error" onClick={() => setEbayErrorListing(null)}><X size={18}/></button></header>
@@ -2211,7 +2240,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           {editing.platform === 'eBay' && editing.status === 'Active' && editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with FlipTracker API:</strong> eBay's app and Seller Hub cannot revise this listing. Make changes here and use Save &amp; Update eBay. Use End Listing or Record Sale for status changes.</p> : null}
           {editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId && !editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with eBay app / Seller Hub:</strong> FlipTracker reads the live item first and preserves its eBay-managed values before updating the fields reviewed here.</p> : null}
           <div className="formGrid listingFactoryForm">
-            <div className="span2 listingReadinessPanelWrap"><ListingReadinessPanel issues={editingReadinessIssues} onNavigate={setEditorStep}/></div>
+            <div className="span2 listingReadinessPanelWrap"><ListingReadinessPanel issues={editingReadinessIssues} quality={editingQuality} onNavigate={setEditorStep}/></div>
             {editorStep === 'details' ? <>
             <label>Platform<select value={editing.platform} onChange={(event) => patchEditing({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>
             <label>Status<select value={editing.status} disabled={editing.platform === 'eBay' && editing.status === 'Active' && Boolean(editing.externalListingId)} onChange={(event) => patchEditing({ status: event.target.value })}>{STATUSES.map((value) => <option key={value}>{value}</option>)}</select></label>
@@ -2266,6 +2295,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               </div></details>
               <label>eBay Image Source<select value={editing.imageMode || 'Actual Item Photo'} onChange={(event) => patchEditing({ imageMode: event.target.value })}><option>Actual Item Photo</option><option disabled={!canUseCatalogImage(editing)}>eBay Catalog</option></select><small>{isBookListing(editing) && editing.photoUrl ? 'The metadata cover can be used as the stock image for this book.' : isNewCondition(editing.condition) ? 'Catalog matching uses the UPC/EAN/ISBN.' : 'Used discs remain flagged for an actual photo.'}</small></label>
               <div className={`photoReadiness ${editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}`}><Camera size={18}/><div><strong>{editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? isBookListing(editing) ? 'Stock book cover ready' : 'Catalog identifier ready' : 'Catalog image unavailable' : editing.hasActualPhoto ? 'Actual photo ready' : 'Actual photo required'}</strong><small>{editing.ebayImageSource ? `Last eBay image: ${editing.ebayImageSource}` : 'Photo selection comes from the linked inventory item.'}</small></div></div>
+              <div className="photoChecklist span2"><div><strong>{photoChecklistFor(editing).recommendedCount} recommended photos</strong><small>{editing.actualPhotoCount || 0} actual item photos saved</small></div><ul>{photoChecklistFor(editing).shots.map((shot, index) => <li key={shot} className={index < (editing.actualPhotoCount || 0) ? 'complete' : ''}>{index < (editing.actualPhotoCount || 0) ? <CheckCircle2 size={14}/> : <Camera size={14}/>} {shot}</li>)}</ul></div>
               <ListingPhotoManager assetId={editing.assetId} title={editing.title} onPhotoAttached={markEditingPhotoReady}/>
             </div></div>
             </> : null}

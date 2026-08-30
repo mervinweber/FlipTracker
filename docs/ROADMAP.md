@@ -5,7 +5,7 @@ FlipTracker should grow deliberately from a focused personal resale tracker into
 ## Current Delivery Sequence
 
 1. `v0.9.4` - daily operations queue, first item-family templates, fulfillment handoff, and profit-first sourcing rules
-2. `v0.9.5` - listing-quality scoring and deeper category-aware templates
+2. `v0.9.5` - listing-quality scoring, category-aware guidance, bulk validation, and measured batch throughput (implemented; real 20-item tuning remains)
 3. `v0.9.6` - in-app label purchase, package economics, and tracking synchronization
 4. `v0.9.7` - throughput metrics and session planning
 5. `v0.10` - specialized card batches and deeper vertical listing intelligence
@@ -254,11 +254,11 @@ Goal: reduce touches per item when scanning a stack.
 Goal: show exactly what eBay will receive before the seller commits.
 
 - [x] Add an eBay payload preview for title, category, condition, specifics, description, photos, price, quantity, package, and policies
-- [ ] Add title-length and keyword guidance without silently rewriting seller text
+- [x] Add title-length and keyword guidance without silently rewriting seller text
 - [ ] Score required/recommended item-specific coverage by category
-- [ ] Add photo order, rotation, missing-angle, and low-resolution checks
+- [x] Add category-aware photo-count and missing-angle guidance; rotation is already available (low-resolution checks remain)
 - [ ] Add a fee/profit preview using clearly labeled estimates and seller-configurable assumptions
-- [ ] Support bulk validation with successful rows separated from exceptions
+- [x] Support bulk validation with successful rows separated from exceptions
 - [ ] Track eBay draft/staged age and warn before records become stale
 
 ## v0.6.4 Pricing And Offers Workspace
@@ -370,10 +370,10 @@ Goal: replace navigation between separate modules with one prioritized seller wo
 Goal: reduce repeated decisions while keeping seller review authoritative.
 
 - [x] Save browser-local item-family templates for condition, completeness, description, shipping, photo source, and pricing assumptions
-- [ ] Add category-specific aspect bundles and explicit photo checklists to templates
-- [ ] Score title length, required/recommended specifics, photo coverage, package readiness, and estimated profit
-- [ ] Add compact warnings and recommended fixes without silently rewriting seller data
-- [ ] Add bulk validation with clean rows separated from an exception queue
+- [x] Add category-specific aspect bundles and explicit photo checklists to templates
+- [x] Score title length, required/recommended specifics, photo coverage, package readiness, and estimated profit
+- [x] Add compact warnings and recommended fixes without silently rewriting seller data
+- [x] Add bulk validation with clean rows separated from an exception queue
 
 ## v0.9.6 Fulfillment
 

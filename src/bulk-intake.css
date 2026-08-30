@@ -62,6 +62,12 @@
   border-color: #1f8a62;
 }
 
+.batchTimingGrid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; margin-bottom:14px; }
+.batchTimingGrid > div { min-width:0; padding:11px 12px; border:1px solid var(--border); border-radius:7px; background:var(--surface-2); }
+.batchTimingGrid span, .batchTimingGrid strong { display:block; }
+.batchTimingGrid span { color:var(--muted); font-size:11px; }
+.batchTimingGrid strong { margin-top:3px; color:#ccfbf1; font-size:18px; }
+
 .batchNextActions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -90,5 +96,6 @@
 }
 
 @media (max-width: 720px) {
+  .batchTimingGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .batchNextActions { grid-template-columns: 1fr; }
 }

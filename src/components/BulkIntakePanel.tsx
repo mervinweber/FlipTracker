@@ -65,6 +65,15 @@ function optionalNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function formatDuration(value?: number) {
+  if (value === undefined || !Number.isFinite(value)) return '—';
+  const seconds = Math.max(0, Math.round(value / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes < 60 ? `${minutes}m ${remainder}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
 async function imageDataUrl(file: File) {
   const bitmap = await createImageBitmap(file);
   const maxEdge = 1600;
@@ -540,6 +549,7 @@ export default function BulkIntakePanel() {
 
       {selectedBatch?.status === 'Completed' ? <section className="panel batchCompletionPanel">
         <div className="panelHeader"><div><p className="eyebrow">Batch complete</p><h2>{selectedBatch.name}</h2><p>{savedCount} items identified, {draftCount} listing drafts created, and {reviewCount} lookup exception{reviewCount === 1 ? '' : 's'} remain.</p></div><span className="badge sold"><CheckCircle2 size={14}/> Scanning finished</span></div>
+        <div className="batchTimingGrid" aria-label="Batch throughput"><div><span>Session time</span><strong>{formatDuration(selectedBatch.timing.elapsedMs)}</strong></div><div><span>Average between scans</span><strong>{formatDuration(selectedBatch.timing.averageScanMs)}</strong></div><div><span>Staged ready</span><strong>{selectedBatch.counts.ready} / {selectedBatch.counts.total}</strong></div><div><span>Average scan to ready</span><strong>{formatDuration(selectedBatch.timing.averageScanToReadyMs)}</strong></div></div>
         <div className="batchNextActions">
           <button onClick={() => { window.location.hash = '#photos'; }}><Images size={18}/><span><strong>Add item photos</strong><small>Work through drafts that require actual photos.</small></span></button>
           <button onClick={() => { window.location.hash = '#listings'; }}><WandSparkles size={18}/><span><strong>Fast review listings</strong><small>Approve routine details and isolate exceptions.</small></span></button>

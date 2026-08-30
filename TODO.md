@@ -40,10 +40,10 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Make Today actions open the fulfillment, blocker, reconciliation, review, publish, or stale-price workflow directly
 - [x] Add reusable browser-local item-family templates for description, condition, completeness, shipping profile/policy, photo source, and pricing assumptions
 - [x] Add profit-first sourcing rules with seller-defined minimum profit, ROI, liquidity, and maximum-buy calculations
-- [ ] Add listing-quality scoring for title, required/recommended specifics, photo coverage, and estimated profit
+- [x] Add listing-quality scoring for title, required/recommended specifics, photo coverage, and estimated profit
 - [x] Add a first post-sale pick/pack workflow with bin location, package profile, insurance prompt, carrier, tracking, and eBay label handoff
 - [ ] Purchase eBay labels in-app and synchronize tracking without leaving FlipTracker
-- [ ] Add template photo checklists and category-specific item-specific defaults
+- [x] Add template photo checklists and category-specific item-specific defaults
 - [ ] Add card batches that preserve front/back pairing through identify, review, price, and publish
 - [ ] Add throughput metrics for scanned, ready, published, sold, and shipped items per work session
 
@@ -56,6 +56,11 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Collapse verbose eBay API errors into a compact row indicator with tap-open details
 - [x] Keep Seller Connection available in a collapsed settings panel instead of occupying the daily workspace
 - [x] Verify the simplified workspace at desktop and 390px mobile widths without horizontal overflow
+- [x] Add a compact 0-100 quality score covering blockers, title, description, category-aware photos, and estimated profit
+- [x] Add Queue batch validation that separates clean listings from exceptions and can select the clean set
+- [x] Persist scan-to-ready timing when an intake item is first staged with eBay
+- [x] Show completed-batch session time, scan cadence, staged-ready count, and average scan-to-ready time
+- [x] Confirm production reconciliation aligned eBay live and FlipTracker tracked-active totals (43 / 43 on 2026-08-29)
 - [ ] Measure the revised Queue workflow against a real 20-item listing batch and tune any remaining friction
 
 ## Deferred - Vinted Wardrobe
@@ -111,7 +116,7 @@ Prototype snapshot:
 ## Queued After v0.6.1
 
 - [ ] v0.6.2: finish presets, exception retry/undo, completion summary, and throughput metrics (persisted batches and continuous scan mode are complete)
-- [ ] v0.6.3: finish listing-quality scoring, photo checks, fee/profit preview, and bulk validation (exact eBay payload preview is complete)
+- [ ] v0.6.3: finish low-resolution photo checks and fee/profit preview (quality scoring, category photo guidance, bulk validation, and exact eBay payload preview are complete)
 - [ ] v0.6.4: saved comp snapshots, Product Research handoff, profit floors, and stale-price queue
 - [ ] v0.6.5: unmatched eBay operations inbox, reconciliation, safe bulk revise/end/relist, and lifecycle audit
 - [ ] v0.6.6: item-aware shipping recommendations, measured package presets, charge/cost preview, and fulfillment queue

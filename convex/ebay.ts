@@ -741,6 +741,7 @@ export const markDraftCreated = internalMutation({
   },
   handler: async (ctx, args) => {
     const listing = await ctx.db.get(args.listingId);
+    const now = Date.now();
     await ctx.db.patch(args.listingId, {
       sku: args.sku,
       ebayInventorySku: args.sku,
@@ -751,12 +752,17 @@ export const markDraftCreated = internalMutation({
       ebayImageFingerprint: args.imageFingerprint,
       ebayImageSource: args.imageSource,
       ebayDraftStatus: "Staged with eBay",
-      ebayDraftCreatedAt: Date.now(),
+      ebayDraftCreatedAt: now,
       ebayLastError: undefined,
       pricingStatus: "eBay Offer Staged",
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
-    if (listing) await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "staged", source: "eBay Inventory API", message: `Offer ${args.offerId} staged with eBay.`, fromStatus: listing.status, toStatus: listing.status, createdAt: Date.now() });
+    if (listing?.intakeBatchId) {
+      const batchItems = await ctx.db.query("intakeBatchItems").withIndex("by_batchId", (q) => q.eq("batchId", listing.intakeBatchId!)).collect();
+      const batchItem = batchItems.find((item) => item.listingId === listing._id);
+      if (batchItem && !batchItem.readyAt) await ctx.db.patch(batchItem._id, { readyAt: now, updatedAt: now });
+    }
+    if (listing) await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "staged", source: "eBay Inventory API", message: `Offer ${args.offerId} staged with eBay.`, fromStatus: listing.status, toStatus: listing.status, createdAt: now });
   },
 });
 
