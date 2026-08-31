@@ -362,6 +362,32 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .queueCommandBar { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:12px; padding-top:10px; border-top:1px solid var(--border); }
 .queueCommandStatus { min-width:0; color:var(--muted); font-size:12px; font-weight:800; }
 .queueMoreMenu > div { right:0; }
+.sellerSessionBar { display:grid; grid-template-columns:auto auto minmax(230px, 1fr) auto; gap:14px; align-items:center; padding:11px 12px; border:1px solid rgba(20,184,166,.5); border-radius:7px; background:rgba(15,118,110,.1); }
+.sellerSessionBar.paused { border-color:var(--border-strong); background:var(--surface-3); }
+.sellerSessionStatus { display:flex; min-width:155px; align-items:center; gap:9px; }
+.sellerSessionStatus strong, .sellerSessionStatus small { display:block; }
+.sellerSessionStatus strong { font-size:12px; }
+.sellerSessionStatus small { margin-top:2px; color:var(--muted); font-size:11px; }
+.sellerSessionIndicator { width:9px; height:9px; flex:0 0 auto; border-radius:50%; background:#2dd4bf; box-shadow:0 0 0 4px rgba(45,212,191,.12); }
+.sellerSessionBar.paused .sellerSessionIndicator { background:#94a3b8; box-shadow:none; }
+.sellerSessionMetrics { display:flex; gap:11px; color:var(--muted); font-size:11px; white-space:nowrap; }
+.sellerSessionMetrics strong { color:var(--text); font-size:13px; }
+.sellerSessionScanner { display:grid; min-width:0; grid-template-columns:auto minmax(100px, 1fr) auto; align-items:center; overflow:hidden; border:1px solid var(--border-strong); border-radius:6px; background:#020617; }
+.sellerSessionScanner > svg { margin-left:10px; color:#7dd3fc; }
+.sellerSessionScanner input { min-width:0; height:38px; border:0; background:transparent; }
+.sellerSessionScanner input:focus { box-shadow:none; }
+.sellerSessionScanner button { min-height:38px; border:0; border-left:1px solid var(--border-strong); border-radius:0; }
+.sellerSessionActions { display:flex; gap:6px; }
+.sellerSessionActions .iconButton { min-width:38px; min-height:38px; }
+.sellerSessionFinish { color:#fca5a5; }
+.sellerSessionMessage { grid-column:1 / -1; margin:0; color:#cbd5e1; font-size:11px; }
+.sellerSessionSummaryModal { max-width:610px; }
+.sellerSessionSummaryGrid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px; overflow:hidden; margin:16px 0; border:1px solid var(--border); border-radius:7px; background:var(--border); }
+.sellerSessionSummaryGrid > div { padding:15px 12px; background:var(--surface-3); }
+.sellerSessionSummaryGrid span, .sellerSessionSummaryGrid strong { display:block; }
+.sellerSessionSummaryGrid span { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
+.sellerSessionSummaryGrid strong { margin-top:4px; font-size:23px; }
+.sellerSessionSummaryNote { color:var(--muted); }
 .ebaySendButton { background:#0f766e; }
 .selectColumn { width:42px; padding-right:4px; text-align:center; }
 .selectColumn input { width:18px; height:18px; accent-color:var(--primary-strong); }
@@ -1045,6 +1071,10 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 
 @media (max-width: 900px) {
   .batchCompletionGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sellerSessionBar { grid-template-columns:auto 1fr auto; }
+  .sellerSessionMetrics { justify-self:end; }
+  .sellerSessionScanner { grid-column:1 / -1; grid-row:2; }
+  .sellerSessionActions { grid-column:3; grid-row:1; }
 }
 
 @media (max-width: 640px) {
@@ -1058,4 +1088,10 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
   .fastReviewReadiness { align-items: stretch; flex-direction: column; }
   .fastReviewModal .listingFactoryFooter { align-items: stretch; flex-direction: column; }
   .fastReviewModal .listingFactoryFooter .actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .sellerSessionBar { grid-template-columns:minmax(0, 1fr) auto; gap:10px; }
+  .sellerSessionStatus { min-width:0; }
+  .sellerSessionMetrics { grid-column:1 / -1; grid-row:2; justify-self:start; }
+  .sellerSessionScanner { grid-column:1 / -1; grid-row:3; }
+  .sellerSessionActions { grid-column:2; grid-row:1; }
+  .sellerSessionSummaryGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
 }

@@ -362,7 +362,7 @@ Goal: replace navigation between separate modules with one prioritized seller wo
 
 - [x] Combine ready-to-list, listing exceptions, stale inventory, eBay reconciliation, and awaiting-shipment orders
 - [x] Make every queue item open directly at the corrective action instead of a generic detail view
-- [ ] Add session completion counts and elapsed-time metrics
+- [x] Add Queue session completion counts and elapsed-time metrics
 - [x] Preserve the existing per-item batch outcomes so one API failure never blocks the rest of a batch
 
 ## v0.9.5 Templates And Listing Quality
@@ -392,10 +392,11 @@ Goal: remove the pause between items during a real listing batch.
 - [x] Consolidate Queue progress, validation, and bulk actions into one contextual command surface
 - [x] Reduce the listing editor to three seller-facing stages and keep secondary setup out of the daily path
 - [x] Use responsive listing cards and a fixed selected-item command bar on phones
-- [ ] Return focus to USB barcode capture after Save, Stage, or Publish
-- [ ] Open the next pending or exception item automatically without returning to the Listings table
-- [ ] Track completed, staged, and published counts plus elapsed time for the current seller session
-- [ ] Add pause/resume and a compact end-of-session summary
+- [x] Return focus to USB barcode capture after Save, Stage, or Publish
+- [x] Open the next pending or exception item automatically without returning to the Listings table
+- [x] Track reviewed, staged, and published counts plus elapsed time for the current seller session
+- [x] Add pause/resume, refresh persistence, and a compact end-of-session summary
+- [ ] Measure a real 20-item seller session and tune scan cadence, focus recovery, and exception handling
 
 ## v0.10 Card Batches And Vertical Intelligence
 

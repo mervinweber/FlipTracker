@@ -45,7 +45,8 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [ ] Purchase eBay labels in-app and synchronize tracking without leaving FlipTracker
 - [x] Add template photo checklists and category-specific item-specific defaults
 - [ ] Add card batches that preserve front/back pairing through identify, review, price, and publish
-- [ ] Add throughput metrics for scanned, ready, published, sold, and shipped items per work session
+- [x] Add Queue seller-session metrics for reviewed, staged, and published items with elapsed time
+- [ ] Extend session metrics through intake, sold, and shipped events for full-day throughput reporting
 
 ## v0.9.5 Listings Workspace
 
@@ -66,7 +67,8 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Show completed-batch session time, scan cadence, staged-ready count, and average scan-to-ready time
 - [x] Confirm production reconciliation aligned eBay live and FlipTracker tracked-active totals (43 / 43 on 2026-08-29)
 - [ ] Measure the revised Queue workflow against a real 20-item listing batch and tune any remaining friction
-- [ ] Add a seller session mode that restores USB-scanner focus after Save, Stage, or Publish and opens the next pending item automatically
+- [x] Add a persistent seller session mode that restores USB-scanner focus after Save, Stage, or Publish and opens the next pending item automatically
+- [x] Add pause/resume controls and a compact end-of-session summary
 
 ## Deferred - Vinted Wardrobe
 

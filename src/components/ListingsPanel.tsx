@@ -1,6 +1,6 @@
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pencil, Percent, Plus, RefreshCw, Rocket, Save, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -16,6 +16,7 @@ import { assessMarkdownListing, isFlipTrackerManagedActiveListing, listingAgeDay
 import { buildTodayOperations } from '../utils/todayOperations';
 import { listingOperationsIssue, shouldArchiveSaleByDefault } from '../utils/listingOperations';
 import { applySafeSpecificDefaults, assessListingQuality, photoChecklistFor } from '../utils/listingQuality';
+import { clearSellerSession, createSellerSession, formatSellerSessionDuration, loadSellerSession, pauseSellerSession, recordSellerSessionEvent, resumeSellerSession, saveSellerSession, sellerSessionElapsedMs, type SellerSession, type SellerSessionEvent } from '../utils/sellerSession';
 import {
   EBAY_CATEGORY_CHOICES,
   EBAY_SHIPPING_PROFILES,
@@ -439,6 +440,12 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [fastReviewing, setFastReviewing] = useState<Listing | null>(null);
+  const [sellerSession, setSellerSession] = useState<SellerSession | null>(() => loadSellerSession(localStorage));
+  const [sellerSessionSummary, setSellerSessionSummary] = useState<SellerSession | null>(null);
+  const [sellerSessionNow, setSellerSessionNow] = useState(Date.now());
+  const [sellerSessionBarcode, setSellerSessionBarcode] = useState('');
+  const [sellerSessionMessage, setSellerSessionMessage] = useState('');
+  const sellerSessionScanRef = useRef<HTMLInputElement>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [fulfillmentEditing, setFulfillmentEditing] = useState<Listing | null>(null);
   const [ebayErrorListing, setEbayErrorListing] = useState<Listing | null>(null);
@@ -514,10 +521,27 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !bulkValidationOpen && !templatesOpen && !fulfillmentEditing && !ebayErrorListing) return;
+    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !bulkValidationOpen && !templatesOpen && !fulfillmentEditing && !ebayErrorListing && !sellerSessionSummary) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkMarkdownOpen, bulkValidationOpen, ebayErrorListing, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, templatesOpen]);
+  }, [bulkMarkdownOpen, bulkValidationOpen, ebayErrorListing, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, sellerSessionSummary, templatesOpen]);
+
+  useEffect(() => {
+    if (!sellerSession) {
+      clearSellerSession(localStorage);
+      return;
+    }
+    saveSellerSession(sellerSession, localStorage);
+    if (!sellerSession.activeSince) return;
+    const timer = window.setInterval(() => setSellerSessionNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [sellerSession]);
+
+  useEffect(() => {
+    if (!sellerSession?.activeSince || editing || fastReviewing || saleEditing) return;
+    const frame = window.requestAnimationFrame(() => sellerSessionScanRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [editing, fastReviewing, saleEditing, sellerSession?.activeSince]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -695,6 +719,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       staged: draftRows.filter((listing) => Boolean(listing.ebayOfferId)).length,
     };
   }, [listings, readinessByListingId]);
+  const sellerSessionElapsed = sellerSession ? sellerSessionElapsedMs(sellerSession, sellerSessionNow) : 0;
   const bulkValidationListings = useMemo(() => {
     const selectedQueueListings = selectedListings.filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status));
     return selectedQueueListings.length ? selectedQueueListings : queueListings;
@@ -861,6 +886,66 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSaleEditing(null);
     setListingSaveError('');
     setFastReviewing(listingWithWorkflowDefaults(target));
+  }
+
+  function recordSessionEvent(event: SellerSessionEvent, count = 1) {
+    setSellerSession((current) => {
+      if (!current) return current;
+      let next = current;
+      for (let index = 0; index < count; index += 1) next = recordSellerSessionEvent(next, event);
+      return next;
+    });
+  }
+
+  function focusSellerSessionScanner() {
+    if (!sellerSession?.activeSince) return;
+    window.requestAnimationFrame(() => sellerSessionScanRef.current?.focus());
+  }
+
+  function startSellerSession() {
+    const next = createSellerSession();
+    setSellerSession(next);
+    setSellerSessionNow(next.startedAt);
+    setSellerSessionMessage('Session started. Scan a queued item or review the next one.');
+    if (queueListings.length) openFastReview(queueListings[0]);
+  }
+
+  function toggleSellerSessionPause() {
+    if (!sellerSession) return;
+    const now = Date.now();
+    const next = sellerSession.activeSince ? pauseSellerSession(sellerSession, now) : resumeSellerSession(sellerSession, now);
+    setSellerSession(next);
+    setSellerSessionNow(now);
+    setSellerSessionMessage(next.activeSince ? 'Session resumed. Scanner is ready.' : 'Session paused. Your progress is saved.');
+  }
+
+  function finishSellerSession() {
+    if (!sellerSession) return;
+    const finished = pauseSellerSession(sellerSession, Date.now());
+    setSellerSessionSummary(finished);
+    setSellerSession(null);
+    setSellerSessionBarcode('');
+    setSellerSessionMessage('');
+    setFastReviewing(null);
+  }
+
+  function scanSellerSessionBarcode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = sellerSessionBarcode.trim().toLowerCase();
+    if (!value || !sellerSession?.activeSince) return;
+    const match = (listings || []).find((listing) => (
+      listing.platform === 'eBay'
+      && ['Draft', 'Pending'].includes(listing.status)
+      && [listing.assetBarcode, listing.sku].some((candidate) => candidate?.trim().toLowerCase() === value)
+    ));
+    setSellerSessionBarcode('');
+    if (!match) {
+      setSellerSessionMessage(`No queued listing matches ${value}. Use Scan Stack to add a new item.`);
+      window.requestAnimationFrame(() => sellerSessionScanRef.current?.focus());
+      return;
+    }
+    setSellerSessionMessage(`Opened ${match.title}.`);
+    openFastReview(match);
   }
 
   function patchFastReview(patch: Partial<Listing>) {
@@ -1420,6 +1505,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     try {
       const result = await createEbayOffer({ adminKey, listingId: listing._id });
       setEbayNotice(`${result.updated ? 'Updated' : 'Created'} staged eBay offer ${result.offerId} for SKU ${result.sku}. It is not live or visible in Seller Hub Drafts.`);
+      recordSessionEvent('staged');
+      focusSellerSessionScanner();
     } catch (error) {
       setEbayError(error instanceof Error ? error.message : 'Could not stage the eBay offer.');
     } finally {
@@ -1438,6 +1525,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       await createEbayOffer({ adminKey, listingId: listing._id });
       const result = await publishEbayOffer({ adminKey, listingId: listing._id });
       setEbayNotice(`Published eBay listing ${result.listingId}. Use the listing link in the row to open it.`);
+      recordSessionEvent('published');
+      focusSellerSessionScanner();
     } catch (error) {
       setEbayError(error instanceof Error ? error.message : 'Could not publish the eBay listing.');
     } finally {
@@ -1611,10 +1700,16 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         await createEbayOffer({ adminKey, listingId: fastReviewing._id });
         setEbayNotice(`Saved and staged ${fastReviewing.title}. It is not live yet.`);
       }
+      recordSessionEvent('reviewed');
+      if (stageAfterSave) recordSessionEvent('staged');
       const currentIndex = queueListings.findIndex((listing) => listing._id === fastReviewing._id);
       const next = queueListings[currentIndex + 1] || queueListings.find((listing) => listing._id !== fastReviewing._id);
       if (next) setFastReviewing(listingWithWorkflowDefaults(next));
-      else setFastReviewing(null);
+      else {
+        setFastReviewing(null);
+        setSellerSessionMessage('Every queued item in this view has been reviewed. Scan another item or finish the session.');
+        focusSellerSessionScanner();
+      }
     } catch (error) {
       setListingSaveError(readableActionError(error, 'Could not save this fast review.'));
     } finally {
@@ -1658,6 +1753,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         return next;
       });
       setEbayNotice(`${succeeded.length} unpublished eBay offer${succeeded.length === 1 ? '' : 's'} created or refreshed.`);
+      recordSessionEvent('staged', succeeded.length);
+      focusSellerSessionScanner();
     }
     if (failures.length) setEbayError(`${failures.length} item${failures.length === 1 ? '' : 's'} failed. ${failures.slice(0, 3).join(' ')}`);
     setQueueBusy(false);
@@ -1693,6 +1790,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       return next;
     });
     if (succeeded.length) setEbayNotice(`${succeeded.length} listing${succeeded.length === 1 ? '' : 's'} published live on eBay.`);
+    if (succeeded.length) {
+      recordSessionEvent('published', succeeded.length);
+      focusSellerSessionScanner();
+    }
     if (failures.length) setEbayError(`${failures.length} listing${failures.length === 1 ? '' : 's'} failed and remain selected. ${failures.slice(0, 3).join(' ')}`);
     setQueueBusy(false);
   }
@@ -1759,10 +1860,18 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         setEbayNotice(`Updated live eBay listing ${result.listingId} through the ${result.revisionSource}.`);
       }
       const savedListingId = editing._id;
+      if (['Draft', 'Pending'].includes(editing.status)) recordSessionEvent('reviewed');
       const nextException = exceptionWorkflow ? exceptionListings.find((listing) => listing._id !== savedListingId) : undefined;
       if (nextException) {
         const nextStep = (readinessByListingId.get(nextException._id) || []).find((issue) => issue.blocking)?.step || 'details';
         openListingEditor(nextException, nextStep, true);
+      } else if (sellerSession?.activeSince) {
+        const currentIndex = queueListings.findIndex((listing) => listing._id === savedListingId);
+        const next = queueListings[currentIndex + 1] || queueListings.find((listing) => listing._id !== savedListingId);
+        setEditing(null);
+        setExceptionWorkflow(false);
+        if (next) openFastReview(next);
+        else focusSellerSessionScanner();
       } else {
         setEditing(null);
         setExceptionWorkflow(false);
@@ -1876,10 +1985,17 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className={`queueCommandBar ${selectedIds.size ? 'hasSelection' : ''}`}>
           <span className="queueCommandStatus">{selectedIds.size ? `${selectedIds.size} selected · ${selectedBlockedCount ? `${selectedBlockedCount} need fixes` : 'validation passed'}` : `${batchCompletion.ready} ready · ${batchCompletion.exceptions} need fixes`}</span>
           <div className="actions queueActions">
-            {!selectedIds.size ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={() => openFastReview()}><WandSparkles size={16}/> Fast Review</button> : firstSelectedBlocked ? <button disabled={queueBusy} onClick={() => openListingEditor(firstSelectedBlocked, (readinessByListingId.get(firstSelectedBlocked._id) || []).find((issue) => issue.blocking)?.step || 'details', true)}><ListChecks size={16}/> Fix {selectedBlockedCount}</button> : selectedReadyForEbay.length ? <button className="ebaySendButton" disabled={queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage ${selectedReadyForEbay.length}`}</button> : selectedStagedForEbay.length ? <button className="ebayPublishButton" disabled={queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish ${selectedStagedForEbay.length}`}</button> : <button onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Review Selection</button>}
+            {!selectedIds.size ? !sellerSession ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={startSellerSession}><Play size={16}/> Start Session</button> : !sellerSession.activeSince ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={toggleSellerSessionPause}><Play size={16}/> Resume Session</button> : <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={() => openFastReview()}><WandSparkles size={16}/> Review Next</button> : firstSelectedBlocked ? <button disabled={queueBusy} onClick={() => openListingEditor(firstSelectedBlocked, (readinessByListingId.get(firstSelectedBlocked._id) || []).find((issue) => issue.blocking)?.step || 'details', true)}><ListChecks size={16}/> Fix {selectedBlockedCount}</button> : selectedReadyForEbay.length ? <button className="ebaySendButton" disabled={queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage ${selectedReadyForEbay.length}`}</button> : selectedStagedForEbay.length ? <button className="ebayPublishButton" disabled={queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish ${selectedStagedForEbay.length}`}</button> : <button onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Review Selection</button>}
             <details className="listingUtilityMenu queueMoreMenu"><summary aria-label="More queue actions" title="More queue actions"><MoreHorizontal size={18}/></summary><div><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear selection' : 'Select all in view'}</button><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Quality report</button>{selectedIds.size ? <button className="secondary" disabled={queueBusy} onClick={openPricingReview}><DollarSign size={16}/> Find fair value</button> : null}</div></details>
           </div>
         </div>
+        {sellerSession ? <div className={`sellerSessionBar ${sellerSession.activeSince ? 'active' : 'paused'}`}>
+          <div className="sellerSessionStatus"><span className="sellerSessionIndicator"/><div><strong>{sellerSession.activeSince ? 'Seller session active' : 'Seller session paused'}</strong><small>{formatSellerSessionDuration(sellerSessionElapsed)} elapsed</small></div></div>
+          <div className="sellerSessionMetrics" aria-label="Seller session progress"><span><strong>{sellerSession.reviewed}</strong> reviewed</span><span><strong>{sellerSession.staged}</strong> staged</span><span><strong>{sellerSession.published}</strong> published</span></div>
+          <form className="sellerSessionScanner" onSubmit={scanSellerSessionBarcode}><ScanBarcode size={17}/><input ref={sellerSessionScanRef} value={sellerSessionBarcode} disabled={!sellerSession.activeSince} onChange={(event) => setSellerSessionBarcode(event.target.value)} placeholder={sellerSession.activeSince ? 'Scan UPC or SKU' : 'Resume to scan'} aria-label="Scan queued UPC or SKU"/><button type="submit" disabled={!sellerSession.activeSince || !sellerSessionBarcode.trim()}>Open</button></form>
+          <div className="sellerSessionActions"><button className="iconButton secondary" onClick={toggleSellerSessionPause} aria-label={sellerSession.activeSince ? 'Pause seller session' : 'Resume seller session'} title={sellerSession.activeSince ? 'Pause session' : 'Resume session'}>{sellerSession.activeSince ? <Pause size={17}/> : <Play size={17}/>}</button><button className="iconButton secondary sellerSessionFinish" onClick={finishSellerSession} aria-label="Finish seller session" title="Finish session"><CircleStop size={17}/></button></div>
+          {sellerSessionMessage ? <p className="sellerSessionMessage" aria-live="polite">{sellerSessionMessage}</p> : null}
+        </div> : null}
         {ebayNotice ? <p className="setupNotice successNotice">{ebayNotice}</p> : null}
         {ebayError ? <p className="setupNotice errorNotice">{ebayError}</p> : null}
       </section> : null}
@@ -2070,6 +2186,13 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <p className="ebaySafetyNote">Purchase the label in eBay so buyer address, service eligibility, postage, and tracking remain authoritative. FlipTracker records the physical workflow and package context.</p>
         {fulfillmentError ? <p className="formError">{fulfillmentError}</p> : null}
         <div className="actions modalActions"><a className="button secondary" href={`${ebaySetup?.environment === 'sandbox' ? 'https://www.sandbox.ebay.com' : 'https://www.ebay.com'}/sh/ord/?filter=status:AWAITING_SHIPMENT`} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Open eBay Labels</a><button className="secondary" disabled={fulfillmentBusy} onClick={() => setFulfillmentEditing(null)}>Cancel</button><button disabled={fulfillmentBusy} onClick={saveFulfillment}><Save size={16}/>{fulfillmentBusy ? 'Saving...' : `Save ${fulfillmentEditing.fulfillmentStatus}`}</button></div>
+      </section></div> : null}
+
+      {sellerSessionSummary ? <div className="modalBackdrop"><section className="modal sellerSessionSummaryModal">
+        <header className="modalHeader"><div><p className="eyebrow">Seller session complete</p><h2>Stack processed</h2><p>Your progress is saved to each listing.</p></div><button className="iconButton secondary" aria-label="Close session summary" onClick={() => setSellerSessionSummary(null)}><X size={18}/></button></header>
+        <div className="sellerSessionSummaryGrid"><div><span>Time</span><strong>{formatSellerSessionDuration(sellerSessionElapsedMs(sellerSessionSummary))}</strong></div><div><span>Reviewed</span><strong>{sellerSessionSummary.reviewed}</strong></div><div><span>Staged</span><strong>{sellerSessionSummary.staged}</strong></div><div><span>Published</span><strong>{sellerSessionSummary.published}</strong></div></div>
+        <p className="sellerSessionSummaryNote">Queue has {queueListings.length} item{queueListings.length === 1 ? '' : 's'} remaining in the current view.</p>
+        <div className="modalActions"><button className="secondary" onClick={() => setSellerSessionSummary(null)}>Done</button>{queueListings.length ? <button onClick={() => { setSellerSessionSummary(null); startSellerSession(); }}><Play size={16}/> Start Another Session</button> : null}</div>
       </section></div> : null}
 
       {fastReviewing ? (
