@@ -660,6 +660,29 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 @media (max-width:600px) { .saleCloseoutGrid { grid-template-columns:1fr; } .saleCloseoutGrid .span2 { grid-column:auto; } }
 @media (max-width:600px) { .repriceModes, .repriceProfitGrid, .repricePreview, .repriceInputBand { grid-template-columns:1fr; } .repriceModes button { min-height:44px; } }
 @media (max-width:760px) {
+  .inventoryPanel .panelHeader { align-items:stretch; flex-direction:column; }
+  .inventoryPanel .inventoryBulkActions { width:100%; }
+  .inventoryPanel .inventoryBulkActions button { flex:1 1 auto; justify-content:center; }
+  .inventoryTable, .inventoryTable tbody { display:block; width:100%; min-width:0; }
+  .inventoryTable thead { display:none; }
+  .inventoryTable tbody { display:grid; gap:10px; padding:10px; }
+  .inventoryTable tr { display:grid; grid-template-columns:28px minmax(0, 1fr) auto; gap:8px 10px; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
+  .inventoryTable td { display:block; min-width:0; padding:0; border:0; background:transparent; }
+  .inventoryTable .selectionCell { grid-column:1; grid-row:1 / span 6; width:28px; padding-top:3px; }
+  .inventoryTable .inventoryFormatCell { grid-column:2; grid-row:1; }
+  .inventoryTable .inventoryFormatCell .consoleTag { box-sizing:border-box; max-width:100%; white-space:normal; overflow-wrap:anywhere; line-height:1.15; }
+  .inventoryTable .inventoryTitleCell { grid-column:2 / -1; grid-row:2; }
+  .inventoryTable .inventoryTitleCell strong { font-size:14px; line-height:1.25; }
+  .inventoryTable .inventoryValueCell { grid-column:3; grid-row:1; align-self:start; font-size:14px; text-align:right; }
+  .inventoryTable .inventoryCollectionCell { grid-column:2; grid-row:3; }
+  .inventoryTable .inventoryLocationCell { grid-column:3; grid-row:3; color:var(--muted); text-align:right; }
+  .inventoryTable .inventorySourceCell { grid-column:2; grid-row:4; }
+  .inventoryTable .inventoryPlanCell { grid-column:2; grid-row:5; }
+  .inventoryTable .inventoryStatusCell { grid-column:3; grid-row:4; justify-self:end; }
+  .inventoryTable .inventoryActionsCell { grid-column:2 / -1; grid-row:6; padding-top:2px; }
+  .inventoryTable .inventoryActionsCell .rowActions { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; }
+  .inventoryTable .inventoryActionsCell button { min-width:0; justify-content:center; padding:7px 5px; white-space:normal; }
+  .inventoryTable .inventoryActionsCell .iconButton { width:100%; }
   .listingWorkspaceTitle { flex-direction:column; }
   .listingWorkspaceActions { width:100%; justify-content:flex-start; }
   .listingWorkspaceTabs { display:flex; overflow-x:auto; scroll-snap-type:x proximity; }
@@ -737,6 +760,10 @@ td small { display:block; color:var(--muted); margin-top:3px; }
   .advancedPackageGrid, .ebayCoreSettingsGrid { grid-template-columns:1fr; }
 }
 
+@media (max-width:420px) {
+  .inventoryTable .inventoryActionsCell .rowActions { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+
 .rowActions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .rowActions button { padding:7px 9px; }
 .tableActionsCell { min-width:0; }
@@ -751,6 +778,11 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .bulkCostPreview span, .bulkCostPreview small { color:var(--muted); }
 .bulkCostPreview strong { color:#99f6e4; font-size:24px; }
 .needsCheck td { background: rgba(245, 158, 11, 0.08); }
+@media (max-width:760px) {
+  .inventoryTable tr.needsCheck { background:rgba(245,158,11,.06); }
+  .inventoryTable tr.needsCheck td { background:transparent; }
+  .inventoryTable .inventoryActionsCell .iconButton { width:40px; justify-self:start; }
+}
 .modalBackdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.72); display:flex; align-items:flex-start; justify-content:center; padding:16px; overflow-y:auto; }
 .modalBackdrop > .modal { margin:auto 0; }
 .modal { position:relative; z-index:1001; width:min(760px, 95vw); max-height:min(90vh, 920px); overflow:auto; overscroll-behavior:contain; background:var(--surface); border:1px solid var(--border-strong); border-radius:18px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
