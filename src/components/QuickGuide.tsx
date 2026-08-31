@@ -44,11 +44,12 @@ export default function QuickGuide() {
 
         <section><div className="guideNumber">3</div><div><h3>Add listing photos from your phone</h3><ol>
           <li>Open the same FlipTracker deployment on your phone and select <strong>Photos</strong>.</li>
-          <li>Scan the item's SKU label or UPC. You can also type either code.</li>
+          <li>Choose <strong>Start Photo Session</strong> for a stack, or scan an item's SKU label/UPC to open one record directly.</li>
           <li>If several copies share a UPC, choose the correct copy by its unique SKU and storage bin.</li>
-          <li>Capture the front, back, spine, discs, inserts, and any flaws. You can also choose several existing photos at once.</li>
-          <li>Select the strongest image as Primary, remove mistakes, then choose <strong>Done &amp; Next</strong>.</li>
-        </ol><p className="guideNote"><Camera size={15}/> The queue shows eBay drafts that still need actual photos. New captures are stored in Convex and remain attached to the inventory copy across devices.</p></div></section>
+          <li>Follow the item-specific shot guide. You can take photos individually or choose several existing photos at once.</li>
+          <li>The session advances automatically at the recommended count. Use <strong>Complete &amp; Next</strong> to finish early, or Skip to leave the item in the queue.</li>
+          <li>Select the strongest image as Primary, rotate sideways images, and remove mistakes before publishing.</li>
+        </ol><p className="guideNote"><Camera size={15}/> Partial photo sets remain in the queue until the recommended count is reached or you explicitly complete them. Captures are stored in Convex and remain attached to the same inventory copy across devices.</p></div></section>
 
         <section><div className="guideNumber">4</div><div><h3>Make a sourcing decision</h3><ol>
           <li>Open <strong>Sourcing</strong> and select <strong>New Analysis</strong>.</li>

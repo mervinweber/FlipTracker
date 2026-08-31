@@ -69,6 +69,9 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [ ] Measure the revised Queue workflow against a real 20-item listing batch and tune any remaining friction
 - [x] Add a persistent seller session mode that restores USB-scanner focus after Save, Stage, or Publish and opens the next pending item automatically
 - [x] Add pause/resume controls and a compact end-of-session summary
+- [x] Add continuous phone photo sessions with item-family shot guides, automatic next-item handoff, skips, elapsed time, and completion totals
+- [x] Keep partially photographed items in the queue until they reach the recommended count or the seller explicitly completes them
+- [ ] Measure a real 20-item photo session and tune recommended shot counts by item family
 
 ## Deferred - Vinted Wardrobe
 

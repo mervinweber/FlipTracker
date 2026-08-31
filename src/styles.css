@@ -868,6 +868,7 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 
 .photoQueuePage { display:grid; gap:18px; }
 .photoQueueHeader { align-items:center; }
+.photoQueueHeaderActions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px; align-items:center; }
 .photoQueueCount { display:grid; grid-template-columns:auto auto; gap:0 8px; align-items:center; min-width:140px; padding:12px 14px; border-left:3px solid var(--warning); background:var(--surface); }
 .photoQueueCount svg { grid-row:1 / 3; color:#fbbf24; }
 .photoQueueCount strong { font-size:24px; line-height:1; }
@@ -886,6 +887,7 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 .photoQueueItem strong, .photoQueueItem small, .photoMatchRow strong, .photoMatchRow small { display:block; }
 .photoQueueItem small, .photoMatchRow small { margin-top:4px; color:var(--muted); line-height:1.35; }
 .photoQueueItem > span { display:flex; align-items:center; gap:4px; color:#93c5fd; font-size:11px; }
+.photoQueueItem .photoQueueItemProgress { color:#6ee7b7; font-weight:900; }
 .photoMatches { display:grid; gap:8px; }
 .photoMatchRow > div { min-width:0; }
 .photoWorkspace { min-height:480px; }
@@ -900,6 +902,33 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 .photoTargetMeta span { display:inline-flex; align-items:center; gap:4px; padding:4px 7px; border:1px solid var(--border); border-radius:5px; color:#cbd5e1; font-size:11px; font-weight:800; }
 .photoCaptureActions { display:flex; gap:10px; margin:16px 0; }
 .photoCaptureButton { flex:1 1 180px; min-height:50px; justify-content:center; }
+.photoCaptureButton.disabled { opacity:.55; cursor:not-allowed; }
+.photoSessionBar { display:grid; grid-template-columns:auto 1fr auto; gap:12px 18px; align-items:center; padding:12px 14px; border:1px solid rgba(20,184,166,.5); border-radius:var(--radius-panel); background:rgba(15,118,110,.1); }
+.photoSessionBar.paused { border-color:var(--border-strong); background:var(--surface); }
+.photoSessionStatus { display:flex; align-items:center; gap:9px; }
+.photoSessionStatus > span { width:9px; height:9px; flex:0 0 auto; border-radius:50%; background:#2dd4bf; box-shadow:0 0 0 4px rgba(45,212,191,.12); }
+.photoSessionBar.paused .photoSessionStatus > span { background:#94a3b8; box-shadow:none; }
+.photoSessionStatus strong, .photoSessionStatus small { display:block; }
+.photoSessionStatus strong { font-size:13px; }
+.photoSessionStatus small { margin-top:2px; color:var(--muted); font-size:11px; }
+.photoSessionMetrics { display:flex; justify-content:center; gap:18px; color:var(--muted); font-size:12px; }
+.photoSessionMetrics strong { color:var(--text); font-size:15px; }
+.photoSessionActions { display:flex; gap:7px; }
+.photoSessionBar > p { grid-column:1 / -1; margin:0; color:#cbd5e1; font-size:12px; }
+.photoShotGuide { display:grid; grid-template-columns:minmax(160px, .42fr) minmax(0, 1fr); gap:16px; margin:16px 0 0; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
+.photoShotGuide > div strong, .photoShotGuide > div small { display:block; }
+.photoShotGuide > div small { margin-top:4px; color:var(--muted); line-height:1.4; }
+.photoShotGuide ol { display:flex; flex-wrap:wrap; gap:7px; margin:0; padding:0; list-style:none; }
+.photoShotGuide li { display:flex; min-height:28px; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--border); border-radius:6px; color:#94a3b8; background:#07101f; font-size:11px; font-weight:800; }
+.photoShotGuide li.core { border-color:#a16207; color:#fde68a; background:#291d08; }
+.photoShotGuide li.complete { border-color:#15803d; color:#bbf7d0; background:#09251f; }
+.photoShotGuide li small { color:#64748b; font-size:9px; text-transform:uppercase; }
+.photoSessionSummaryModal { max-width:620px; }
+.photoSessionSummaryGrid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px; overflow:hidden; margin:16px 0; border:1px solid var(--border); border-radius:7px; background:var(--border); }
+.photoSessionSummaryGrid > div { padding:14px 12px; background:var(--surface-3); }
+.photoSessionSummaryGrid span, .photoSessionSummaryGrid strong { display:block; }
+.photoSessionSummaryGrid span { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
+.photoSessionSummaryGrid strong { margin-top:4px; font-size:22px; }
 .photoGrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
 .photoTile { min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
 .photoTile.primary { border-color:#fbbf24; }
@@ -910,8 +939,8 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 .photoTileBar .iconButton { width:30px; height:30px; }
 .photoWorkflowFooter { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-top:18px; padding-top:14px; border-top:1px solid var(--border); }
 .photoWorkflowFooter p { margin:0; font-size:12px; }
-@media (max-width:850px) { .photoQueueLayout { grid-template-columns:1fr; } .photoQueueList { max-height:280px; } .photoGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-@media (max-width:560px) { .photoLookupBand { grid-template-columns:1fr; } .photoLookupBand > button { justify-content:center; } .photoQueueHeader { align-items:stretch; } .photoQueueCount { width:100%; box-sizing:border-box; } .photoCaptureActions, .photoWorkflowFooter { flex-direction:column; align-items:stretch; } .photoGrid { grid-template-columns:1fr 1fr; } .photoTargetHeader { flex-direction:column; } }
+@media (max-width:850px) { .photoQueueLayout { grid-template-columns:1fr; } .photoQueueList { max-height:280px; } .photoGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } .photoShotGuide { grid-template-columns:1fr; } }
+@media (max-width:560px) { .photoLookupBand { grid-template-columns:1fr; } .photoLookupBand > button { justify-content:center; } .photoQueueHeader { align-items:stretch; } .photoQueueHeaderActions { display:grid; grid-template-columns:1fr; } .photoQueueHeaderActions > button { justify-content:center; } .photoQueueCount { width:100%; box-sizing:border-box; } .photoSessionBar { grid-template-columns:minmax(0, 1fr) auto; } .photoSessionMetrics { grid-column:1 / -1; grid-row:2; justify-content:flex-start; } .photoSessionActions { grid-column:2; grid-row:1; } .photoSessionBar > p { grid-row:3; } .photoCaptureActions, .photoWorkflowFooter { flex-direction:column; align-items:stretch; } .photoCaptureButton { flex:0 0 auto; } .photoWorkflowFooter .actions { display:grid; grid-template-columns:1fr; width:100%; } .photoWorkflowFooter .actions button { justify-content:center; } .photoGrid { grid-template-columns:1fr 1fr; } .photoTargetHeader { flex-direction:column; } .photoSessionSummaryGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:720px) {
   .bulkValidationSummary { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .bulkValidationList > button { grid-template-columns:auto minmax(0, 1fr) auto; }

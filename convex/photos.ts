@@ -7,6 +7,16 @@ import { assertOwner, currentOwnerId } from "./ownership";
 
 const MAX_PHOTOS = 12;
 
+function recommendedPhotoCount(asset: { type: string; mediaFormat?: string; title: string }) {
+  const identity = `${asset.type} ${asset.mediaFormat ?? ""} ${asset.title}`.toLowerCase();
+  if (/\bbook\b|isbn/.test(identity)) return 2;
+  if (/dvd|blu[ -]?ray|movie|cd|music/.test(identity)) return 3;
+  if (/video game|\bgame\b|playstation|xbox|nintendo/.test(identity)) return 4;
+  if (/card|tcg|ccg|pokemon|pokémon|yu-gi-oh|yugioh/.test(identity)) return 2;
+  if (/clothing|apparel|shirt|pants|jeans|dress|jacket|coat|sweater|hoodie|shoe|boot/.test(identity)) return 5;
+  return 4;
+}
+
 function normalized(value?: string) {
   return value?.trim().toLowerCase() ?? "";
 }
@@ -126,6 +136,7 @@ async function targetForAsset(ctx: QueryCtx, assetId: Id<"assets">, ownerId?: st
     assetId: asset._id,
     listingId: listing?._id,
     title: asset.title,
+    assetType: asset.type,
     edition: asset.edition,
     format: asset.mediaFormat || asset.console || asset.type,
     upc: asset.upc || asset.barcode,
@@ -135,8 +146,25 @@ async function targetForAsset(ctx: QueryCtx, assetId: Id<"assets">, ownerId?: st
     photoCount: photos.length + (asset.photoDataUrl ? 1 : 0),
     primaryPhotoUrl: primary ? await ctx.storage.getUrl(primary.storageId) : asset.photoDataUrl,
     hasDraft: Boolean(listing),
+    photosCompleteAt: listing?.photosCompleteAt,
   };
 }
+
+export const markComplete = mutation({
+  args: { listingId: v.id("marketplaceListings") },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const listing = await ctx.db.get(args.listingId);
+    assertOwner(listing, ownerId, "Listing");
+    const asset = await ctx.db.get(listing.assetId);
+    assertOwner(asset, ownerId, "Inventory item");
+    const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", listing.assetId)).collect();
+    if (!photos.length && !asset.photoDataUrl) throw new Error("Add at least one actual item photo before completing this item.");
+    const completedAt = Date.now();
+    await ctx.db.patch(listing._id, { photosCompleteAt: completedAt, updatedAt: completedAt });
+    return { completedAt, photoCount: photos.length + (asset.photoDataUrl ? 1 : 0) };
+  },
+});
 
 function dataUrlToBlob(dataUrl: string) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -219,7 +247,7 @@ export const queue = query({
       if (!asset || usesCatalogImage(listing, asset)) continue;
       seen.add(listing.assetId);
       const target = await targetForAsset(ctx, listing.assetId, ownerId);
-      if (target && target.photoCount === 0) results.push(target);
+      if (target && !listing.photosCompleteAt && target.photoCount < recommendedPhotoCount(asset)) results.push(target);
     }
     return results;
   },

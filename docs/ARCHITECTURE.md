@@ -8,6 +8,8 @@ Operational presets are stored in browser `localStorage` by `src/utils/listingSp
 
 Queue seller sessions are also browser-local and credential-free. `src/utils/sellerSession.ts` persists the active timer and reviewed/staged/published counters across refreshes; `ListingsPanel` owns scanner focus and advances through the existing Fast Review workflow. Listing changes remain authoritative Convex mutations, while ending a session only clears its temporary local progress record.
 
+Photo sessions follow the same split between durable records and temporary workflow state. Photos remain ordered Convex `assetPhotos` attached to the physical inventory asset, while `marketplaceListings.photosCompleteAt` records an explicit seller completion decision. `src/utils/photoSession.ts` stores only the local timer, counters, and session skips. The queue retains partial photo sets, automatically removes records that reach the item-family target, and also honors intentional early completion.
+
 ## v0.9 Identity And Tenancy
 
 - Clerk supplies browser identity and a Convex-compatible JWT.

@@ -398,6 +398,17 @@ Goal: remove the pause between items during a real listing batch.
 - [x] Add pause/resume, refresh persistence, and a compact end-of-session summary
 - [ ] Measure a real 20-item seller session and tune scan cadence, focus recovery, and exception handling
 
+## v0.9.8 Continuous Photo Sessions
+
+Goal: turn phone photography into a guided stack workflow instead of a sequence of unrelated item edits.
+
+- [x] Keep partial photo sets in the queue until the recommended count or explicit seller completion
+- [x] Show category-specific shot guides for books, movies, games, cards, clothing, and general merchandise
+- [x] Automatically complete and open the next item when the core photo count is reached
+- [x] Allow intentional early completion and session-only skipping without losing the item
+- [x] Persist pause/resume state and show elapsed time, completed items, photos added, remaining items, and a final summary
+- [ ] Run a real mixed 20-item photo session and tune shot targets plus mobile ergonomics
+
 ## v0.10 Card Batches And Vertical Intelligence
 
 Goal: extend the proven batch pipeline where category-specific handling creates real speed.

@@ -293,6 +293,7 @@ export default defineSchema({
     packageWidthIn: v.optional(v.number()),
     packageHeightIn: v.optional(v.number()),
     imageMode: v.optional(v.string()),
+    photosCompleteAt: v.optional(v.number()),
     ebayImageUrl: v.optional(v.string()),
     ebayImageFingerprint: v.optional(v.string()),
     ebayImageSource: v.optional(v.string()),
