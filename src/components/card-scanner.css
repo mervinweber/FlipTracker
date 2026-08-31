@@ -2,6 +2,11 @@
 .cardScannerHeader { align-items: flex-start; }
 .cardScannerHeader .statusPill { display: inline-flex; align-items: center; gap: 6px; }
 .cardGameSwitch { display: flex; gap: 8px; width: fit-content; }
+.cardSessionToolbar { display: grid; grid-template-columns: auto minmax(190px, 1fr) minmax(150px, .55fr) minmax(150px, .55fr); align-items: end; gap: 12px; padding: 14px; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; }
+.cardSessionToolbar > label { min-width: 0; }
+.cardSessionMetric { min-height: 46px; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 10px; padding: 8px 10px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; }
+.cardSessionMetric span, .cardSessionMetric small { color: var(--muted); font-size: .74rem; }
+.cardSessionMetric strong { grid-row: span 2; font-size: 1.35rem; }
 .cardScannerColumns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); background: var(--panel); border-radius: 8px; overflow: hidden; }
 .cardScannerStage { min-width: 0; padding: 20px; border-right: 1px solid var(--border); }
 .cardScannerStage:last-child { border-right: 0; }
@@ -9,8 +14,15 @@
 .cardScannerStage > header > span { display: grid; place-items: center; flex: 0 0 28px; height: 28px; border-radius: 50%; background: var(--primary); color: white; font-weight: 800; }
 .cardScannerStage h3 { margin: 1px 0 3px; font-size: 1rem; }
 .cardScannerStage header p, .cardScannerStage small { margin: 0; color: var(--muted); }
-.cardPhotoAction { min-height: 132px; display: grid; place-items: center; align-content: center; gap: 6px; padding: 18px; border: 1px dashed var(--accent); background: var(--surface); text-align: center; cursor: pointer; }
-.cardPhotoAction input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.cardPhotoPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cardPhotoSlot { min-width: 0; }
+.cardPhotoSlot > label { position: relative; min-height: 164px; display: grid; place-items: center; align-content: center; gap: 5px; padding: 10px; border: 1px dashed var(--accent); background: var(--surface); text-align: center; cursor: pointer; overflow: hidden; }
+.cardPhotoSlot > label.hasPhoto { padding: 0; border-style: solid; }
+.cardPhotoSlot img { width: 100%; height: 164px; display: block; object-fit: contain; background: #080d18; }
+.cardPhotoSlot input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.cardPhotoSlot small { font-size: .72rem; }
+.cardPhotoTools { display: flex; justify-content: flex-end; gap: 6px; padding-top: 6px; }
+.cardPhotoTools .iconButton { width: 34px; min-width: 34px; height: 34px; padding: 0; }
 .cardIdentityFields, .cardConfirmFields { display: grid; gap: 12px; margin: 16px 0; }
 .cardConfirmFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .cardCandidateList { display: grid; gap: 8px; max-height: 570px; overflow-y: auto; }
@@ -21,10 +33,19 @@
 .cardCandidate span { display: grid; min-width: 0; gap: 4px; }
 .cardCandidate strong, .cardCandidate small { overflow-wrap: anywhere; }
 .cardScannerEmpty { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 8px; color: var(--muted); border: 1px dashed var(--border); }
-.checkboxLabel { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; margin: 8px 0 14px; }
-.checkboxLabel input { width: auto; }
+.cardRecommendation { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 9px; padding: 11px; border: 1px solid var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); border-radius: 6px; }
+.cardRecommendation.positive { border-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
+.cardRecommendation div { min-width: 0; display: grid; gap: 3px; }
+.cardRecommendation small { overflow-wrap: anywhere; }
 .cardPhotoReminder { margin: 12px 0 0; color: var(--warning); font-size: .82rem; }
+.cardSessionResults { display: grid; gap: 12px; padding-top: 4px; }
+.cardSessionList { display: grid; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.cardSessionList article { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(90px, auto) 38px; align-items: center; gap: 12px; padding: 11px 13px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.cardSessionList article:last-child { border-bottom: 0; }
+.cardSessionList article > div { min-width: 0; display: grid; gap: 3px; }
+.cardSessionList article strong, .cardSessionList article small { overflow-wrap: anywhere; }
+.cardSessionList article small { color: var(--muted); }
 .spin { animation: cardSpin .8s linear infinite; }
 @keyframes cardSpin { to { transform: rotate(360deg); } }
-@media (max-width: 1080px) { .cardScannerColumns { grid-template-columns: 1fr; } .cardScannerStage { border-right: 0; border-bottom: 1px solid var(--border); } .cardScannerStage:last-child { border-bottom: 0; } }
-@media (max-width: 600px) { .cardConfirmFields { grid-template-columns: 1fr; } .cardScannerStage { padding: 15px; } .cardScannerHeader { display: grid; } }
+@media (max-width: 1080px) { .cardSessionToolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cardGameSwitch { align-self: center; } .cardScannerColumns { grid-template-columns: 1fr; } .cardScannerStage { border-right: 0; border-bottom: 1px solid var(--border); } .cardScannerStage:last-child { border-bottom: 0; } }
+@media (max-width: 600px) { .cardSessionToolbar { grid-template-columns: 1fr; } .cardGameSwitch, .cardGameSwitch button { width: 100%; } .cardConfirmFields { grid-template-columns: 1fr; } .cardScannerStage { padding: 15px; } .cardScannerHeader { display: grid; } .cardSessionList article { grid-template-columns: minmax(0, 1fr) 38px; } .cardSessionList article > .statusPill, .cardSessionList article > span:not(.statusPill) { justify-self: start; } }

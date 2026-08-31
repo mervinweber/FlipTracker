@@ -1,10 +1,12 @@
 import { ChangeEvent, useMemo, useState } from 'react';
 import { useAction, useMutation } from 'convex/react';
-import { Camera, Check, ImagePlus, LoaderCircle, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { Camera, Check, Copy, ImagePlus, Layers3, LoaderCircle, RotateCw, Search, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import type { Id } from '../../convex/_generated/dataModel';
 import { api } from '../../convex/_generated/api';
+import { buildCardListingCopy, cardDuplicateKey, countExactDuplicates, recommendCardDisposition, type CardGame, type CardIdentity } from '../utils/cardSession';
+import { resizeForListing, rotatePhotoClockwise } from '../utils/listingPhotos';
 import './card-scanner.css';
 
-type CardGame = 'pokemon' | 'yugioh';
 type Candidate = {
   provider: string;
   providerId: string;
@@ -20,26 +22,44 @@ type Candidate = {
   confidence: number;
 };
 
+type CapturedPhoto = { file: File; previewUrl: string };
+type Destination = 'inventory' | 'ebay' | 'vinted';
+type SessionCard = CardIdentity & {
+  sku: string;
+  title: string;
+  description: string;
+  price?: number;
+  destination: Destination;
+  disposition: string;
+  photoCount: number;
+};
+
 async function imageDataUrl(file: File) {
-  const bitmap = await createImageBitmap(file);
-  const maxEdge = 1280;
-  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL('image/jpeg', 0.78);
+  const blob = await resizeForListing(file);
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('This browser could not read the card photo.'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function money(value?: number) {
   return value === undefined ? '' : `$${value.toFixed(2)}`;
 }
 
+function destinationLabel(destination: Destination) {
+  if (destination === 'ebay') return 'eBay draft';
+  if (destination === 'vinted') return 'Vinted prep';
+  return 'Inventory';
+}
+
 export default function CardScannerPanel() {
   const lookup = useAction(api.cardCatalog.lookup);
   const identify = useAction(api.cardCatalog.extractIdentityFromImage);
   const createCard = useMutation(api.cardIntake.createCard);
+  const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
+  const attachPhoto = useMutation(api.photos.attach);
   const [game, setGame] = useState<CardGame>('pokemon');
   const [name, setName] = useState('');
   const [setCode, setSetCode] = useState('');
@@ -47,23 +67,78 @@ export default function CardScannerPanel() {
   const [printedCode, setPrintedCode] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selected, setSelected] = useState<Candidate | null>(null);
+  const [frontPhoto, setFrontPhoto] = useState<CapturedPhoto | null>(null);
+  const [backPhoto, setBackPhoto] = useState<CapturedPhoto | null>(null);
   const [busy, setBusy] = useState<'identify' | 'search' | 'save' | ''>('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [language, setLanguage] = useState('English');
   const [finish, setFinish] = useState('');
   const [edition, setEdition] = useState('');
-  const [condition, setCondition] = useState('Used');
+  const [condition, setCondition] = useState('Near Mint');
   const [storageLocation, setStorageLocation] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [listingPrice, setListingPrice] = useState('');
-  const [createDraft, setCreateDraft] = useState(true);
+  const [destination, setDestination] = useState<Destination>('vinted');
+  const [minimumSinglePrice, setMinimumSinglePrice] = useState('5');
+  const [sessionCards, setSessionCards] = useState<SessionCard[]>([]);
   const searchReady = useMemo(() => game === 'yugioh' ? Boolean(printedCode.trim() || name.trim()) : Boolean(setCode.trim() || collectorNumber.trim() || name.trim()), [game, printedCode, setCode, collectorNumber, name]);
+
+  const currentIdentity = useMemo<CardIdentity | null>(() => selected ? {
+    game,
+    providerId: selected.providerId,
+    name: selected.name,
+    setName: selected.setName,
+    setCode: selected.setCode,
+    collectorNumber: selected.collectorNumber,
+    printedCode: selected.printedCode,
+    rarity: selected.rarity,
+    language,
+    finish: finish || undefined,
+    edition: edition || undefined,
+  } : null, [selected, game, language, finish, edition]);
+
+  const recommendation = useMemo(() => {
+    if (!currentIdentity) return null;
+    const exactCopies = countExactDuplicates(sessionCards, currentIdentity) + 1;
+    const enteredPrice = listingPrice === '' ? undefined : Number(listingPrice);
+    return {
+      exactCopies,
+      ...recommendCardDisposition({
+        referencePrice: Number.isFinite(enteredPrice) ? enteredPrice : selected?.marketPrice,
+        exactCopies,
+        minimumSinglePrice: Number(minimumSinglePrice) || 5,
+      }),
+    };
+  }, [currentIdentity, sessionCards, listingPrice, selected, minimumSinglePrice]);
+
+  const duplicateGroups = useMemo(() => new Set(sessionCards.map(cardDuplicateKey)).size, [sessionCards]);
+
+  function replacePhoto(side: 'front' | 'back', next: CapturedPhoto | null) {
+    const current = side === 'front' ? frontPhoto : backPhoto;
+    if (current) URL.revokeObjectURL(current.previewUrl);
+    if (side === 'front') setFrontPhoto(next);
+    else setBackPhoto(next);
+  }
+
+  function clearCurrentCard() {
+    replacePhoto('front', null);
+    replacePhoto('back', null);
+    setCandidates([]);
+    setSelected(null);
+    setName('');
+    setSetCode('');
+    setCollectorNumber('');
+    setPrintedCode('');
+    setFinish('');
+    setEdition('');
+    setPurchasePrice('');
+    setListingPrice('');
+  }
 
   function changeGame(next: CardGame) {
     setGame(next);
-    setCandidates([]);
-    setSelected(null);
+    clearCurrentCard();
     setError('');
     setNotice('');
   }
@@ -85,13 +160,10 @@ export default function CardScannerPanel() {
     }
   }
 
-  async function identifyPhoto(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+  async function identifyPhoto(file: File) {
     const adminKey = localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey') || '';
     if (!adminKey) {
-      setError('Load your private access key in Seller Connection before using AI photo identification.');
+      setNotice('Front photo saved. Load your private access key to use AI identification, or enter the printed identifiers manually.');
       return;
     }
     setBusy('identify');
@@ -103,7 +175,7 @@ export default function CardScannerPanel() {
       setPrintedCode(result.printedCode || '');
       setSetCode(result.setCode || '');
       setCollectorNumber(result.collectorNumber || '');
-      setNotice(`Photo read ${Math.round(result.confidence * 100)}% confidence. Review the identifiers, then search the catalog.`);
+      setNotice(`Front read at ${Math.round(result.confidence * 100)}% confidence. Review the identifiers, then search the catalog.`);
     } catch (identifyError) {
       setError(identifyError instanceof Error ? identifyError.message : 'Photo identification failed.');
     } finally {
@@ -111,18 +183,53 @@ export default function CardScannerPanel() {
     }
   }
 
+  async function capturePhoto(side: 'front' | 'back', event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    replacePhoto(side, { file, previewUrl: URL.createObjectURL(file) });
+    if (side === 'front') await identifyPhoto(file);
+  }
+
+  async function rotateCaptured(side: 'front' | 'back') {
+    const current = side === 'front' ? frontPhoto : backPhoto;
+    if (!current || busy) return;
+    try {
+      const rotated = await rotatePhotoClockwise(await resizeForListing(current.file));
+      const file = new File([rotated], current.file.name || `${side}-card.jpg`, { type: rotated.type || 'image/jpeg' });
+      replacePhoto(side, { file, previewUrl: URL.createObjectURL(file) });
+    } catch (rotateError) {
+      setError(rotateError instanceof Error ? rotateError.message : 'Could not rotate the photo.');
+    }
+  }
+
   function selectCandidate(candidate: Candidate) {
     setSelected(candidate);
     if (candidate.marketPrice !== undefined && !listingPrice) setListingPrice(candidate.marketPrice.toFixed(2));
-    setNotice('Candidate selected. Confirm printing details and condition before saving.');
+    setNotice('Candidate selected. Confirm printing details, photos, and condition before saving.');
+  }
+
+  async function uploadPhoto(assetId: Id<'assets'>, captured: CapturedPhoto) {
+    const blob = await resizeForListing(captured.file);
+    const uploadUrl = await generateUploadUrl();
+    const response = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+    if (!response.ok) throw new Error('Photo upload failed. Check the connection and try again.');
+    const result = await response.json() as { storageId: Id<'_storage'> };
+    await attachPhoto({ assetId, storageId: result.storageId, filename: captured.file.name, contentType: blob.type || 'image/jpeg' });
   }
 
   async function saveCard() {
-    if (!selected) return;
+    if (!selected || !currentIdentity) return;
+    if (!frontPhoto || !backPhoto) {
+      setError('Add clear front and back photos before saving this card.');
+      return;
+    }
     setBusy('save');
     setError('');
     setNotice('');
     try {
+      const numericPrice = listingPrice === '' ? undefined : Number(listingPrice);
+      const copy = buildCardListingCopy(currentIdentity, condition);
       const result = await createCard({
         game,
         provider: selected.provider,
@@ -142,20 +249,31 @@ export default function CardScannerPanel() {
         condition,
         storageLocation: storageLocation || undefined,
         purchasePrice: purchasePrice === '' ? undefined : Number(purchasePrice),
-        listingPrice: listingPrice === '' ? undefined : Number(listingPrice),
-        createDraft,
+        listingPrice: numericPrice,
+        createDraft: destination === 'ebay',
       });
-      setNotice(`${selected.name} saved as ${result.sku}${result.listingId ? ' with an eBay draft.' : '.'}`);
-      setCandidates([]);
-      setSelected(null);
-      setName('');
-      setSetCode('');
-      setCollectorNumber('');
-      setPrintedCode('');
-      setFinish('');
-      setEdition('');
-      setPurchasePrice('');
-      setListingPrice('');
+      let photoWarning = '';
+      let uploadedPhotos = 0;
+      try {
+        await uploadPhoto(result.assetId, frontPhoto);
+        uploadedPhotos += 1;
+        await uploadPhoto(result.assetId, backPhoto);
+        uploadedPhotos += 1;
+      } catch (photoError) {
+        photoWarning = ` The inventory record was saved, but its photos need attention: ${photoError instanceof Error ? photoError.message : 'upload failed'}`;
+      }
+      setSessionCards((current) => [...current, {
+        ...currentIdentity,
+        sku: result.sku,
+        title: copy.title,
+        description: copy.description,
+        price: numericPrice,
+        destination,
+        disposition: recommendation?.disposition || 'Review',
+        photoCount: uploadedPhotos,
+      }]);
+      setNotice(`${selected.name} saved as ${result.sku} for ${destinationLabel(destination)}.${photoWarning}`);
+      clearCurrentCard();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Card save failed.');
     } finally {
@@ -163,21 +281,42 @@ export default function CardScannerPanel() {
     }
   }
 
+  async function copyListing(card: SessionCard) {
+    await navigator.clipboard.writeText(`${card.title}\n\n${card.description}`);
+    setNotice(`${card.name} listing copy copied.`);
+  }
+
   return <section className="cardScannerWorkspace">
     <div className="panelHeader cardScannerHeader">
-      <div><p className="eyebrow">TCG intake</p><h2>Card Scanner</h2><p>Read the card, match the exact printing, then create one inventory record and optional eBay draft.</p></div>
-      <span className="statusPill"><ShieldCheck size={14}/> Confirmation required</span>
+      <div><p className="eyebrow">TCG rapid intake</p><h2>Pokemon &amp; Yu-Gi-Oh! Card Session</h2><p>Photograph both sides, confirm the exact printing, and keep moving through the stack.</p></div>
+      <span className="statusPill"><ShieldCheck size={14}/> Seller-confirmed matches</span>
     </div>
 
-    <div className="cardGameSwitch" role="group" aria-label="Card game">
-      <button className={game === 'pokemon' ? '' : 'secondary'} onClick={() => changeGame('pokemon')}>Pokemon</button>
-      <button className={game === 'yugioh' ? '' : 'secondary'} onClick={() => changeGame('yugioh')}>Yu-Gi-Oh!</button>
+    <div className="cardSessionToolbar">
+      <div className="cardGameSwitch" role="group" aria-label="Card game">
+        <button className={game === 'pokemon' ? '' : 'secondary'} onClick={() => changeGame('pokemon')}>Pokemon</button>
+        <button className={game === 'yugioh' ? '' : 'secondary'} onClick={() => changeGame('yugioh')}>Yu-Gi-Oh!</button>
+      </div>
+      <label>Save destination<select value={destination} onChange={(event) => setDestination(event.target.value as Destination)}><option value="vinted">Vinted-ready inventory</option><option value="ebay">Inventory + eBay draft</option><option value="inventory">Inventory only</option></select></label>
+      <label>Minimum single value<input type="number" min="0" step="0.5" inputMode="decimal" value={minimumSinglePrice} onChange={(event) => setMinimumSinglePrice(event.target.value)}/></label>
+      <div className="cardSessionMetric"><span>Saved this session</span><strong>{sessionCards.length}</strong><small>{duplicateGroups} exact printing{duplicateGroups === 1 ? '' : 's'}</small></div>
     </div>
 
     <div className="cardScannerColumns">
       <section className="cardScannerStage">
-        <header><span>1</span><div><h3>Read identifiers</h3><p>Use a clear front photo or type the small printed code.</p></div></header>
-        <label className="cardPhotoAction"><Camera size={22}/><strong>{busy === 'identify' ? 'Reading card...' : 'Identify From Photo'}</strong><small>AI extracts identifiers; it does not choose the final printing.</small><input type="file" accept="image/*" capture="environment" disabled={Boolean(busy)} onChange={identifyPhoto}/></label>
+        <header><span>1</span><div><h3>Photograph and identify</h3><p>Use the front for identification and retain both sides for the listing.</p></div></header>
+        <div className="cardPhotoPair">
+          {(['front', 'back'] as const).map((side) => {
+            const photo = side === 'front' ? frontPhoto : backPhoto;
+            return <div className="cardPhotoSlot" key={side}>
+              <label className={photo ? 'hasPhoto' : ''}>
+                {photo ? <img src={photo.previewUrl} alt={`${side} of card`}/> : <><Camera size={22}/><strong>{side === 'front' && busy === 'identify' ? 'Reading front...' : `Add ${side}`}</strong><small>{side === 'front' ? 'Identifies the card' : 'Records condition'}</small></>}
+                <input type="file" accept="image/*" capture="environment" disabled={Boolean(busy)} onChange={(event) => capturePhoto(side, event)}/>
+              </label>
+              {photo ? <div className="cardPhotoTools"><button className="iconButton secondary" title={`Rotate ${side}`} onClick={() => rotateCaptured(side)}><RotateCw size={16}/></button><button className="iconButton danger" title={`Remove ${side}`} onClick={() => replacePhoto(side, null)}><Trash2 size={16}/></button></div> : null}
+            </div>;
+          })}
+        </div>
         <div className="cardIdentityFields">
           <label>Card Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Optional but helpful"/></label>
           {game === 'yugioh' ? <label>Printed Set Code<input value={printedCode} onChange={(event) => setPrintedCode(event.target.value.toUpperCase())} placeholder="LOB-001"/></label> : <>
@@ -200,22 +339,33 @@ export default function CardScannerPanel() {
       </section>
 
       <section className="cardScannerStage">
-        <header><span>3</span><div><h3>Confirm and save</h3><p>Catalog prices are reference points, not eBay sold comps.</p></div></header>
+        <header><span>3</span><div><h3>Confirm and save</h3><p>Defaults stay in place while each saved card clears for the next one.</p></div></header>
+        {recommendation ? <div className={`cardRecommendation ${recommendation.disposition === 'Sell Individually' ? 'positive' : ''}`}><Layers3 size={18}/><div><strong>{recommendation.disposition}</strong><small>{recommendation.exactCopies} exact {recommendation.exactCopies === 1 ? 'copy' : 'copies'} in this session. {recommendation.reason}</small></div></div> : null}
         <div className="cardConfirmFields">
           <label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English</option><option>Japanese</option><option>Spanish</option><option>French</option><option>German</option><option>Italian</option><option>Korean</option><option>Portuguese</option></select></label>
           <label>Finish<select value={finish} onChange={(event) => setFinish(event.target.value)}><option value="">Not specified</option><option>Non-Holo</option><option>Holofoil</option><option>Reverse Holofoil</option><option>Foil</option></select></label>
           <label>Edition<input value={edition} onChange={(event) => setEdition(event.target.value)} placeholder="1st Edition, Unlimited..."/></label>
-          <label>Condition<select value={condition} onChange={(event) => setCondition(event.target.value)}><option>Near Mint</option><option>Lightly Played</option><option>Moderately Played</option><option>Heavily Played</option><option>Damaged</option><option>Used</option></select></label>
+          <label>Condition<select value={condition} onChange={(event) => setCondition(event.target.value)}><option>Near Mint</option><option>Lightly Played</option><option>Moderately Played</option><option>Heavily Played</option><option>Damaged</option></select></label>
           <label>Bin / Location<input value={storageLocation} onChange={(event) => setStorageLocation(event.target.value)} placeholder="CARD-A1"/></label>
           <label>Cost Paid<input type="number" min="0" step="0.01" inputMode="decimal" value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)}/></label>
           <label>Starting Price<input type="number" min="0" step="0.01" inputMode="decimal" value={listingPrice} onChange={(event) => setListingPrice(event.target.value)}/></label>
         </div>
-        <label className="checkboxLabel"><input type="checkbox" checked={createDraft} onChange={(event) => setCreateDraft(event.target.checked)}/> Create internal eBay draft</label>
-        <button disabled={!selected || Boolean(busy)} onClick={saveCard}>{busy === 'save' ? <LoaderCircle className="spin" size={16}/> : <Sparkles size={16}/>} Save Confirmed Card</button>
-        <p className="cardPhotoReminder">Attach actual front and back photos in Photos before publishing to eBay.</p>
+        <button disabled={!selected || !frontPhoto || !backPhoto || Boolean(busy)} onClick={saveCard}>{busy === 'save' ? <LoaderCircle className="spin" size={16}/> : <Sparkles size={16}/>} Save &amp; Start Next Card</button>
+        <p className="cardPhotoReminder">Catalog prices are references, not verified sold comps. Front and back photos are saved as actual item photos.</p>
       </section>
     </div>
+
     {notice ? <p className="setupNotice successNotice">{notice}</p> : null}
     {error ? <p className="setupNotice errorNotice">{error}</p> : null}
+
+    {sessionCards.length ? <section className="cardSessionResults">
+      <div className="panelHeader"><div><p className="eyebrow">Current session</p><h3>Saved Cards</h3><p>Use the duplicate guidance now; all records and photos are already stored.</p></div></div>
+      <div className="cardSessionList">{[...sessionCards].reverse().map((card) => <article key={card.sku}>
+        <div><strong>{card.title}</strong><small>{card.sku} · {destinationLabel(card.destination)} · {card.photoCount}/2 photos</small></div>
+        <span className="statusPill">{card.disposition}</span>
+        <span>{money(card.price) || 'Price needed'}</span>
+        <button className="iconButton secondary" title="Copy title and description" onClick={() => copyListing(card)}><Copy size={16}/></button>
+      </article>)}</div>
+    </section> : null}
   </section>;
 }

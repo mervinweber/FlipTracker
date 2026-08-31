@@ -134,7 +134,8 @@ Prototype snapshot:
 - [ ] v0.8: finish specialized books, movies/games, clothing, and general-merchandise workflows; the human-confirmed Pokemon/Yu-Gi-Oh! card scanner foundation is complete
 - [x] Add cached Pokemon TCG API and YGOPRODeck catalog adapters without making TCGplayer API access a launch dependency
 - [x] Add optional Gemini card-identifier extraction, exact-print candidate review, variant fields, and confirmed-card inventory/eBay-draft creation
-- [ ] Add card photo batches, reference-art rehosting, sports-card provider research, duplicate detection, and low-value lot rules
+- [x] Add rapid Pokemon/Yu-Gi-Oh! sessions with front/back photo persistence, destination-ready copy, exact-duplicate detection, and seller-defined low-value lot rules
+- [ ] Add resumable card sessions, explicit lot creation, reference-art rehosting, and sports-card provider research
 - [ ] v0.9: authentication and owner-scoped/eBay-tenant foundations are implemented; activate Clerk, claim legacy data, complete onboarding/backups/telemetry, and pass private-beta isolation tests
 - [x] Document competitor workflow lessons in `docs/PRODUCT_BENCHMARKS.md`
 

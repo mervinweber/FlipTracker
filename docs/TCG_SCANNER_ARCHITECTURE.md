@@ -9,8 +9,9 @@ FlipTracker uses a confirmation-first card workflow:
 3. Query a game-specific catalog adapter.
 4. Present ranked printings to the seller.
 5. Require the seller to choose the exact set, number, rarity, language, finish, and edition.
-6. Save one inventory record and optionally create an internal eBay draft.
-7. Require actual front/back listing photos before eBay publication.
+6. Capture and retain the actual front and back photos during intake.
+7. Save one inventory record, both photos, and optionally create an internal eBay draft.
+8. Keep a session ledger for exact-duplicate detection and low-value lot guidance.
 
 Image recognition must never silently choose or price a printing. Shared artwork, reprints, promos, foils, languages, and first editions can have materially different values.
 
@@ -46,12 +47,16 @@ TCGplayer's API would be useful for catalog and market-price enrichment, but its
 
 Reference: https://docs.tcgplayer.com/docs/getting-started
 
-## Current v0.8 Foundation
+## Current Workflow
 
 - `convex/cardCatalog.ts`: cached Pokemon and Yu-Gi-Oh! catalog adapters plus gated Gemini identifier extraction.
 - `convex/cardIntake.ts`: seller-confirmed inventory and optional eBay-draft creation.
-- `src/components/CardScannerPanel.tsx`: phone photo/manual-code workflow, candidate review, variant confirmation, cost/bin/price, and save.
+- `src/components/CardScannerPanel.tsx`: rapid phone workflow with paired front/back capture, candidate review, variant confirmation, destination selection, cost/bin/price, and immediate next-card reset.
+- `src/utils/cardSession.ts`: deterministic duplicate grouping, individual/playset/bundle/hold guidance, and marketplace-ready listing copy.
 - Card provider ID, language, rarity, finish, edition, identification method, and confidence are persisted.
+- Actual item photos are resized, stored in Convex, and attached in front/back order during intake.
+- Session recommendations use a seller-defined minimum individual-card value. They are operational guidance, not verified sold-price conclusions.
+- Vinted-ready mode prepares the inventory record and copy for manual posting. FlipTracker does not automate or scrape Vinted.
 
 ## Required Configuration
 
@@ -64,7 +69,7 @@ Reference: https://docs.tcgplayer.com/docs/getting-started
 
 - Rehost permitted reference artwork in Convex storage with attribution and expiry rules.
 - Add sports-card provider research before enabling sports image identification.
-- Add batch photo pairing, front/back association, and duplicate-printing detection.
-- Add low-value lot recommendations and seller-defined minimum individual-listing value.
+- Persist resumable multi-device card sessions and aggregate session cost/profit reporting.
+- Add a bulk action that turns confirmed low-value duplicates into one explicit lot record without losing source-card traceability.
 - Keep catalog reference prices separate from verified eBay sold comps.
 - Add graded-card fields only after raw-card intake is dependable.

@@ -42,6 +42,15 @@ export default function QuickGuide() {
           <li>Review amber rows, then use the Photos queue on your phone before finishing pricing in Listings.</li>
         </ol><p className="guideNote"><Keyboard size={15}/> Photo identification and prices are editable working estimates, not verified sold comps. All records remain internal drafts until you review photos and send them to eBay.</p></div></section>
 
+        <section><div className="guideNumber">TCG</div><div><h3>Process Pokemon and Yu-Gi-Oh! cards</h3><ol>
+          <li>Open <strong>Cards</strong>, choose Pokemon or Yu-Gi-Oh!, and set the session destination and minimum value for an individual listing.</li>
+          <li>Take a clear front photo. Gemini can read the visible identifiers when configured; you can always type the set code or collector number manually.</li>
+          <li>Add the back photo, search the free game catalog, and choose the exact printing. Confirm language, finish, edition, and condition yourself.</li>
+          <li>Review the catalog reference price, cost, bin, and Individual, Playset, Bundle, or Hold guidance.</li>
+          <li>Select <strong>Save &amp; Start Next Card</strong>. The inventory record and both actual photos are saved together while session defaults remain ready for the next card.</li>
+          <li>For eBay, create an internal draft. For Vinted, use the prepared title and description from the session tray for a quick manual listing.</li>
+        </ol><p className="guideNote"><Camera size={15}/> Card recognition proposes candidates but never silently chooses a printing. Vinted-ready prep does not log in, scrape, or publish to Vinted.</p></div></section>
+
         <section><div className="guideNumber">3</div><div><h3>Add listing photos from your phone</h3><ol>
           <li>Open the same FlipTracker deployment on your phone and select <strong>Photos</strong>.</li>
           <li>Choose <strong>Start Photo Session</strong> for a stack, or scan an item's SKU label/UPC to open one record directly.</li>

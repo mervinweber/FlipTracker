@@ -22,6 +22,11 @@ function normalized(value?: string) {
   return value?.trim().replace(/\s+/g, " ") || "";
 }
 
+function normalizedCardNumber(value?: string) {
+  const raw = normalized(value).split("/")[0];
+  return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
+}
+
 function cacheKey(args: { game: CardGame; printedCode?: string; setCode?: string; collectorNumber?: string; name?: string }) {
   return [args.game, args.printedCode, args.setCode, args.collectorNumber, args.name]
     .map((value) => normalized(value).toLowerCase())
@@ -29,16 +34,23 @@ function cacheKey(args: { game: CardGame; printedCode?: string; setCode?: string
 }
 
 async function fetchJson(url: string, headers?: Record<string, string>) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers: { "user-agent": "FlipTracker/0.8", ...headers } });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(payload?.error || payload?.message || `Card catalog request failed (${response.status}).`);
-    return payload;
-  } finally {
-    clearTimeout(timeout);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { "user-agent": "FlipTracker/0.8", ...headers } });
+      const payload = await response.json().catch(() => null);
+      if (response.ok) return payload;
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === 2) throw new Error(payload?.error || payload?.message || `Card catalog request failed (${response.status}).`);
+    } catch (error) {
+      if (attempt === 2) throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
   }
+  throw new Error("Card catalog request failed after several attempts.");
 }
 
 function finitePrice(value: unknown) {
@@ -91,7 +103,7 @@ function pokemonQuery(args: { setCode?: string; collectorNumber?: string; name?:
   const parts: string[] = [];
   const safe = (value: string) => value.replace(/["\\]/g, "");
   if (normalized(args.setCode)) parts.push(`set.id:${safe(normalized(args.setCode))}`);
-  if (normalized(args.collectorNumber)) parts.push(`number:${safe(normalized(args.collectorNumber).split("/")[0])}`);
+  if (normalized(args.collectorNumber)) parts.push(`number:${safe(normalizedCardNumber(args.collectorNumber))}`);
   if (normalized(args.name)) parts.push(`name:"${safe(normalized(args.name))}"`);
   if (!parts.length) throw new Error("Enter a set code, collector number, or card name.");
   return parts.join(" ");
@@ -100,8 +112,34 @@ function pokemonQuery(args: { setCode?: string; collectorNumber?: string; name?:
 async function lookupPokemon(args: { setCode?: string; collectorNumber?: string; name?: string }): Promise<CardCandidate[]> {
   const headers = process.env.POKEMON_TCG_API_KEY ? { "X-Api-Key": process.env.POKEMON_TCG_API_KEY } : undefined;
   const query = pokemonQuery(args);
-  const payload = await fetchJson(`https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&pageSize=20`, headers);
-  return (payload?.data || []).map((card: any) => ({
+  const fetchPokemon = async (search: string, pageSize: number) => {
+    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(search)}&pageSize=${pageSize}`;
+    try {
+      return await fetchJson(url, headers);
+    } catch (error) {
+      if (!headers) throw error;
+      return await fetchJson(url);
+    }
+  };
+  let payload;
+  try {
+    payload = await fetchPokemon(query, 20);
+  } catch (error) {
+    if (!normalized(args.collectorNumber)) throw error;
+  }
+  let cards = Array.isArray(payload?.data) ? payload.data : [];
+  if (!cards.length && normalized(args.collectorNumber)) {
+    const number = normalizedCardNumber(args.collectorNumber);
+    const fallbackParts = [`number:${number.replace(/["\\]/g, "")}`];
+    if (normalized(args.name)) fallbackParts.push(`name:"${normalized(args.name).replace(/["\\]/g, "")}"`);
+    const fallback = await fetchPokemon(fallbackParts.join(" "), 250);
+    cards = (Array.isArray(fallback?.data) ? fallback.data : []).filter((card: any) => {
+      if (normalized(args.setCode) && normalized(card.set?.id) !== normalized(args.setCode)) return false;
+      if (normalized(args.name) && normalized(card.name) !== normalized(args.name)) return false;
+      return true;
+    });
+  }
+  return cards.map((card: any) => ({
     provider: "pokemontcg",
     providerId: String(card.id),
     game: "pokemon" as const,
@@ -112,7 +150,7 @@ async function lookupPokemon(args: { setCode?: string; collectorNumber?: string;
     rarity: card.rarity,
     imageUrl: card.images?.small,
     marketPrice: finitePrice(card.tcgplayer?.prices?.normal?.market ?? card.tcgplayer?.prices?.holofoil?.market ?? card.cardmarket?.prices?.averageSellPrice),
-    confidence: card.set?.id?.toLowerCase() === normalized(args.setCode).toLowerCase() && String(card.number) === normalized(args.collectorNumber).split("/")[0] ? 0.98 : 0.78,
+    confidence: card.set?.id?.toLowerCase() === normalized(args.setCode).toLowerCase() && normalizedCardNumber(card.number) === normalizedCardNumber(args.collectorNumber) ? 0.98 : 0.78,
   })).slice(0, 20);
 }
 
