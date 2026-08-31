@@ -16,6 +16,7 @@ import { assessMarkdownListing, isFlipTrackerManagedActiveListing, listingAgeDay
 import { buildTodayOperations } from '../utils/todayOperations';
 import { listingOperationsIssue, shouldArchiveSaleByDefault } from '../utils/listingOperations';
 import { applySafeSpecificDefaults, assessListingQuality, photoChecklistFor } from '../utils/listingQuality';
+import { fulfillmentEconomics, recommendFulfillment } from '../utils/fulfillment';
 import { clearSellerSession, createSellerSession, formatSellerSessionDuration, loadSellerSession, pauseSellerSession, recordSellerSessionEvent, resumeSellerSession, saveSellerSession, sellerSessionElapsedMs, type SellerSession, type SellerSessionEvent } from '../utils/sellerSession';
 import {
   EBAY_CATEGORY_CHOICES,
@@ -86,12 +87,16 @@ type Listing = {
   pricingSource?: string;
   pricingUpdatedAt?: number;
   ebayOrderId?: string;
+  ebayOrderLineItemId?: string;
   ebayLastSyncedAt?: number;
   fulfillmentStatus?: string;
   packedAt?: number;
   shippedAt?: number;
   shippingCarrier?: string;
+  shippingService?: string;
   trackingNumber?: string;
+  trackingSubmittedAt?: number;
+  ebayFulfillmentId?: string;
   insuranceRequired?: boolean;
   fulfillmentNotes?: string;
   updatedAt: number;
@@ -154,7 +159,7 @@ type ActivePricingResult = {
 };
 
 type RepriceMode = 'percentage' | 'exact' | 'profit';
-type ListingWorkspaceView = 'Queue' | 'Active' | 'Sold' | 'Attention';
+type ListingWorkspaceView = 'Queue' | 'Active' | 'Shipping' | 'Sold' | 'Attention';
 type ListingEditorStep = 'details' | 'shipping' | 'price';
 
 const LISTING_EDITOR_STEPS: Array<{ id: ListingEditorStep; label: string }> = [
@@ -232,6 +237,10 @@ function setItemSpecificValue(itemSpecifics: string | undefined, name: string, v
     lines.unshift(nextLine);
   }
   return lines.join('\n');
+}
+
+function htmlEscape(value: unknown) {
+  return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] || character);
 }
 
 type EbaySettings = {
@@ -437,6 +446,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const updateEbayPrice = useAction(api.ebay.updatePublishedPrice);
   const revisePublishedListing = useAction(api.ebay.revisePublishedListing);
   const endEbayListing = useAction(api.ebay.endPublishedListing);
+  const submitShippingFulfillment = useAction(api.ebay.submitShippingFulfillment);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [fastReviewing, setFastReviewing] = useState<Listing | null>(null);
@@ -495,6 +505,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [status, setStatus] = useState('All');
   const [platform, setPlatform] = useState('All');
   const [queueType, setQueueType] = useState('All');
+  const [fulfillmentFilter, setFulfillmentFilter] = useState('All');
   const [sortBy, setSortBy] = useState<ListingSort>('Newest');
   const [priceChangeReason, setPriceChangeReason] = useState('');
   const [adminKey, setAdminKey] = useState(() => localStorage.getItem('fliptrackerRememberedSellerKey') || sessionStorage.getItem('fliptrackerSellerKey') || '');
@@ -673,6 +684,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     const feeRate = (listingSpeedPresetFor(fastReviewing)?.feePercent ?? 15) / 100;
     return price - (price * feeRate) - (fastReviewing.purchasePrice ?? 0) - (fastReviewing.shippingCost ?? 0);
   }, [fastReviewing]);
+  const fulfillmentRecommendation = useMemo(() => fulfillmentEditing ? recommendFulfillment(fulfillmentEditing) : null, [fulfillmentEditing]);
+  const fulfillmentProfit = useMemo(() => fulfillmentEditing ? fulfillmentEconomics(fulfillmentEditing) : null, [fulfillmentEditing]);
   const exceptionListings = useMemo(() => (listings || []).filter((listing) => {
     if (listing.platform !== 'eBay' || !['Draft', 'Pending'].includes(listing.status)) return false;
     return (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field));
@@ -687,15 +700,20 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const filtered = useMemo(() => filteredByControls.filter((listing) => {
     if (workspaceView === 'Queue') return ['Draft', 'Pending'].includes(listing.status);
     if (workspaceView === 'Active') return listing.status === 'Active';
+    if (workspaceView === 'Shipping') return listing.status === 'Sold'
+      && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '')
+      && (fulfillmentFilter === 'All' || listing.fulfillmentStatus === fulfillmentFilter);
     if (workspaceView === 'Sold') return listing.status === 'Sold';
     return attentionIds.has(listing._id);
-  }), [attentionIds, filteredByControls, workspaceView]);
+  }), [attentionIds, filteredByControls, fulfillmentFilter, workspaceView]);
+  const shippingListings = useMemo(() => (listings || []).filter((listing) => listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '')), [listings]);
   const workspaceCounts = useMemo(() => ({
     Queue: (listings || []).filter((listing) => ['Draft', 'Pending'].includes(listing.status)).length,
     Active: (listings || []).filter((listing) => listing.status === 'Active').length,
+    Shipping: shippingListings.length,
     Sold: (listings || []).filter((listing) => listing.status === 'Sold').length,
     Attention: attentionIds.size,
-  }), [attentionIds, listings]);
+  }), [attentionIds, listings, shippingListings.length]);
   const todayOperations = useMemo(() => buildTodayOperations(listings || [], (listing) => ({
     blockingIssues: (readinessByListingId.get(listing._id) || []).filter((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field)).length,
     queueStage: queueStatus(listing),
@@ -817,14 +835,34 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   }
 
   function openFulfillmentEditor(listing: Listing) {
+    const recommendation = recommendFulfillment(listing);
     setEditing(null);
     setSaleEditing(null);
     setFulfillmentError('');
     setFulfillmentEditing({
       ...listing,
       fulfillmentStatus: listing.fulfillmentStatus || 'Awaiting Shipment',
-      insuranceRequired: listing.insuranceRequired ?? (listing.soldPrice ?? 0) >= 100,
+      shippingPreset: listing.shippingPreset || recommendation.profileKey,
+      packageWeightOz: listing.packageWeightOz || recommendation.weightOz,
+      packageLengthIn: listing.packageLengthIn || recommendation.dimensions.length,
+      packageWidthIn: listing.packageWidthIn || recommendation.dimensions.width,
+      packageHeightIn: listing.packageHeightIn || recommendation.dimensions.height,
+      shippingCarrier: listing.shippingCarrier || recommendation.carrier,
+      shippingService: listing.shippingService || recommendation.service,
+      insuranceRequired: listing.insuranceRequired ?? recommendation.insuranceRecommended,
     });
+  }
+
+  function applyFulfillmentProfile(profileKey: string) {
+    const profile = shippingProfileForKey(profileKey as EbayShippingProfileKey);
+    setFulfillmentEditing((current) => current ? {
+      ...current,
+      shippingPreset: profile.key,
+      packageWeightOz: profile.weight.value,
+      packageLengthIn: profile.dimensions.length,
+      packageWidthIn: profile.dimensions.width,
+      packageHeightIn: profile.dimensions.height,
+    } : current);
   }
 
   async function saveFulfillment() {
@@ -839,7 +877,14 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         packedAt: fulfillmentEditing.fulfillmentStatus === 'Packed' ? fulfillmentEditing.packedAt || now : fulfillmentEditing.packedAt,
         shippedAt: fulfillmentEditing.fulfillmentStatus === 'Shipped' ? fulfillmentEditing.shippedAt || now : fulfillmentEditing.shippedAt,
         shippingCarrier: fulfillmentEditing.shippingCarrier?.trim() || undefined,
+        shippingService: fulfillmentEditing.shippingService?.trim() || undefined,
         trackingNumber: fulfillmentEditing.trackingNumber?.trim() || undefined,
+        shippingCost: fulfillmentEditing.shippingCost,
+        shippingPreset: fulfillmentEditing.shippingPreset,
+        packageWeightOz: fulfillmentEditing.packageWeightOz,
+        packageLengthIn: fulfillmentEditing.packageLengthIn,
+        packageWidthIn: fulfillmentEditing.packageWidthIn,
+        packageHeightIn: fulfillmentEditing.packageHeightIn,
         insuranceRequired: Boolean(fulfillmentEditing.insuranceRequired),
         fulfillmentNotes: fulfillmentEditing.fulfillmentNotes?.trim() || undefined,
       });
@@ -850,6 +895,49 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     } finally {
       setFulfillmentBusy(false);
     }
+  }
+
+  async function submitFulfillmentTracking() {
+    if (!fulfillmentEditing || !adminKey) return;
+    if (!fulfillmentEditing.ebayOrderId) {
+      setFulfillmentError('This sale is not linked to an eBay order. Sync eBay Sales before submitting tracking.');
+      return;
+    }
+    if (!fulfillmentEditing.shippingCarrier?.trim() || !fulfillmentEditing.trackingNumber?.trim()) {
+      setFulfillmentError('Choose a carrier and enter the tracking number from the purchased label.');
+      return;
+    }
+    setFulfillmentBusy(true);
+    setFulfillmentError('');
+    try {
+      const result = await submitShippingFulfillment({
+        adminKey,
+        listingId: fulfillmentEditing._id,
+        carrier: fulfillmentEditing.shippingCarrier.trim(),
+        service: fulfillmentEditing.shippingService?.trim() || undefined,
+        trackingNumber: fulfillmentEditing.trackingNumber.trim(),
+        shippingCost: fulfillmentEditing.shippingCost,
+      });
+      setEbayNotice(result.alreadySubmitted ? `${fulfillmentEditing.title} was already shipped on eBay and is now reconciled.` : `${fulfillmentEditing.title} tracking submitted to eBay.`);
+      setFulfillmentEditing(null);
+    } catch (error) {
+      setFulfillmentError(readableActionError(error, 'Could not submit tracking to eBay.'));
+    } finally {
+      setFulfillmentBusy(false);
+    }
+  }
+
+  function printShippingPickList() {
+    const rows = shippingListings
+      .slice()
+      .sort((a, b) => (a.storageLocation || 'ZZZ').localeCompare(b.storageLocation || 'ZZZ') || a.title.localeCompare(b.title));
+    const popup = window.open('', '_blank');
+    if (!popup) {
+      setEbayError('Allow pop-ups to print the shipping pick list.');
+      return;
+    }
+    popup.document.write(`<!doctype html><html><head><title>FlipTracker Shipping Pick List</title><style>body{font:14px system-ui;margin:28px;color:#111}h1{font-size:22px}p{color:#555}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:9px 7px;border-bottom:1px solid #bbb;text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase}.check{font-size:20px;width:28px}.location{font-weight:800}.meta{font-size:11px;color:#555}</style></head><body><h1>FlipTracker Shipping Pick List</h1><p>${rows.length} order${rows.length === 1 ? '' : 's'} awaiting shipment · ${htmlEscape(new Date().toLocaleString())}</p><table><thead><tr><th></th><th>Location</th><th>Item</th><th>Order</th><th>Package</th></tr></thead><tbody>${rows.map((listing) => { const recommendation = recommendFulfillment(listing); return `<tr><td class="check">□</td><td class="location">${htmlEscape(listing.storageLocation || 'Unassigned')}</td><td><strong>${htmlEscape(listing.title)}</strong><div class="meta">${htmlEscape(listing.sku || '')}</div></td><td>${htmlEscape(listing.ebayOrderId || '')}<div class="meta">${htmlEscape(listing.buyer || '')}</div></td><td>${htmlEscape(recommendation.profileLabel)}<div class="meta">${htmlEscape(`${recommendation.weightOz} oz · ${recommendation.service}`)}</div></td></tr>`; }).join('')}</tbody></table><script>window.addEventListener('load',()=>window.print())</script></body></html>`);
+    popup.document.close();
   }
 
   function openTodayOperation(operation: typeof todayOperations[number]) {
@@ -1951,8 +2039,14 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       </section>
 
       <nav className="listingWorkspaceTabs" aria-label="Listing lifecycle views">
-        {(['Queue', 'Active', 'Sold', 'Attention'] as ListingWorkspaceView[]).map((view) => <button key={view} className={workspaceView === view ? 'active' : 'secondary'} onClick={() => { setWorkspaceView(view); setStatus('All'); setQueueType('All'); setSelectedIds(new Set()); }}><span>{view === 'Attention' ? 'Needs Attention' : view === 'Active' ? 'Tracked active' : view}</span><b>{workspaceCounts[view]}</b></button>)}
+        {(['Queue', 'Active', 'Shipping', 'Sold', 'Attention'] as ListingWorkspaceView[]).map((view) => <button key={view} className={workspaceView === view ? 'active' : 'secondary'} onClick={() => { setWorkspaceView(view); setStatus('All'); setQueueType('All'); setFulfillmentFilter('All'); setSelectedIds(new Set()); }}><span>{view === 'Attention' ? 'Needs Attention' : view === 'Active' ? 'Tracked active' : view}</span><b>{workspaceCounts[view]}</b></button>)}
       </nav>
+
+      {workspaceView === 'Shipping' ? <section className="panel shippingWorkspacePanel">
+        <div className="shippingWorkspaceHeader"><div><p className="eyebrow">Fulfillment queue</p><h2>Pick, pack, buy label, submit tracking</h2><p>Work by bin location, retain the listing package, and send purchased-label tracking back to eBay.</p></div><div className="actions"><button className="secondary" disabled={sellerSalesSyncBusy || !ebaySetup?.connected} onClick={refreshEbaySales}><RefreshCw size={16}/>{sellerSalesSyncBusy ? 'Syncing...' : 'Sync Orders'}</button><button className="secondary" disabled={!shippingListings.length} onClick={printShippingPickList}><Download size={16}/> Print Pick List</button></div></div>
+        <div className="shippingWorkspaceMetrics"><div><span>To pick</span><strong>{shippingListings.filter((listing) => listing.fulfillmentStatus === 'Awaiting Shipment').length}</strong></div><div><span>Packed</span><strong>{shippingListings.filter((listing) => listing.fulfillmentStatus === 'Packed').length}</strong></div><div><span>Insurance review</span><strong>{shippingListings.filter((listing) => listing.insuranceRequired || (listing.soldPrice || 0) >= 100).length}</strong></div><div><span>Buyer shipping</span><strong>{money(shippingListings.reduce((sum, listing) => sum + (listing.shippingCharged || 0), 0))}</strong></div></div>
+        <p className="shippingApiNote"><ShieldCheck size={15}/> eBay’s public Fulfillment API accepts carrier and tracking. Outbound label purchase remains in eBay Labels, then FlipTracker submits and records the shipment.</p>
+      </section> : null}
 
       {workspaceView === 'Attention' && todayOperations.length ? <section className={`panel todayOperationsPanel ${todayOperations.length ? 'hasWork' : ''}`}>
         <div className="todayOperationsHeader">
@@ -2114,7 +2208,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search listings..." value={query} onChange={(event) => setQuery(event.target.value)}/></div>
         <select value={platform} onChange={(event) => setPlatform(event.target.value)}>{['All', ...PLATFORMS].map((value) => <option key={value}>{value}</option>)}</select>
         <select aria-label="Sort listings" value={sortBy} onChange={(event) => setSortBy(event.target.value as ListingSort)}>{(['Newest', 'Queue', 'Status', 'Price High', 'Price Low'] as ListingSort[]).map((value) => <option key={value} value={value}>{`Sort: ${value}`}</option>)}</select>
-        <details className="listingFilterMenu"><summary><SlidersHorizontal size={16}/> Filters</summary><div>{workspaceView === 'Attention' ? <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['All', ...STATUSES].map((value) => <option key={value}>{value}</option>)}</select></label> : null}{workspaceView === 'Queue' ? <label>Queue Stage<select aria-label="Filter by queue type" value={queueType} onChange={(event) => setQueueType(event.target.value)}><option value="All">All stages</option>{QUEUE_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : null}{workspaceView !== 'Queue' && workspaceView !== 'Attention' ? <p>No additional filters for this stage.</p> : null}</div></details>
+        <details className="listingFilterMenu"><summary><SlidersHorizontal size={16}/> Filters</summary><div>{workspaceView === 'Attention' ? <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['All', ...STATUSES].map((value) => <option key={value}>{value}</option>)}</select></label> : null}{workspaceView === 'Queue' ? <label>Queue Stage<select aria-label="Filter by queue type" value={queueType} onChange={(event) => setQueueType(event.target.value)}><option value="All">All stages</option>{QUEUE_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : null}{workspaceView === 'Shipping' ? <label>Fulfillment Stage<select value={fulfillmentFilter} onChange={(event) => setFulfillmentFilter(event.target.value)}><option value="All">All open shipments</option><option>Awaiting Shipment</option><option>Packed</option></select></label> : null}{!['Queue', 'Attention', 'Shipping'].includes(workspaceView) ? <p>No additional filters for this stage.</p> : null}</div></details>
         <div className="actions listingTools">
           {workspaceView === 'Active' || workspaceView === 'Attention' ? <button className="secondary" disabled={activeListingsSyncBusy || !ebaySetup?.connected} onClick={refreshActiveEbayListings}><RefreshCw size={16}/>{activeListingsSyncBusy ? 'Syncing...' : 'Sync Active'}</button> : null}
           {workspaceView === 'Sold' || workspaceView === 'Attention' ? <button className="secondary" disabled={sellerSalesSyncBusy || !ebaySetup?.connected} onClick={refreshEbaySales}><RefreshCw size={16}/>{sellerSalesSyncBusy ? 'Syncing...' : 'Sync Sales'}</button> : null}
@@ -2124,16 +2218,16 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       </section>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>{workspaceView === 'Attention' ? 'Needs Attention' : `${workspaceView} Listings`}</h2><p>{listings === undefined ? 'Loading Convex data...' : `${filtered.length} listing${filtered.length === 1 ? '' : 's'} in this view`}</p></div><button className="secondary" onClick={onAddOtherItem}><Plus size={16}/> Add Item</button></div>
-        {listings === undefined ? <p className="panelMessage">Loading listings...</p> : filtered.length === 0 ? <div className="empty"><h2>No listings found</h2><p>Create a draft from an item in Inventory, then track it through sale.</p></div> : (
+        <div className="panelHeader"><div><h2>{workspaceView === 'Attention' ? 'Needs Attention' : workspaceView === 'Shipping' ? 'Orders Awaiting Shipment' : `${workspaceView} Listings`}</h2><p>{listings === undefined ? 'Loading Convex data...' : `${filtered.length} ${workspaceView === 'Shipping' ? 'order' : 'listing'}${filtered.length === 1 ? '' : 's'} in this view`}</p></div>{workspaceView !== 'Shipping' ? <button className="secondary" onClick={onAddOtherItem}><Plus size={16}/> Add Item</button> : null}</div>
+        {listings === undefined ? <p className="panelMessage">Loading listings...</p> : filtered.length === 0 ? <div className="empty"><h2>{workspaceView === 'Shipping' ? 'No orders awaiting shipment' : 'No listings found'}</h2><p>{workspaceView === 'Shipping' ? 'Sync eBay Sales to import paid orders. Packed and awaiting-shipment orders will appear here.' : 'Create a draft from an item in Inventory, then track it through sale.'}</p></div> : (
           <div className="tableWrap">
             <table className="listingLifecycleTable">
-              <thead><tr><th className="selectColumn">{workspaceView === 'Queue' ? <input type="checkbox" aria-label="Select all eligible listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/> : null}</th><th>Item</th><th>Readiness</th><th>Price</th><th>Location</th><th>Action</th></tr></thead>
+              <thead><tr><th className="selectColumn">{workspaceView === 'Queue' ? <input type="checkbox" aria-label="Select all eligible listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/> : null}</th><th>Item</th><th>{workspaceView === 'Shipping' ? 'Fulfillment' : 'Readiness'}</th><th>Price</th><th>Location</th><th>Action</th></tr></thead>
               <tbody>{filtered.map((listing) => (
                 <tr key={listing._id}>
                   <td className="selectColumn">{workspaceView === 'Queue' && listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <input type="checkbox" aria-label={`Select ${listing.title}`} checked={selectedIds.has(listing._id)} onChange={() => toggleSelected(listing._id)}/> : null}</td>
                   <td className="listingIdentityCell"><div className="listingIdentityHeader"><span className="consoleTag">{listing.platform}</span><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span></div><strong>{listing.title}</strong><small>{listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
-                  <td className="listingStateCell"><div className="queueQualityLine"><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</td>
+                  <td className="listingStateCell">{workspaceView === 'Shipping' ? <><div className="queueQualityLine"><span className="queueBadge ready-for-ebay">{listing.fulfillmentStatus || 'Awaiting Shipment'}</span></div><small>{listing.shippingService || recommendFulfillment(listing).service}</small>{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : <small className="warningText">Sync order before tracking</small>}</> : <><div className="queueQualityLine"><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</>}</td>
                   <td className="valueCell listingPriceCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td className="listingLocationCell">{listing.storageLocation || <span className="mutedValue">—</span>}</td>
                   <td className="tableActionsCell"><div className="rowActions simplifiedRowActions">
@@ -2176,16 +2270,24 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <div><span>Sold for</span><strong>{money(fulfillmentEditing.soldPrice)}</strong></div>
           <div><span>Package</span><strong>{fulfillmentEditing.packageWeightOz ? `${fulfillmentEditing.packageWeightOz} oz` : 'Confirm weight'}</strong><small>{[fulfillmentEditing.packageLengthIn, fulfillmentEditing.packageWidthIn, fulfillmentEditing.packageHeightIn].every(Boolean) ? `${fulfillmentEditing.packageLengthIn} × ${fulfillmentEditing.packageWidthIn} × ${fulfillmentEditing.packageHeightIn} in` : fulfillmentEditing.shippingPreset || 'No saved profile'}</small></div>
           <div><span>Buyer shipping</span><strong>{money(fulfillmentEditing.shippingCharged)}</strong></div>
+          <div><span>Label cost</span><strong>{fulfillmentEditing.shippingCost !== undefined ? money(fulfillmentEditing.shippingCost) : 'Enter after purchase'}</strong><small>{fulfillmentProfit ? `${fulfillmentProfit.shippingMargin >= 0 ? '+' : ''}${money(fulfillmentProfit.shippingMargin)} shipping margin` : ''}</small></div>
         </div>
+        {fulfillmentRecommendation ? <div className="shippingRecommendation"><Truck size={20}/><div><span>Recommended starting point</span><strong>{fulfillmentRecommendation.service} · {fulfillmentRecommendation.profileLabel}</strong><p>{fulfillmentRecommendation.reason}</p>{fulfillmentRecommendation.warnings.map((warning) => <small key={warning}>{warning}</small>)}</div><button className="secondary" onClick={() => setFulfillmentEditing((current) => current ? { ...current, shippingCarrier: fulfillmentRecommendation.carrier, shippingService: fulfillmentRecommendation.service } : current)}>Use</button></div> : null}
         <div className="fulfillmentFormGrid">
-          <label>Carrier<select value={fulfillmentEditing.shippingCarrier || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, shippingCarrier: event.target.value || undefined } : current)}><option value="">Choose after label purchase</option>{['USPS','UPS','FedEx','Other'].map((value) => <option key={value}>{value}</option>)}</select></label>
-          <label>Tracking Number<input value={fulfillmentEditing.trackingNumber || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, trackingNumber: event.target.value } : current)} placeholder="Optional until shipped"/></label>
+          <label>Package Profile<select value={fulfillmentEditing.shippingPreset || fulfillmentRecommendation?.profileKey || 'custom'} onChange={(event) => applyFulfillmentProfile(event.target.value)}>{EBAY_SHIPPING_PROFILES.map((profile) => <option key={profile.key} value={profile.key}>{profile.label}</option>)}</select></label>
+          <label>Shipping Service<input value={fulfillmentEditing.shippingService || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, shippingService: event.target.value } : current)} placeholder="USPS Media Mail"/></label>
+          <label>Carrier<select value={fulfillmentEditing.shippingCarrier || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, shippingCarrier: event.target.value || undefined } : current)}><option value="">Choose after label purchase</option>{['USPS','UPS','FedEx','DHL','Other'].map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label>Tracking Number<input value={fulfillmentEditing.trackingNumber || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, trackingNumber: event.target.value } : current)} placeholder="Paste from purchased label"/></label>
+          <label>Label Cost<input type="number" min="0" step="0.01" value={fulfillmentEditing.shippingCost ?? ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, shippingCost: optionalNumber(event.target.value) } : current)} placeholder="Actual postage paid"/></label>
+          <label>Package Weight (oz)<input type="number" min="0.1" step="0.1" value={fulfillmentEditing.packageWeightOz ?? ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, packageWeightOz: optionalNumber(event.target.value), shippingPreset: 'custom' } : current)}/></label>
+          <details className="fulfillmentMeasurements"><summary>Package measurements</summary><div><label>Length (in)<input type="number" min="0.1" step="0.1" value={fulfillmentEditing.packageLengthIn ?? ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, packageLengthIn: optionalNumber(event.target.value), shippingPreset: 'custom' } : current)}/></label><label>Width (in)<input type="number" min="0.1" step="0.1" value={fulfillmentEditing.packageWidthIn ?? ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, packageWidthIn: optionalNumber(event.target.value), shippingPreset: 'custom' } : current)}/></label><label>Height (in)<input type="number" min="0.1" step="0.1" value={fulfillmentEditing.packageHeightIn ?? ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, packageHeightIn: optionalNumber(event.target.value), shippingPreset: 'custom' } : current)}/></label></div></details>
           <label className="checkRow fulfillmentInsurance"><input type="checkbox" checked={Boolean(fulfillmentEditing.insuranceRequired)} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, insuranceRequired: event.target.checked } : current)}/><span><strong>Insurance or additional coverage needed</strong><small>Automatically suggested at $100 or more. Confirm carrier limits before purchase.</small></span></label>
           <label className="fulfillmentNotes">Packing Notes<textarea value={fulfillmentEditing.fulfillmentNotes || ''} onChange={(event) => setFulfillmentEditing((current) => current ? { ...current, fulfillmentNotes: event.target.value } : current)} placeholder="Box, padding, signature, damage protection, or handoff notes..."/></label>
         </div>
-        <p className="ebaySafetyNote">Purchase the label in eBay so buyer address, service eligibility, postage, and tracking remain authoritative. FlipTracker records the physical workflow and package context.</p>
+        {fulfillmentProfit ? <div className="fulfillmentEconomics"><span>Estimated order net after item cost, fees, and label</span><strong>{money(fulfillmentProfit.estimatedNet)}</strong></div> : null}
+        <p className="ebaySafetyNote">Purchase the label in eBay so buyer address, eligible services, and postage remain authoritative. Return here, enter the final label cost and tracking, then submit shipment.</p>
         {fulfillmentError ? <p className="formError">{fulfillmentError}</p> : null}
-        <div className="actions modalActions"><a className="button secondary" href={`${ebaySetup?.environment === 'sandbox' ? 'https://www.sandbox.ebay.com' : 'https://www.ebay.com'}/sh/ord/?filter=status:AWAITING_SHIPMENT`} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Open eBay Labels</a><button className="secondary" disabled={fulfillmentBusy} onClick={() => setFulfillmentEditing(null)}>Cancel</button><button disabled={fulfillmentBusy} onClick={saveFulfillment}><Save size={16}/>{fulfillmentBusy ? 'Saving...' : `Save ${fulfillmentEditing.fulfillmentStatus}`}</button></div>
+        <div className="actions modalActions"><a className="button secondary" href={`${ebaySetup?.environment === 'sandbox' ? 'https://www.sandbox.ebay.com' : 'https://www.ebay.com'}/sh/ord/?filter=status:AWAITING_SHIPMENT`} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Buy Label on eBay</a><button className="secondary" disabled={fulfillmentBusy} onClick={saveFulfillment}><Save size={16}/> Save Progress</button><button disabled={fulfillmentBusy || !adminKey || !fulfillmentEditing.ebayOrderId || !fulfillmentEditing.shippingCarrier || !fulfillmentEditing.trackingNumber} onClick={submitFulfillmentTracking}><Send size={16}/>{fulfillmentBusy ? 'Submitting...' : 'Submit Tracking to eBay'}</button></div>
       </section></div> : null}
 
       {sellerSessionSummary ? <div className="modalBackdrop"><section className="modal sellerSessionSummaryModal">

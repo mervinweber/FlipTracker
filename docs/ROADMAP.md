@@ -282,7 +282,7 @@ Goal: make FlipTracker the reliable source of truth after publication.
 - [ ] Reconcile local and eBay status, price, quantity, URL, SKU, and listing ID
 - [ ] Add safe bulk revise, end, and relist workflows with per-item outcomes
 - [ ] Add stale inventory views and a configurable review cadence
-- [ ] Surface orders awaiting shipment and preserve tracking/shipping state when eBay APIs permit
+- [x] Surface orders awaiting shipment and preserve tracking/shipping state through the eBay Fulfillment API
 - [ ] Add a lifecycle audit trail showing who/what changed each state
 
 ## v0.6.6 Shipping And Fulfillment
@@ -291,11 +291,11 @@ Goal: make shipping selection understandable and hard to misconfigure.
 
 - [x] Put item-aware package and service recommendations before advanced policy/package overrides
 - [ ] Save seller-measured package profiles by item family and quantity range (built-in profiles exist)
-- [ ] Preview buyer charge, estimated label cost, dimensional-weight risk, insurance, and net shipping impact
+- [x] Preview buyer charge, seller-entered label cost, package measurements, insurance, shipping margin, and estimated order net
 - [x] Block known Media Mail and Standard Envelope eligibility/package errors before staging
 - [ ] Expand plain-language guidance for Priority Mail, UPS, FedEx, insurance, and dimensional weight
-- [ ] Add packing and insurance prompts for high-value items
-- [ ] Add post-sale packing queue, label/tracking handoff, and shipped confirmation where supported
+- [x] Add packing and insurance prompts for high-value items
+- [x] Add a post-sale packing queue, printable bin pick list, eBay Labels handoff, and shipped confirmation through `createShippingFulfillment`
 
 ## v0.8 Vertical Listing Intelligence
 
@@ -383,7 +383,20 @@ Goal: carry the same inventory record from sale through packing and shipment.
 - [x] Retain the reviewed package profile from the listing workflow
 - [x] Prompt for insurance on high-value items
 - [x] Hand off to eBay's label workspace and retain manual carrier/tracking/shipped state
-- [ ] Purchase labels and synchronize tracking/shipment state directly through approved eBay APIs
+- [x] Submit carrier and tracking through eBay's approved Fulfillment API with duplicate-submission protection
+- [ ] Purchase outbound labels inside FlipTracker only if eBay makes a general seller-label purchase API available
+
+## v0.9.9 Shipping Workspace
+
+Goal: complete the paid-order workflow without losing the original inventory/listing record.
+
+- [x] Add Shipping as a dedicated listing lifecycle view for Awaiting Shipment and Packed orders
+- [x] Add item-aware package and carrier/service guidance with Media Mail, game, card-envelope, bulky-package, and insurance guardrails
+- [x] Show buyer shipping, final label cost, shipping margin, and estimated order net
+- [x] Print a location-sorted pick list for open shipments
+- [x] Hand label purchase to eBay Labels and submit purchased-label tracking back through `createShippingFulfillment`
+- [x] Make tracking submission retry-safe by reconciling existing order fulfillments before creating one
+- [ ] Production-smoke one synced paid order after reconnecting eBay with `sell.fulfillment` write access
 
 ## v0.9.7 Continuous Seller Sessions
 

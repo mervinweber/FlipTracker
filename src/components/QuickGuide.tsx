@@ -70,7 +70,7 @@ export default function QuickGuide() {
         </ol><p className="guideNote">Changing the title, UPC, edition, condition, or completeness marks the item for another value check.</p></div></section>
 
         <section><div className="guideNumber">6</div><div><h3>Create the listing draft</h3><ol>
-          <li>Open <strong>Listings</strong> and use its lifecycle views: Queue for draft work, Active for live-listing maintenance, Sold for closeout and fulfillment, and Needs Attention for exceptions.</li>
+          <li>Open <strong>Listings</strong> and use its lifecycle views: Queue for draft work, Active for live-listing maintenance, Shipping for paid orders, Sold for completed-sale history, and Needs Attention for exceptions.</li>
           <li>Use <strong>Listing Templates</strong> to remember family defaults for books, movies, games, cards, clothing, and general items.</li>
           <li>Find the item in Inventory and select <strong>Draft</strong>.</li>
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
@@ -100,8 +100,10 @@ export default function QuickGuide() {
           <li>Edit Current Price whenever a listing is reduced and enter a reason. FlipTracker preserves the price history.</li>
           <li>When sold, change the listing status to <strong>Sold</strong>.</li>
           <li>Use the dollar button on a listing to record where it sold, sale price/date, what you paid, shipping income/cost, fees, buyer, order reference, and notes. Imported sold records open this same closeout directly and do not require eBay category, photo, or shipping details.</li>
-          <li>Open Fulfillment from the Today queue to pick by bin, confirm the package profile, flag insurance, and mark the order Packed or Shipped.</li>
-          <li>Save carrier and tracking details in FlipTracker, or hand off to eBay Labels for the connected order.</li>
+          <li>Open <strong>Shipping</strong> to work every paid order by bin location, or print the compact pick list for a larger batch.</li>
+          <li>Review the suggested package and service, confirm the measured weight, flag insurance, and mark the order Packed.</li>
+          <li>Choose <strong>Buy Label on eBay</strong>. eBay remains authoritative for buyer address, service eligibility, and the final postage charge.</li>
+          <li>Return to FlipTracker, enter the label cost and tracking number, then choose <strong>Submit Tracking to eBay</strong>. Repeated submissions reconcile the existing fulfillment instead of creating another shipment.</li>
           <li>Select <strong>Mark completed / archived</strong> when no fulfillment work remains. The record stays Sold so revenue and profit reporting remain accurate.</li>
           <li>FlipTracker updates inventory status, sales history, revenue, net profit, and fulfillment state.</li>
         </ol></div></section>

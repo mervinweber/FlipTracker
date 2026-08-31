@@ -9,6 +9,7 @@ import {
   mergeItemSpecifics,
   remoteItemSpecifics,
 } from "./lib/ebayNativeRevision";
+import { matchExistingFulfillment, matchOrderLine, type ExistingShippingFulfillment } from "./lib/ebayFulfillment";
 import { currentOwnerId } from "./ownership";
 
 const EBAY_SCOPES = [
@@ -16,6 +17,7 @@ const EBAY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/sell.account.readonly",
+  "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
 ].join(" ");
 
@@ -47,6 +49,7 @@ type EbayOrderLineItem = {
   quantity?: number;
   lineItemCost?: EbayAmount;
   discountedLineItemCost?: EbayAmount;
+  lineItemFulfillmentStatus?: string;
 };
 type EbayOrder = {
   orderId?: string;
@@ -870,6 +873,54 @@ export const markOfferWithdrawn = internalMutation({
   },
 });
 
+export const markShipmentSubmitted = internalMutation({
+  args: {
+    listingId: v.id("marketplaceListings"),
+    ownerId: v.optional(v.string()),
+    carrier: v.string(),
+    service: v.optional(v.string()),
+    trackingNumber: v.string(),
+    shippingCost: v.optional(v.number()),
+    fulfillmentId: v.optional(v.string()),
+    alreadySubmitted: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const listing = await ctx.db.get(args.listingId);
+    if (!listing || (args.ownerId && listing.ownerId !== args.ownerId)) throw new Error("Listing not found.");
+    const now = Date.now();
+    await ctx.db.patch(listing._id, {
+      fulfillmentStatus: "Shipped",
+      shippedAt: listing.shippedAt || now,
+      shippingCarrier: args.carrier,
+      shippingService: args.service,
+      trackingNumber: args.trackingNumber,
+      trackingSubmittedAt: now,
+      ebayFulfillmentId: args.fulfillmentId,
+      shippingCost: args.shippingCost,
+      ebayLastSyncedAt: now,
+      ebayLastError: undefined,
+      updatedAt: now,
+    });
+    if (args.shippingCost !== undefined) {
+      await ctx.db.patch(listing.assetId, { shipping: args.shippingCost, updatedAt: now });
+      const sale = await ctx.db.query("sales").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).unique();
+      if (sale) await ctx.db.patch(sale._id, { shipping: args.shippingCost, updatedAt: now });
+    }
+    await ctx.db.insert("listingEvents", {
+      ownerId: listing.ownerId,
+      listingId: listing._id,
+      assetId: listing.assetId,
+      eventType: args.alreadySubmitted ? "shipment_reconciled" : "shipment_submitted",
+      source: "eBay",
+      fromStatus: listing.fulfillmentStatus,
+      toStatus: "Shipped",
+      message: args.alreadySubmitted ? "Existing eBay shipment reconciled with FlipTracker." : "Tracking submitted to eBay and order marked shipped.",
+      metadata: JSON.stringify({ carrier: args.carrier, service: args.service, trackingNumber: args.trackingNumber, fulfillmentId: args.fulfillmentId }),
+      createdAt: now,
+    });
+  },
+});
+
 export const reconcileSoldOrderLine = internalMutation({
   args: {
     ownerId: v.optional(v.string()),
@@ -989,6 +1040,7 @@ export const reconcileSoldOrderLine = internalMutation({
       await ctx.db.patch(listing._id, {
         salePlatform: "eBay",
         saleReference: args.orderId,
+        ebayOrderLineItemId: args.orderLineItemKey,
         ebayLastSyncedAt: now,
         fulfillmentStatus: nextFulfillmentStatus,
         updatedAt: now,
@@ -1014,6 +1066,7 @@ export const reconcileSoldOrderLine = internalMutation({
       salePlatform: "eBay",
       saleReference: args.orderId,
       ebayOrderId: args.orderId,
+      ebayOrderLineItemId: args.orderLineItemKey,
       ebayLastSyncedAt: now,
       ebayDraftStatus: "Sold on eBay",
       fulfillmentStatus: nextFulfillmentStatus,
@@ -1514,6 +1567,81 @@ export const syncSoldOrders = action({
       throw new ConvexError(needsAuthorization
         ? "eBay has not authorized sold-order access. Reconnect eBay, approve access, then retry Sync eBay Sales."
         : `eBay sold-order sync failed: ${message}`);
+    }
+  },
+});
+
+export const submitShippingFulfillment = action({
+  args: {
+    adminKey: v.string(),
+    listingId: v.id("marketplaceListings"),
+    carrier: v.string(),
+    service: v.optional(v.string()),
+    trackingNumber: v.string(),
+    shippingCost: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ submitted: boolean; alreadySubmitted: boolean; fulfillmentId?: string }> => {
+    requireAdminKey(args.adminKey);
+    const carrier = args.carrier.trim();
+    const trackingNumber = args.trackingNumber.trim();
+    if (!carrier || !trackingNumber) throw new ConvexError("Choose a carrier and enter the tracking number before submitting shipment.");
+    if (args.shippingCost !== undefined && (!Number.isFinite(args.shippingCost) || args.shippingCost < 0)) {
+      throw new ConvexError("Label cost must be zero or higher.");
+    }
+
+    const ownerId = await currentOwnerId(ctx);
+    const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId, ownerId });
+    if (!bundle) throw new ConvexError("Listing or inventory item not found.");
+    const { listing } = bundle;
+    if (listing.platform.toLowerCase() !== "ebay" || listing.status !== "Sold" || !listing.ebayOrderId) {
+      throw new ConvexError("Only a sold eBay order linked to FlipTracker can submit tracking.");
+    }
+
+    try {
+      const accessToken = await refreshAccessToken(ctx);
+      const orderPath = `/sell/fulfillment/v1/order/${encodeURIComponent(listing.ebayOrderId)}`;
+      const order = await ebayFetch(accessToken, orderPath) as { lineItems?: EbayOrderLineItem[] };
+      const lineItem = matchOrderLine(order.lineItems ?? [], listing);
+      if (!lineItem?.lineItemId) throw new Error("The sold line item could not be matched inside the eBay order. Sync eBay Sales and retry.");
+
+      const fulfillmentPath = `${orderPath}/shipping_fulfillment`;
+      const existingBody = await ebayFetch(accessToken, fulfillmentPath) as { fulfillments?: ExistingShippingFulfillment[] };
+      const existing = matchExistingFulfillment(existingBody.fulfillments ?? [], lineItem.lineItemId, trackingNumber);
+
+      if (!existing) {
+        await ebayFetch(accessToken, fulfillmentPath, {
+          method: "POST",
+          body: JSON.stringify({
+            lineItems: [{ lineItemId: lineItem.lineItemId, quantity: Math.max(1, Math.round(lineItem.quantity ?? 1)) }],
+            shippedDate: new Date().toISOString(),
+            shippingCarrierCode: carrier,
+            trackingNumber,
+          }),
+        });
+      }
+
+      const refreshedBody = existingBody.fulfillments && existing
+        ? existingBody
+        : await ebayFetch(accessToken, fulfillmentPath) as { fulfillments?: ExistingShippingFulfillment[] };
+      const saved = existing ?? refreshedBody.fulfillments?.find((fulfillment) => fulfillment.trackingNumber === trackingNumber);
+      await ctx.runMutation(internal.ebay.markShipmentSubmitted, {
+        listingId: listing._id,
+        ownerId,
+        carrier,
+        service: args.service?.trim() || undefined,
+        trackingNumber,
+        shippingCost: args.shippingCost,
+        fulfillmentId: saved?.fulfillmentId,
+        alreadySubmitted: Boolean(existing),
+      });
+      return { submitted: !existing, alreadySubmitted: Boolean(existing), fulfillmentId: saved?.fulfillmentId };
+    } catch (error) {
+      if (error instanceof ConvexError) throw error;
+      const message = error instanceof Error ? error.message : "Unknown eBay error.";
+      const needsAuthorization = /scope|permission|access denied|authorization|token|forbidden|unauthorized/i.test(message);
+      throw new ConvexError(needsAuthorization
+        ? "eBay has not authorized shipment updates. Reconnect eBay, approve fulfillment access, then retry."
+        : `eBay shipment submission failed: ${message}`);
     }
   },
 });

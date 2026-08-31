@@ -42,7 +42,8 @@ This file is the working checklist for the combined FlipTracker inventory, resea
 - [x] Add profit-first sourcing rules with seller-defined minimum profit, ROI, liquidity, and maximum-buy calculations
 - [x] Add listing-quality scoring for title, required/recommended specifics, photo coverage, and estimated profit
 - [x] Add a first post-sale pick/pack workflow with bin location, package profile, insurance prompt, carrier, tracking, and eBay label handoff
-- [ ] Purchase eBay labels in-app and synchronize tracking without leaving FlipTracker
+- [x] Add a dedicated Shipping queue, pick-list printing, package/service guidance, shipping economics, and idempotent tracking submission to eBay
+- [ ] Purchase outbound eBay labels in-app only if eBay exposes an approved public seller-label endpoint; until then retain the Seller Hub Labels handoff
 - [x] Add template photo checklists and category-specific item-specific defaults
 - [ ] Add card batches that preserve front/back pairing through identify, review, price, and publish
 - [x] Add Queue seller-session metrics for reviewed, staged, and published items with elapsed time
