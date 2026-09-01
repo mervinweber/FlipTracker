@@ -26,6 +26,9 @@
 .cardIdentityFields, .cardConfirmFields { display: grid; gap: 12px; margin: 16px 0; }
 .cardConfirmFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .cardCandidateList { display: grid; gap: 8px; max-height: 570px; overflow-y: auto; }
+.cardRarityHint, .cardRarityWarning { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-bottom: 10px; padding: 10px; border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-radius: 6px; font-size: .78rem; }
+.cardRarityWarning { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); }
+.cardRarityHint span, .cardRarityWarning span { min-width: 0; overflow-wrap: anywhere; }
 .cardCandidate { width: 100%; min-height: 90px; display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--border); }
 .cardCandidate:hover, .cardCandidate.selected { border-color: var(--accent); background: var(--surface-strong); }
 .cardCandidate img, .cardImagePlaceholder { width: 58px; height: 78px; object-fit: contain; background: #080d18; border-radius: 4px; }

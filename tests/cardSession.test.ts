@@ -17,6 +17,7 @@ test('duplicate keys distinguish finish and language variants', () => {
   assert.equal(cardDuplicateKey(pokemon), cardDuplicateKey({ ...pokemon, name: '  PIKACHU ' }));
   assert.notEqual(cardDuplicateKey(pokemon), cardDuplicateKey({ ...pokemon, finish: 'Holofoil' }));
   assert.notEqual(cardDuplicateKey(pokemon), cardDuplicateKey({ ...pokemon, language: 'Japanese' }));
+  assert.notEqual(cardDuplicateKey(pokemon), cardDuplicateKey({ ...pokemon, rarity: 'Secret Rare' }));
 });
 
 test('duplicate count only includes exact printings', () => {

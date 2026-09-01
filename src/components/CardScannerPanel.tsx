@@ -17,6 +17,9 @@ type Candidate = {
   collectorNumber?: string;
   printedCode?: string;
   rarity?: string;
+  finish?: string;
+  edition?: string;
+  sourceUrl?: string;
   imageUrl?: string;
   marketPrice?: number;
   confidence: number;
@@ -54,6 +57,20 @@ function destinationLabel(destination: Destination) {
   return 'Inventory';
 }
 
+function rankCandidates(candidates: Candidate[], rarity?: string, finish?: string, edition?: string, copyrightYear?: string) {
+  return [...candidates].sort((left, right) => {
+    const score = (candidate: Candidate) => {
+      const reprint2020 = /2020 date reprint/i.test(candidate.setName || '');
+      return Number(candidate.rarity === rarity)
+        + Number(candidate.finish === finish)
+        + Number(candidate.edition === edition)
+        + Number(copyrightYear === '2020' && reprint2020)
+        + Number(copyrightYear === '1996' && !reprint2020);
+    };
+    return score(right) - score(left);
+  });
+}
+
 export default function CardScannerPanel() {
   const lookup = useAction(api.cardCatalog.lookup);
   const identify = useAction(api.cardCatalog.extractIdentityFromImage);
@@ -75,6 +92,9 @@ export default function CardScannerPanel() {
   const [language, setLanguage] = useState('English');
   const [finish, setFinish] = useState('');
   const [edition, setEdition] = useState('');
+  const [suggestedRarity, setSuggestedRarity] = useState<{ value: string; confidence: number } | null>(null);
+  const [suggestedFinish, setSuggestedFinish] = useState<{ value: string; confidence: number } | null>(null);
+  const [suggestedCopyrightYear, setSuggestedCopyrightYear] = useState('');
   const [condition, setCondition] = useState('Near Mint');
   const [storageLocation, setStorageLocation] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
@@ -113,6 +133,7 @@ export default function CardScannerPanel() {
   }, [currentIdentity, sessionCards, listingPrice, selected, minimumSinglePrice]);
 
   const duplicateGroups = useMemo(() => new Set(sessionCards.map(cardDuplicateKey)).size, [sessionCards]);
+  const catalogVariantCount = useMemo(() => new Set(candidates.map((candidate) => [candidate.rarity, candidate.finish].filter(Boolean).join('|')).filter(Boolean)).size, [candidates]);
 
   function replacePhoto(side: 'front' | 'back', next: CapturedPhoto | null) {
     const current = side === 'front' ? frontPhoto : backPhoto;
@@ -132,6 +153,9 @@ export default function CardScannerPanel() {
     setPrintedCode('');
     setFinish('');
     setEdition('');
+    setSuggestedRarity(null);
+    setSuggestedFinish(null);
+    setSuggestedCopyrightYear('');
     setPurchasePrice('');
     setListingPrice('');
   }
@@ -151,7 +175,8 @@ export default function CardScannerPanel() {
     setSelected(null);
     try {
       const result = await lookup({ game, name: name.trim() || undefined, setCode: setCode.trim() || undefined, collectorNumber: collectorNumber.trim() || undefined, printedCode: printedCode.trim() || undefined });
-      setCandidates(result.candidates as Candidate[]);
+      const nextCandidates = rankCandidates(result.candidates as Candidate[], suggestedRarity?.value, suggestedFinish?.value, edition, suggestedCopyrightYear);
+      setCandidates(nextCandidates);
       if (!result.candidates.length) setNotice('No exact candidates found. Check the printed code and try again.');
     } catch (lookupError) {
       setError(lookupError instanceof Error ? lookupError.message : 'Card lookup failed.');
@@ -175,9 +200,38 @@ export default function CardScannerPanel() {
       setPrintedCode(result.printedCode || '');
       setSetCode(result.setCode || '');
       setCollectorNumber(result.collectorNumber || '');
-      setNotice(`Front read at ${Math.round(result.confidence * 100)}% confidence. Review the identifiers, then search the catalog.`);
+      setSuggestedRarity(result.rarity ? { value: result.rarity, confidence: result.rarityConfidence || 0 } : null);
+      setSuggestedFinish(result.finish ? { value: result.finish, confidence: result.finishConfidence || 0 } : null);
+      if (result.edition) setEdition(result.edition);
+      setSuggestedCopyrightYear(result.copyrightYear || '');
+      const rarityNote = result.rarity ? ` Possible ${result.rarity} (${Math.round((result.rarityConfidence || 0) * 100)}% visual confidence); confirm the foil pattern yourself.` : '';
+      const finishNote = result.finish ? ` Possible ${result.finish} treatment (${Math.round((result.finishConfidence || 0) * 100)}% visual confidence).` : '';
+      const printNote = result.edition || result.copyrightYear ? ` Printed marks suggest ${[result.edition, result.copyrightYear ? `copyright ${result.copyrightYear}` : ''].filter(Boolean).join(', ')}.` : '';
+      const lookupArgs = {
+        game,
+        name: result.name || undefined,
+        setCode: result.setCode || undefined,
+        collectorNumber: result.collectorNumber || undefined,
+        printedCode: result.printedCode || undefined,
+      };
+      const canLookup = game === 'yugioh' ? Boolean(lookupArgs.printedCode || lookupArgs.name) : Boolean(lookupArgs.setCode || lookupArgs.collectorNumber || lookupArgs.name);
+      if (!canLookup) {
+        setNotice(`Front read at ${Math.round(result.confidence * 100)}% confidence.${rarityNote}${finishNote}${printNote} The identifiers were not clear enough for an automatic catalog search.`);
+        return;
+      }
+      const catalog = await lookup(lookupArgs);
+      const nextCandidates = rankCandidates(catalog.candidates as Candidate[], result.rarity, result.finish, result.edition, result.copyrightYear);
+      setCandidates(nextCandidates);
+      if (nextCandidates.length === 1) {
+        selectCandidate(nextCandidates[0]);
+        setNotice(`Card identified and matched automatically at ${Math.round(result.confidence * 100)}% photo confidence.${rarityNote}${finishNote}${printNote} Confirm the selected printing before saving.`);
+      } else if (nextCandidates.length > 1) {
+        setNotice(`Card identified and ${nextCandidates.length} catalog variants found automatically.${rarityNote}${finishNote}${printNote} Choose the exact printing before saving.`);
+      } else {
+        setNotice(`Card identifiers were read, but no catalog match was found automatically. Review the code and retry the search.`);
+      }
     } catch (identifyError) {
-      setError(identifyError instanceof Error ? identifyError.message : 'Photo identification failed.');
+      setError(identifyError instanceof Error ? identifyError.message : 'Photo identification or catalog lookup failed.');
     } finally {
       setBusy('');
     }
@@ -205,6 +259,8 @@ export default function CardScannerPanel() {
 
   function selectCandidate(candidate: Candidate) {
     setSelected(candidate);
+    if (candidate.edition && !edition) setEdition(candidate.edition);
+    if (candidate.finish) setFinish(candidate.finish);
     if (candidate.marketPrice !== undefined && !listingPrice) setListingPrice(candidate.marketPrice.toFixed(2));
     setNotice('Candidate selected. Confirm printing details, photos, and condition before saving.');
   }
@@ -329,10 +385,14 @@ export default function CardScannerPanel() {
 
       <section className="cardScannerStage">
         <header><span>2</span><div><h3>Choose exact printing</h3><p>Compare set, number, rarity, and artwork.</p></div></header>
+        {suggestedRarity ? <div className="cardRarityHint"><Sparkles size={16}/><span>Photo suggestion: <strong>{suggestedRarity.value}</strong> ({Math.round(suggestedRarity.confidence * 100)}%). Use this only as a clue.</span></div> : null}
+        {suggestedFinish ? <div className="cardRarityHint"><Sparkles size={16}/><span>Finish suggestion: <strong>{suggestedFinish.value}</strong> ({Math.round(suggestedFinish.confidence * 100)}%). Confirm the pattern under good light.</span></div> : null}
+        {suggestedCopyrightYear ? <div className="cardRarityHint"><Search size={16}/><span>Bottom copyright detected: <strong>{suggestedCopyrightYear}</strong>. For pre-2020 Yu-Gi-Oh! sets, 2020 usually identifies the later date reprint.</span></div> : null}
+        {catalogVariantCount > 1 ? <div className="cardRarityWarning"><ShieldCheck size={16}/><span><strong>{catalogVariantCount} variants share this card number.</strong> {game === 'yugioh' ? 'Compare the name foil, artwork foil, border texture, and anniversary watermark.' : 'Compare normal, reverse foil, Poke Ball, and Master Ball patterns before choosing.'}</span></div> : null}
         {!candidates.length ? <div className="cardScannerEmpty"><ImagePlus size={28}/><p>Catalog matches will appear here.</p></div> : <div className="cardCandidateList">
-          {candidates.map((candidate) => <button key={`${candidate.provider}-${candidate.providerId}-${candidate.printedCode || candidate.collectorNumber || candidate.setCode}`} className={`cardCandidate ${selected === candidate ? 'selected' : ''}`} onClick={() => selectCandidate(candidate)}>
+          {candidates.map((candidate) => <button key={`${candidate.provider}-${candidate.providerId}-${candidate.printedCode || candidate.collectorNumber || candidate.setCode}-${candidate.rarity || 'unknown'}`} className={`cardCandidate ${selected === candidate ? 'selected' : ''}`} onClick={() => selectCandidate(candidate)}>
             {candidate.imageUrl ? <img src={candidate.imageUrl} alt=""/> : <div className="cardImagePlaceholder">No preview</div>}
-            <span><strong>{candidate.name}</strong><small>{[candidate.setName, candidate.printedCode || candidate.collectorNumber, candidate.rarity].filter(Boolean).join(' · ')}</small><small>{money(candidate.marketPrice)} catalog reference · {Math.round(candidate.confidence * 100)}% match</small></span>
+            <span><strong>{candidate.name}</strong><small>{[candidate.setName, candidate.printedCode || candidate.collectorNumber, candidate.rarity, candidate.finish, candidate.edition].filter(Boolean).join(' · ')}</small><small>{candidate.marketPrice !== undefined ? `${money(candidate.marketPrice)} catalog reference` : 'No catalog price'} · {Math.round(candidate.confidence * 100)}% match</small></span>
             {selected === candidate ? <Check size={18}/> : null}
           </button>)}
         </div>}
@@ -343,7 +403,7 @@ export default function CardScannerPanel() {
         {recommendation ? <div className={`cardRecommendation ${recommendation.disposition === 'Sell Individually' ? 'positive' : ''}`}><Layers3 size={18}/><div><strong>{recommendation.disposition}</strong><small>{recommendation.exactCopies} exact {recommendation.exactCopies === 1 ? 'copy' : 'copies'} in this session. {recommendation.reason}</small></div></div> : null}
         <div className="cardConfirmFields">
           <label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English</option><option>Japanese</option><option>Spanish</option><option>French</option><option>German</option><option>Italian</option><option>Korean</option><option>Portuguese</option></select></label>
-          <label>Finish<select value={finish} onChange={(event) => setFinish(event.target.value)}><option value="">Not specified</option><option>Non-Holo</option><option>Holofoil</option><option>Reverse Holofoil</option><option>Foil</option></select></label>
+          <label>Finish<select value={finish} onChange={(event) => setFinish(event.target.value)}><option value="">Not specified</option><option>Normal</option><option>Non-Holo</option><option>Holofoil</option><option>Reverse Holofoil</option><option>Poke Ball Reverse Holo</option><option>Master Ball Reverse Holo</option><option>Foil</option></select></label>
           <label>Edition<input value={edition} onChange={(event) => setEdition(event.target.value)} placeholder="1st Edition, Unlimited..."/></label>
           <label>Condition<select value={condition} onChange={(event) => setCondition(event.target.value)}><option>Near Mint</option><option>Lightly Played</option><option>Moderately Played</option><option>Heavily Played</option><option>Damaged</option></select></label>
           <label>Bin / Location<input value={storageLocation} onChange={(event) => setStorageLocation(event.target.value)} placeholder="CARD-A1"/></label>

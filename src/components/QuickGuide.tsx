@@ -44,8 +44,8 @@ export default function QuickGuide() {
 
         <section><div className="guideNumber">TCG</div><div><h3>Process Pokemon and Yu-Gi-Oh! cards</h3><ol>
           <li>Open <strong>Cards</strong>, choose Pokemon or Yu-Gi-Oh!, and set the session destination and minimum value for an individual listing.</li>
-          <li>Take a clear front photo. Gemini can read the visible identifiers when configured; you can always type the set code or collector number manually.</li>
-          <li>Add the back photo, search the free game catalog, and choose the exact printing. Confirm language, finish, edition, and condition yourself.</li>
+          <li>Take a clear front photo. Gemini reads the visible identifiers and immediately searches the catalog when configured; manual set-code and collector-number entry remains the fallback.</li>
+          <li>Add the back photo and choose the exact printing when several variants are found. A single unambiguous catalog match is selected automatically. For older Yu-Gi-Oh! reprints, confirm `1st Edition` below the artwork and the tiny `1996` or `2020` bottom copyright mark.</li>
           <li>Review the catalog reference price, cost, bin, and Individual, Playset, Bundle, or Hold guidance.</li>
           <li>Select <strong>Save &amp; Start Next Card</strong>. The inventory record and both actual photos are saved together while session defaults remain ready for the next card.</li>
           <li>For eBay, create an internal draft. For Vinted, use the prepared title and description from the session tray for a quick manual listing.</li>

@@ -26,6 +26,7 @@ export function cardDuplicateKey(card: CardIdentity) {
     card.providerId,
     card.printedCode || card.collectorNumber,
     card.setCode,
+    card.rarity,
     card.language,
     card.finish,
     card.edition,
