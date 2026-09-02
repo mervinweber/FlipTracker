@@ -1066,6 +1066,113 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
   color: #94a3b8;
 }
 
+.smartPreparePanel {
+  margin-bottom: 16px;
+  padding: 13px 14px;
+  border: 1px solid #334155;
+  background: #0a1425;
+}
+
+.smartPreparePanel.busy { border-color: #0f766e; }
+.smartPreparePanel.complete { border-color: #1f8a62; }
+
+.smartPrepareHeader,
+.smartPrepareHeader > div,
+.smartPrepareMetrics,
+.smartApplied,
+.smartPrepareSpinner {
+  display: flex;
+  align-items: center;
+}
+
+.smartPrepareHeader {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.smartPrepareHeader > div { gap: 10px; min-width: 0; }
+.smartPrepareHeader strong,
+.smartPrepareHeader small { display: block; }
+.smartPrepareHeader small { margin-top: 2px; color: #9fb0c8; font-size: 12px; }
+
+.smartPrepareIcon {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #14b8a6;
+  border-radius: 50%;
+  color: #5eead4;
+  background: #082f2a;
+}
+
+.smartPrepareSpinner { gap: 7px; color: #5eead4; font-size: 13px; font-weight: 800; }
+.smartPrepareSpinner svg { animation: smartPrepareSpin 1.1s linear infinite; }
+
+@keyframes smartPrepareSpin { to { transform: rotate(360deg); } }
+
+.smartPrepareMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid #27364c;
+  background: #27364c;
+}
+
+.smartPrepareMetrics span {
+  min-width: 0;
+  padding: 8px 10px;
+  color: #94a3b8;
+  background: #0b1324;
+  font-size: 11px;
+}
+
+.smartPrepareMetrics strong { display: block; color: #e2e8f0; font-size: 14px; }
+
+.smartPrepareChanges,
+.smartPrepareWarnings { margin-top: 10px; border-top: 1px solid #27364c; }
+.smartPrepareChanges > summary,
+.smartPrepareWarnings > summary { padding: 10px 0 0; color: #bfdbfe; cursor: pointer; font-size: 12px; font-weight: 800; }
+.smartPrepareWarnings > summary { display: flex; align-items: center; gap: 6px; color: #fbbf24; }
+.smartPrepareWarnings ul { margin: 8px 0 0; padding-left: 20px; color: #cbd5e1; font-size: 12px; }
+
+.smartPrepareChange {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #1e293b;
+}
+
+.smartPrepareChange:last-child { border-bottom: 0; }
+.smartPrepareChange > div { min-width: 0; }
+.smartPrepareChange strong,
+.smartPrepareChange small,
+.smartPrepareChange em { display: block; overflow-wrap: anywhere; }
+.smartPrepareChange small { margin-top: 2px; color: #e2e8f0; }
+.smartPrepareChange em { margin-top: 2px; color: #7f8da3; font-size: 11px; font-style: normal; }
+
+.smartSource {
+  padding: 3px 6px;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.smartSource.ai { border-color: #0e7490; color: #67e8f9; }
+.smartSource.market { border-color: #a16207; color: #fbbf24; }
+.smartSource.defaults { border-color: #0f766e; color: #5eead4; }
+.smartApplied { gap: 5px; color: #6ee7b7; font-size: 12px; font-weight: 800; }
+.smartPrepareClear { display: flex; align-items: center; gap: 7px; margin: 10px 0 0; color: #6ee7b7; font-size: 12px; }
+
 .fastReviewLayout {
   display: grid;
   grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.6fr);
@@ -1174,6 +1281,12 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
   .fastReviewFieldRow,
   .fastReviewSummary { grid-template-columns: 1fr; }
   .fastReviewProgress { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .smartPrepareHeader { align-items: stretch; flex-direction: column; }
+  .smartPrepareHeader > button { width: 100%; }
+  .smartPrepareMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .smartPrepareChange { align-items: start; grid-template-columns: 58px minmax(0, 1fr); }
+  .smartPrepareChange > button,
+  .smartPrepareChange > .smartApplied { grid-column: 2; justify-self: start; }
   .fastReviewReadiness { align-items: stretch; flex-direction: column; }
   .fastReviewModal .listingFactoryFooter { align-items: stretch; flex-direction: column; }
   .fastReviewModal .listingFactoryFooter .actions { display: grid; grid-template-columns: 1fr; width: 100%; }

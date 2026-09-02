@@ -18,6 +18,7 @@ import { listingOperationsIssue, shouldArchiveSaleByDefault } from '../utils/lis
 import { applySafeSpecificDefaults, assessListingQuality, photoChecklistFor } from '../utils/listingQuality';
 import { fulfillmentEconomics, recommendFulfillment } from '../utils/fulfillment';
 import { clearSellerSession, createSellerSession, formatSellerSessionDuration, loadSellerSession, pauseSellerSession, recordSellerSessionEvent, resumeSellerSession, saveSellerSession, sellerSessionElapsedMs, type SellerSession, type SellerSessionEvent } from '../utils/sellerSession';
+import { applySmartPreparation, buildSmartPreparationPlan, recommendedSmartChangeKeys, type SmartPreparationChange, type SmartPreparationPlan } from '../utils/smartListingPreparation';
 import {
   EBAY_CATEGORY_CHOICES,
   EBAY_SHIPPING_PROFILES,
@@ -172,6 +173,12 @@ function compactEditorStep(step: ListingReadinessStep | 'preview'): ListingEdito
   if (step === 'category') return 'details';
   if (step === 'preview') return 'price';
   return step;
+}
+
+function smartValueSummary(value: string | number | boolean | undefined) {
+  if (value === undefined || value === '') return 'Not set';
+  const text = typeof value === 'number' ? String(value) : String(value).trim();
+  return text.length > 110 ? `${text.slice(0, 107)}...` : text;
 }
 
 type EbaySetup = {
@@ -448,6 +455,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const endEbayListing = useAction(api.ebay.endPublishedListing);
   const submitShippingFulfillment = useAction(api.ebay.submitShippingFulfillment);
   const generateListingCopy = useAction(api.aiDescriptions.generateListingCopy);
+  const prepareListingCopy = useAction(api.aiDescriptions.prepareListingCopy);
   const [editing, setEditing] = useState<Listing | null>(null);
   const [fastReviewing, setFastReviewing] = useState<Listing | null>(null);
   const [sellerSession, setSellerSession] = useState<SellerSession | null>(() => loadSellerSession(localStorage));
@@ -529,6 +537,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [queueBusy, setQueueBusy] = useState(false);
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionError, setDescriptionError] = useState('');
+  const [smartPreparation, setSmartPreparation] = useState<SmartPreparationPlan | null>(null);
+  const [smartPrepareBusy, setSmartPrepareBusy] = useState(false);
+  const [smartPrepareError, setSmartPrepareError] = useState('');
+  const smartPrepareRequest = useRef(0);
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
@@ -957,7 +969,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     }
     if (operation.kind === 'ready') {
       if (listing.ebayOfferId) openListingEditor(listing, 'preview');
-      else openFastReview(listing);
+      else void openSmartPrepare(listing);
       return;
     }
     if (listing.status === 'Sold') openSaleEditor(listing);
@@ -973,7 +985,77 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setEditing(null);
     setSaleEditing(null);
     setListingSaveError('');
+    setSmartPreparation(null);
+    setSmartPrepareError('');
     setFastReviewing(listingWithWorkflowDefaults(target));
+  }
+
+  async function openSmartPrepare(listing?: Listing) {
+    const target = listing || queueListings[0];
+    if (!target) {
+      setEbayError('There are no Draft or Pending listings in this view.');
+      return;
+    }
+    const requestId = ++smartPrepareRequest.current;
+    const defaults = listingWithWorkflowDefaults(target);
+    setEditing(null);
+    setSaleEditing(null);
+    setListingSaveError('');
+    setSmartPreparation(null);
+    setSmartPrepareError('');
+    setSmartPrepareBusy(true);
+    setFastReviewing(defaults);
+
+    if (!adminKey) {
+      const plan = buildSmartPreparationPlan(target, defaults);
+      plan.warnings.push('Load the Seller Access Key to add AI copy and live eBay market guidance. Workflow defaults are still ready.');
+      if (requestId === smartPrepareRequest.current) {
+        setSmartPreparation(plan);
+        setSmartPrepareBusy(false);
+      }
+      return;
+    }
+
+    const [aiResult, pricingResult] = await Promise.allSettled([
+      prepareListingCopy({
+        adminKey,
+        title: defaults.title.trim(),
+        assetTitle: defaults.assetTitle || undefined,
+        type: defaults.assetType || undefined,
+        mediaFormat: defaults.mediaFormat || undefined,
+        author: defaults.author || defaults.assetAuthor || undefined,
+        barcode: defaults.assetBarcode || undefined,
+        condition: defaults.condition || undefined,
+        completeness: defaults.completeness || undefined,
+        language: defaults.language || undefined,
+        itemSpecifics: defaults.itemSpecifics || undefined,
+        existingDescription: defaults.description || undefined,
+        internalNotes: defaults.notes || undefined,
+        cardGame: defaults.cardGame || undefined,
+        cardSet: defaults.cardSet || undefined,
+        cardNumber: defaults.cardNumber || undefined,
+      }),
+      lookupActivePricing({ adminKey, listingIds: [target._id] }) as Promise<ActivePricingResult[]>,
+    ]);
+    if (requestId !== smartPrepareRequest.current) return;
+
+    const ai = aiResult.status === 'fulfilled' ? aiResult.value : undefined;
+    const market = pricingResult.status === 'fulfilled' ? pricingResult.value[0] : undefined;
+    const plan = buildSmartPreparationPlan(target, defaults, ai, market);
+    if (aiResult.status === 'rejected') plan.warnings.push(readableActionError(aiResult.reason, 'AI copy could not be prepared.'));
+    if (pricingResult.status === 'rejected') plan.warnings.push(readableActionError(pricingResult.reason, 'Market pricing could not be prepared.'));
+    const recommended = recommendedSmartChangeKeys(plan);
+    setFastReviewing(applySmartPreparation(defaults, plan, recommended) as Listing);
+    setSmartPreparation(plan);
+    setSmartPrepareBusy(false);
+  }
+
+  function useSmartSuggestion(change: SmartPreparationChange) {
+    setFastReviewing((current) => current ? applySmartPreparation(current, {
+      changes: [change],
+      warnings: [],
+      marketMatchCount: smartPreparation?.marketMatchCount,
+    }, new Set([change.key])) as Listing : current);
   }
 
   function recordSessionEvent(event: SellerSessionEvent, count = 1) {
@@ -995,7 +1077,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSellerSession(next);
     setSellerSessionNow(next.startedAt);
     setSellerSessionMessage('Session started. Scan a queued item or review the next one.');
-    if (queueListings.length) openFastReview(queueListings[0]);
+    if (queueListings.length) void openSmartPrepare(queueListings[0]);
   }
 
   function toggleSellerSessionPause() {
@@ -1015,6 +1097,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSellerSessionBarcode('');
     setSellerSessionMessage('');
     setFastReviewing(null);
+    setSmartPreparation(null);
+    smartPrepareRequest.current += 1;
   }
 
   function scanSellerSessionBarcode(event: FormEvent<HTMLFormElement>) {
@@ -1033,7 +1117,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       return;
     }
     setSellerSessionMessage(`Opened ${match.title}.`);
-    openFastReview(match);
+    void openSmartPrepare(match);
   }
 
   function patchFastReview(patch: Partial<Listing>) {
@@ -1792,7 +1876,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       if (stageAfterSave) recordSessionEvent('staged');
       const currentIndex = queueListings.findIndex((listing) => listing._id === fastReviewing._id);
       const next = queueListings[currentIndex + 1] || queueListings.find((listing) => listing._id !== fastReviewing._id);
-      if (next) setFastReviewing(listingWithWorkflowDefaults(next));
+      if (next) void openSmartPrepare(next);
       else {
         setFastReviewing(null);
         setSellerSessionMessage('Every queued item in this view has been reviewed. Scan another item or finish the session.');
@@ -1958,7 +2042,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         const next = queueListings[currentIndex + 1] || queueListings.find((listing) => listing._id !== savedListingId);
         setEditing(null);
         setExceptionWorkflow(false);
-        if (next) openFastReview(next);
+        if (next) void openSmartPrepare(next);
         else focusSellerSessionScanner();
       } else {
         setEditing(null);
@@ -2079,7 +2163,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className={`queueCommandBar ${selectedIds.size ? 'hasSelection' : ''}`}>
           <span className="queueCommandStatus">{selectedIds.size ? `${selectedIds.size} selected · ${selectedBlockedCount ? `${selectedBlockedCount} need fixes` : 'validation passed'}` : `${batchCompletion.ready} ready · ${batchCompletion.exceptions} need fixes`}</span>
           <div className="actions queueActions">
-            {!selectedIds.size ? !sellerSession ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={startSellerSession}><Play size={16}/> Start Session</button> : !sellerSession.activeSince ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={toggleSellerSessionPause}><Play size={16}/> Resume Session</button> : <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={() => openFastReview()}><WandSparkles size={16}/> Review Next</button> : firstSelectedBlocked ? <button disabled={queueBusy} onClick={() => openListingEditor(firstSelectedBlocked, (readinessByListingId.get(firstSelectedBlocked._id) || []).find((issue) => issue.blocking)?.step || 'details', true)}><ListChecks size={16}/> Fix {selectedBlockedCount}</button> : selectedReadyForEbay.length ? <button className="ebaySendButton" disabled={queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage ${selectedReadyForEbay.length}`}</button> : selectedStagedForEbay.length ? <button className="ebayPublishButton" disabled={queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish ${selectedStagedForEbay.length}`}</button> : <button onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Review Selection</button>}
+            {!selectedIds.size ? !sellerSession ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={startSellerSession}><Play size={16}/> Start Session</button> : !sellerSession.activeSince ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={toggleSellerSessionPause}><Play size={16}/> Resume Session</button> : <button className="fastReviewButton" disabled={!queueListings.length || queueBusy || smartPrepareBusy} onClick={() => void openSmartPrepare()}><WandSparkles size={16}/> {smartPrepareBusy ? 'Preparing...' : 'Prepare Next'}</button> : firstSelectedBlocked ? <button disabled={queueBusy} onClick={() => openListingEditor(firstSelectedBlocked, (readinessByListingId.get(firstSelectedBlocked._id) || []).find((issue) => issue.blocking)?.step || 'details', true)}><ListChecks size={16}/> Fix {selectedBlockedCount}</button> : selectedReadyForEbay.length ? <button className="ebaySendButton" disabled={queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage ${selectedReadyForEbay.length}`}</button> : selectedStagedForEbay.length ? <button className="ebayPublishButton" disabled={queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish ${selectedStagedForEbay.length}`}</button> : <button onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Review Selection</button>}
             <details className="listingUtilityMenu queueMoreMenu"><summary aria-label="More queue actions" title="More queue actions"><MoreHorizontal size={18}/></summary><div><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear selection' : 'Select all in view'}</button><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Quality report</button>{selectedIds.size ? <button className="secondary" disabled={queueBusy} onClick={openPricingReview}><DollarSign size={16}/> Find fair value</button> : null}</div></details>
           </div>
         </div>
@@ -2231,7 +2315,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                   <td className="valueCell listingPriceCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td className="listingLocationCell">{listing.storageLocation || <span className="mutedValue">—</span>}</td>
                   <td className="tableActionsCell"><div className="rowActions simplifiedRowActions">
-                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="rowPrimaryAction ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => publishToEbay(listing)}><Rocket size={15}/> Publish</button> : listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="rowPrimaryAction ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => sendToEbay(listing)}><CloudUpload size={15}/> Stage</button> : listing.status === 'Active' && listing.platform === 'eBay' && listing.externalListingId ? <button className="rowPrimaryAction ebayRepriceButton" disabled={repriceBusy} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={15}/> Price</button> : listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '') ? <button className="rowPrimaryAction fulfillmentButton" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/> Ship</button> : listing.status === 'Sold' ? <button className="rowPrimaryAction saleCloseButton" onClick={() => openSaleEditor(listing)}><DollarSign size={15}/> Sale</button> : <button className="rowPrimaryAction fastReviewRowButton" onClick={() => openFastReview(listing)}><WandSparkles size={15}/> Review</button>}
+                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="rowPrimaryAction ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => publishToEbay(listing)}><Rocket size={15}/> Publish</button> : listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="rowPrimaryAction ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => sendToEbay(listing)}><CloudUpload size={15}/> Stage</button> : listing.status === 'Active' && listing.platform === 'eBay' && listing.externalListingId ? <button className="rowPrimaryAction ebayRepriceButton" disabled={repriceBusy} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={15}/> Price</button> : listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '') ? <button className="rowPrimaryAction fulfillmentButton" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/> Ship</button> : listing.status === 'Sold' ? <button className="rowPrimaryAction saleCloseButton" onClick={() => openSaleEditor(listing)}><DollarSign size={15}/> Sale</button> : <button className="rowPrimaryAction fastReviewRowButton" disabled={smartPrepareBusy} onClick={() => void openSmartPrepare(listing)}><WandSparkles size={15}/> Prepare</button>}
                     <details className="rowActionMenu"><summary aria-label={`More actions for ${listing.title}`} title="More actions"><MoreHorizontal size={17}/></summary><div>
                       <button className="secondary" onClick={() => openListingEditor(listing)}><Pencil size={15}/> Edit record</button>
                       {listing.status !== 'Sold' ? <button className="secondary" onClick={() => requestSaleEditor(listing)}><DollarSign size={15}/> Record sale</button> : null}
@@ -2299,8 +2383,35 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
       {fastReviewing ? (
         <div className="modalBackdrop"><section className="modal wideModal fastReviewModal">
-          <header className="modalHeader"><div><p className="eyebrow">Fast listing review</p><h2>{fastReviewing.assetTitle}</h2><span className="statusPill">{[fastReviewing.assetType, fastReviewing.sku ? `SKU ${fastReviewing.sku}` : undefined].filter(Boolean).join(' · ')}</span></div><button className="iconButton secondary" aria-label="Close fast review" onClick={() => setFastReviewing(null)}><X size={18}/></button></header>
+          <header className="modalHeader"><div><p className="eyebrow">Smart listing review</p><h2>{fastReviewing.assetTitle}</h2><span className="statusPill">{[fastReviewing.assetType, fastReviewing.sku ? `SKU ${fastReviewing.sku}` : undefined].filter(Boolean).join(' · ')}</span></div><button className="iconButton secondary" aria-label="Close smart review" onClick={() => { smartPrepareRequest.current += 1; setFastReviewing(null); setSmartPreparation(null); setSmartPrepareBusy(false); }}><X size={18}/></button></header>
           <div className="fastReviewProgress"><span>{Math.max(1, queueListings.findIndex((listing) => listing._id === fastReviewing._id) + 1)} of {queueListings.length}</span><strong>{listingFamily(fastReviewing)} workflow</strong><small>Only routine selling choices are shown here.</small></div>
+          <section className={`smartPreparePanel ${smartPrepareBusy ? 'busy' : smartPreparation ? 'complete' : ''}`} aria-live="polite">
+            <div className="smartPrepareHeader">
+              <div><span className="smartPrepareIcon"><Sparkles size={18}/></span><div><strong>{smartPrepareBusy ? 'Preparing the listing' : smartPreparation ? 'Smart Prepare complete' : 'Prepare this listing'}</strong><small>{smartPrepareBusy ? 'Combining workflow defaults, AI copy, and eBay market guidance.' : smartPreparation ? 'Safe missing values were applied. Existing seller choices were left alone.' : 'Fill routine fields and surface only the decisions that need you.'}</small></div></div>
+              {!smartPrepareBusy ? <button className="secondary" onClick={() => void openSmartPrepare(fastReviewing)}><RefreshCw size={15}/>{smartPreparation ? 'Run Again' : 'Smart Prepare'}</button> : <span className="smartPrepareSpinner"><RefreshCw size={16}/> Working</span>}
+            </div>
+            {smartPreparation ? <>
+              <div className="smartPrepareMetrics">
+                <span><strong>{smartPreparation.changes.filter((change) => change.recommended).length}</strong> safe updates</span>
+                <span><strong>{smartPreparation.changes.filter((change) => !change.recommended).length}</strong> optional ideas</span>
+                <span><strong>{smartPreparation.marketMatchCount ?? 0}</strong> market matches</span>
+                <span><strong>{smartPreparation.aiProvider ? smartPreparation.aiProvider.toUpperCase() : 'Rules'}</strong> copy source</span>
+              </div>
+              {smartPreparation.changes.length ? <details className="smartPrepareChanges"><summary>Review {smartPreparation.changes.length} prepared field{smartPreparation.changes.length === 1 ? '' : 's'}</summary><div>
+                {smartPreparation.changes.map((change) => {
+                  const current = (fastReviewing as unknown as Record<string, string | number | boolean | undefined>)[String(change.field)];
+                  const applied = String(current ?? '').trim() === String(change.after).trim();
+                  return <div className="smartPrepareChange" key={change.key}>
+                    <span className={`smartSource ${change.source.toLowerCase()}`}>{change.source}</span>
+                    <div><strong>{change.label}</strong><small>{smartValueSummary(change.after)}</small><em>{change.reason}</em></div>
+                    {applied ? <span className="smartApplied"><CheckCircle2 size={14}/> Applied</span> : <button className="secondary" onClick={() => useSmartSuggestion(change)}>Use</button>}
+                  </div>;
+                })}
+              </div></details> : <p className="smartPrepareClear"><CheckCircle2 size={16}/> Existing values already match the available guidance.</p>}
+              {smartPreparation.warnings.length ? <details className="smartPrepareWarnings"><summary><AlertTriangle size={15}/> {smartPreparation.warnings.length} item{smartPreparation.warnings.length === 1 ? '' : 's'} to verify</summary><ul>{smartPreparation.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></details> : null}
+            </> : null}
+            {smartPrepareError ? <p className="formError">{smartPrepareError}</p> : null}
+          </section>
           <div className="fastReviewLayout">
             <section className="fastReviewPhoto">
               {fastReviewing.ebayImageUrl || fastReviewing.photoUrl ? <img src={fastReviewing.ebayImageUrl || fastReviewing.photoUrl} alt={fastReviewing.title}/> : <div className="fastReviewPhotoMissing"><Camera size={32}/><strong>No image yet</strong><span>Add actual photos from the phone queue.</span></div>}
@@ -2330,7 +2441,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             {fastReviewIssues.length ? <button className="secondary" onClick={() => openListingEditor(fastReviewing, fastReviewIssues[0].step, true)}>Open Full Editor</button> : null}
           </section>
           {listingSaveError ? <p className="formError listingSaveError">{listingSaveError}</p> : null}
-          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => setFastReviewing(null)}>Close</button><div className="actions"><button className="secondary" disabled={listingSaveBusy} onClick={() => openListingEditor(fastReviewing)}>Advanced</button><button disabled={listingSaveBusy} onClick={() => saveFastReview(false)}><Save size={16}/> {listingSaveBusy ? 'Saving...' : 'Save & Next'}</button><button className="ebaySendButton" disabled={listingSaveBusy || fastReviewIssues.some((issue) => issue.blocking) || !sellerDefaultsReady} onClick={() => saveFastReview(true)}><CloudUpload size={16}/> Save, Stage & Next</button></div></div>
+          <div className="listingFactoryFooter"><button className="secondary" disabled={listingSaveBusy} onClick={() => { smartPrepareRequest.current += 1; setFastReviewing(null); setSmartPreparation(null); setSmartPrepareBusy(false); }}>Close</button><div className="actions"><button className="secondary" disabled={listingSaveBusy} onClick={() => openListingEditor(fastReviewing)}>Advanced</button><button disabled={listingSaveBusy || smartPrepareBusy} onClick={() => saveFastReview(false)}><Save size={16}/> {listingSaveBusy ? 'Saving...' : 'Save & Next'}</button><button className="ebaySendButton" disabled={listingSaveBusy || smartPrepareBusy || fastReviewIssues.some((issue) => issue.blocking) || !sellerDefaultsReady} onClick={() => saveFastReview(true)}><CloudUpload size={16}/> Save, Stage & Next</button></div></div>
         </section></div>
       ) : null}
 

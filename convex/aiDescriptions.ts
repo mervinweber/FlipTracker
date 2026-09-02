@@ -13,6 +13,13 @@ type GeminiPayload = {
   promptFeedback?: { blockReason?: string };
 };
 
+type ListingDraftPayload = {
+  title?: unknown;
+  description?: unknown;
+  confidence?: unknown;
+  warnings?: unknown;
+};
+
 type AiProvider = "gemini" | "openai";
 
 const LISTING_INSTRUCTIONS = [
@@ -24,6 +31,17 @@ const LISTING_INSTRUCTIONS = [
   "Never expose storage/bin locations, acquisition source, purchase price, profit, workflow reminders, private names, or contact details.",
   "If facts conflict, prefer item disclosures and internal condition notes over older description text.",
   "Do not mention AI, pricing research, shipping promises, returns, or eBay policy.",
+].join(" ");
+
+const PREPARATION_INSTRUCTIONS = [
+  "Prepare truthful, buyer-ready eBay listing copy from supplied item facts.",
+  "Return strict JSON only with title, description, confidence, and warnings.",
+  "The title must be 80 characters or fewer and lead with useful identity, edition, format, and condition details that are explicitly supplied.",
+  "The description must use two or three short plain-text paragraphs with no markdown heading.",
+  "Confidence must be a number from 0 to 1. Warnings must be an array of zero to four short seller-review notes.",
+  "Use only supplied facts. Never invent testing, authenticity, included parts, edition, rarity, condition, provenance, or specifications.",
+  "Do not expose storage locations, cost, profit, workflow notes, private names, or contact details.",
+  "When facts are incomplete, keep the language neutral and add a warning instead of guessing.",
 ].join(" ");
 
 function requiredEnv(name: string) {
@@ -142,6 +160,74 @@ async function generateWithGemini(input: string) {
   return { text, model, provider: "gemini" as const };
 }
 
+function parseListingDraft(text: string, fallbackTitle: string) {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  let payload: ListingDraftPayload;
+  try {
+    payload = JSON.parse(cleaned) as ListingDraftPayload;
+  } catch {
+    throw new Error("The AI response could not be reviewed safely. Try Smart Prepare again.");
+  }
+  const title = typeof payload.title === "string" ? payload.title.trim().slice(0, 80) : fallbackTitle.trim().slice(0, 80);
+  const description = typeof payload.description === "string" ? payload.description.trim().slice(0, 8_000) : "";
+  const rawConfidence = typeof payload.confidence === "number" ? payload.confidence : Number(payload.confidence);
+  const confidence = Number.isFinite(rawConfidence) ? Math.max(0, Math.min(1, rawConfidence)) : 0.5;
+  const warnings = Array.isArray(payload.warnings)
+    ? payload.warnings.filter((warning): warning is string => typeof warning === "string").map((warning) => warning.trim().slice(0, 240)).filter(Boolean).slice(0, 4)
+    : [];
+  if (!title || !description) throw new Error("The AI did not return complete listing copy. Try Smart Prepare again.");
+  return { title, description, confidence, warnings };
+}
+
+async function prepareWithOpenAi(input: string, adminKey: string) {
+  const apiKey = requiredEnv("OPENAI_API_KEY");
+  const model = process.env.OPENAI_DESCRIPTION_MODEL || "gpt-5.6-luna";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      store: false,
+      reasoning: { effort: "none" },
+      text: { verbosity: "low" },
+      max_output_tokens: 750,
+      safety_identifier: await safetyIdentifier(adminKey),
+      instructions: PREPARATION_INSTRUCTIONS,
+      input,
+    }),
+  });
+  const payload = (await response.json()) as OpenAiPayload;
+  if (!response.ok) throw new Error(payload.error?.message || `OpenAI preparation request failed (${response.status}).`);
+  const text = openAiText(payload);
+  if (!text) throw new Error("OpenAI returned an empty preparation. Please try again.");
+  return { text, model, provider: "openai" as const };
+}
+
+async function prepareWithGemini(input: string) {
+  const apiKey = requiredEnv("GEMINI_API_KEY");
+  const model = process.env.GEMINI_DESCRIPTION_MODEL || "gemini-2.5-flash-lite";
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: PREPARATION_INSTRUCTIONS }] },
+        contents: [{ role: "user", parts: [{ text: input }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 750, responseMimeType: "application/json" },
+      }),
+    },
+  );
+  const payload = (await response.json()) as GeminiPayload;
+  if (!response.ok) throw new Error(payload.error?.message || `Gemini preparation request failed (${response.status}).`);
+  const text = geminiText(payload);
+  if (!text) {
+    const reason = payload.promptFeedback?.blockReason;
+    throw new Error(reason ? `Gemini did not prepare the listing (${reason}).` : "Gemini returned an empty preparation. Please try again.");
+  }
+  return { text, model, provider: "gemini" as const };
+}
+
 export const generateListingCopy = action({
   args: {
     adminKey: v.string(),
@@ -171,5 +257,44 @@ export const generateListingCopy = action({
     return selectedProvider() === "gemini"
       ? await generateWithGemini(input)
       : await generateWithOpenAi(input, args.adminKey);
+  },
+});
+
+export const prepareListingCopy = action({
+  args: {
+    adminKey: v.string(),
+    title: v.string(),
+    assetTitle: v.optional(v.string()),
+    type: v.optional(v.string()),
+    mediaFormat: v.optional(v.string()),
+    author: v.optional(v.string()),
+    barcode: v.optional(v.string()),
+    condition: v.optional(v.string()),
+    completeness: v.optional(v.string()),
+    language: v.optional(v.string()),
+    itemSpecifics: v.optional(v.string()),
+    existingDescription: v.optional(v.string()),
+    internalNotes: v.optional(v.string()),
+    cardGame: v.optional(v.string()),
+    cardSet: v.optional(v.string()),
+    cardNumber: v.optional(v.string()),
+  },
+  returns: v.object({
+    title: v.string(),
+    description: v.string(),
+    confidence: v.number(),
+    warnings: v.array(v.string()),
+    model: v.string(),
+    provider: v.union(v.literal("gemini"), v.literal("openai")),
+  }),
+  handler: async (_ctx, args) => {
+    requireAdminKey(args.adminKey);
+    const { adminKey: _adminKey, ...rawFacts } = args;
+    const facts = boundedFacts({ ...rawFacts, internalNotes: buyerRelevantNotes(args.internalNotes) });
+    const input = `Prepare a listing draft from this JSON:\n${JSON.stringify(facts, null, 2)}`;
+    const generated = selectedProvider() === "gemini"
+      ? await prepareWithGemini(input)
+      : await prepareWithOpenAi(input, args.adminKey);
+    return { ...parseListingDraft(generated.text, args.title), model: generated.model, provider: generated.provider };
   },
 });

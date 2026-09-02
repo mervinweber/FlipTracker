@@ -2,6 +2,18 @@
 
 This file is the working checklist for the combined FlipTracker inventory, research, listing, and sales app.
 
+## v0.10 Smart Listing Prepare
+
+- [x] Combine deterministic category, shipping, language, package, and photo-source defaults into one Prepare action
+- [x] Add structured Gemini/OpenAI title and description suggestions with explicit confidence and seller-review warnings
+- [x] Add active-eBay market guidance without allowing AI to invent a price
+- [x] Preserve existing seller-entered titles, descriptions, and prices unless the seller explicitly chooses a replacement
+- [x] Route Queue rows and continuous seller sessions through the assisted Prepare review
+- [x] Keep all prepared changes local until Save, Stage, or Publish is explicitly selected
+- [ ] Measure Prepare-to-Stage time and correction rate across a real 20-item DVD/book batch
+- [ ] Add photo blur, glare, crop, and identifier-readability guidance
+- [ ] Add resumable card sessions and explicit low-value lot creation
+
 ## v0.9.1 Listing Speed
 
 - [x] Add a compact Fast Review workflow for title, condition, price, shipping, photo status, and estimated net
