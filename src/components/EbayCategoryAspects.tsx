@@ -50,12 +50,14 @@ export default function EbayCategoryAspects({
   itemSpecifics,
   onChange,
   onMissingRequiredChange,
+  hiddenRecommendedNames = [],
 }: {
   categoryId?: string;
   marketplaceId?: string;
   itemSpecifics?: string;
   onChange: (itemSpecifics: string) => void;
   onMissingRequiredChange?: (names: string[]) => void;
+  hiddenRecommendedNames?: string[];
 }) {
   const getCategoryAspects = useAction(api.ebayTaxonomy.getCategoryAspects);
   const [aspects, setAspects] = useState<CategoryAspect[]>([]);
@@ -94,7 +96,14 @@ export default function EbayCategoryAspects({
   }, [categoryId, marketplaceId]);
 
   const required = useMemo(() => aspects.filter((aspect) => aspect.required), [aspects]);
-  const recommended = useMemo(() => aspects.filter((aspect) => !aspect.required).slice(0, 12), [aspects]);
+  const hiddenRecommended = useMemo(
+    () => new Set(hiddenRecommendedNames.map((name) => name.trim().toLowerCase())),
+    [hiddenRecommendedNames],
+  );
+  const recommended = useMemo(
+    () => aspects.filter((aspect) => !aspect.required && !hiddenRecommended.has(aspect.name.trim().toLowerCase())).slice(0, 12),
+    [aspects, hiddenRecommended],
+  );
   useEffect(() => {
     onMissingRequiredChange?.(required.filter((aspect) => !values.get(aspect.name.toLowerCase())?.value).map((aspect) => aspect.name));
   }, [onMissingRequiredChange, required, values]);

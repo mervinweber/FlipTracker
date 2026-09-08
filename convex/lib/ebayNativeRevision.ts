@@ -65,8 +65,12 @@ export function itemSpecificsXml(aspects: Record<string, string[]>) {
 export function conditionIdForNativeListing(condition?: string, fallback?: unknown) {
   const normalized = condition?.trim().toLowerCase() ?? '';
   if (!normalized) return scalarText(fallback);
-  if (['new', 'brand new', 'sealed'].includes(normalized)) return '1000';
-  if (normalized.includes('new other')) return '1500';
+  if (['new', 'brand new', 'sealed', 'new with tags'].includes(normalized)) return '1000';
+  if (normalized.includes('new other') || normalized === 'new without tags') return '1500';
+  if (normalized === 'new with defects') return '1750';
+  if (normalized === 'pre-owned - excellent' || normalized === 'pre-owned excellent') return '2990';
+  if (normalized === 'pre-owned - good' || normalized === 'pre-owned good') return '3000';
+  if (normalized === 'pre-owned - fair' || normalized === 'pre-owned fair') return '3010';
   if (normalized.includes('like new')) return '2750';
   if (normalized.includes('very good')) return '4000';
   if (normalized.includes('acceptable')) return '6000';

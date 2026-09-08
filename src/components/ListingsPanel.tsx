@@ -303,6 +303,11 @@ const STATUSES = ['Draft', 'Active', 'Pending', 'Sold', 'Expired', 'Relisted', '
 const CARD_PRODUCT_TYPES = ['Single Card', 'Card Lot', 'Complete Set', 'Sealed Pack', 'Sealed Box'];
 const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One Piece Card Game', 'Disney Lorcana', 'Other CCG'];
 const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
+const MEDIA_CONDITIONS = ['New', 'Like New', 'Very Good', 'Good', 'Acceptable', 'For Parts'];
+const CLOTHING_CONDITIONS = ['New with tags', 'New without tags', 'New with defects', 'Pre-owned - Excellent', 'Pre-owned - Good', 'Pre-owned - Fair'];
+const CLOTHING_TYPES = ['T-Shirt', 'Shirt', 'Blouse', 'Sweater', 'Hoodie', 'Dress', 'Jeans', 'Pants', 'Shorts', 'Skirt', 'Jacket', 'Coat', 'Shoes', 'Boots', 'Other'];
+const CLOTHING_DEPARTMENTS = ['Women', 'Men', 'Unisex Adults', 'Girls', 'Boys', 'Unisex Kids', 'Baby', 'Toddler'];
+const CLOTHING_HIDDEN_PRODUCT_CODES = ['UPC', 'EAN', 'ISBN'];
 type SalesTrackerImportItem = {
   title: string;
   description?: string;
@@ -378,7 +383,7 @@ function ebayListingOrigin(listing: Listing) {
 }
 
 function isNewCondition(condition?: string) {
-  return ['new', 'brand new', 'sealed'].includes(condition?.trim().toLowerCase() || '');
+  return ['new', 'brand new', 'sealed', 'new with tags', 'new without tags', 'new with defects'].includes(condition?.trim().toLowerCase() || '');
 }
 
 function isBookListing(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
@@ -389,8 +394,27 @@ function isCardListing(listing: Pick<Listing, 'assetType'>) {
   return Boolean(listing.assetType?.toLowerCase().includes('card'));
 }
 
-function isClothingListing(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
-  return /clothing|apparel|shirt|jeans|pants|dress|jacket|sweater|hoodie|coat|shoe/i.test(`${listing.assetType || ''} ${listing.mediaFormat || ''}`);
+function isClothingListing(listing: Pick<Listing, 'assetType' | 'mediaFormat' | 'category'>) {
+  return /clothing|apparel|shirt|jeans|pants|dress|jacket|sweater|hoodie|coat|shoe/i.test(`${listing.assetType || ''} ${listing.mediaFormat || ''} ${listing.category || ''}`);
+}
+
+function hasMediaCompleteness(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
+  return /book|video game|dvd|blu-ray|blu ray|cd|music/i.test(`${listing.assetType || ''} ${listing.mediaFormat || ''}`);
+}
+
+function hasLanguageSpecific(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
+  return hasMediaCompleteness(listing) || isCardListing(listing);
+}
+
+function conditionOptionsFor(listing: Pick<Listing, 'assetType' | 'mediaFormat' | 'category'>) {
+  return isClothingListing(listing) ? CLOTHING_CONDITIONS : MEDIA_CONDITIONS;
+}
+
+function completenessOptionsFor(listing: Pick<Listing, 'assetType' | 'mediaFormat'>) {
+  const identity = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase();
+  if (identity.includes('book')) return ['Complete', 'Dust Jacket Included', 'No Dust Jacket', 'Ex-Library', 'Incomplete'];
+  if (/video game|game/.test(identity)) return ['Complete', 'Game Only', 'Case + Game', 'No Manual', 'Sealed', 'Loose', 'Incomplete'];
+  return ['Complete', 'Disc Only', 'Case Only', 'Case + Disc', 'Sealed', 'Incomplete'];
 }
 
 function defaultCardGame(type?: string) {
@@ -807,7 +831,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   function listingWithWorkflowDefaults(listing: Listing) {
     const condition = listing.condition?.trim().toLowerCase() || '';
     const isBookWithCover = `${listing.assetType || ''} ${listing.mediaFormat || ''}`.toLowerCase().includes('book') && Boolean(listing.photoUrl);
-    const imageMode = listing.imageMode || (["new", "brand new", "sealed"].includes(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
+    const imageMode = listing.imageMode || (isNewCondition(condition) || isBookWithCover ? 'eBay Catalog' : 'Actual Item Photo');
     const categoryResolution = resolveEbayCategory({ itemType: listing.assetType, barcode: listing.assetBarcode, cardSaleFormat: listing.cardProductType });
     const configuredProfile = EBAY_SHIPPING_PROFILES.find((profile) => profile.key === listing.shippingPreset || profile.label === listing.shippingPreset);
     const shippingProfile = configuredProfile || resolveShippingProfile({ itemType: listing.assetType, mediaFormat: listing.mediaFormat, title: listing.title });
@@ -817,7 +841,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     const presetPolicy = withPreset.fulfillmentPolicyId || findSuggestedShippingPolicy(ebaySetup?.policies.fulfillment || [], presetProfile)?.id || suggestedPolicy?.id;
     return applySafeSpecificDefaults({
       ...withPreset,
-      language: withPreset.language || itemSpecificValue(withPreset.itemSpecifics, 'Language') || 'English',
+      language: hasLanguageSpecific(withPreset) ? withPreset.language || itemSpecificValue(withPreset.itemSpecifics, 'Language') || 'English' : undefined,
       bookTitle: (withPreset.bookTitle || itemSpecificValue(withPreset.itemSpecifics, 'Book Title') || (isBookListing(withPreset) ? withPreset.assetTitle : undefined))?.slice(0, 65),
       author: withPreset.author || itemSpecificValue(withPreset.itemSpecifics, 'Author') || withPreset.assetAuthor,
       imageMode: withPreset.imageMode || imageMode,
@@ -1845,8 +1869,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         title: fastReviewing.title.trim(),
         description: fastReviewing.description || undefined,
         condition: fastReviewing.condition || undefined,
-        completeness: fastReviewing.completeness || undefined,
-        language: fastReviewing.language || undefined,
+        completeness: hasMediaCompleteness(fastReviewing) ? fastReviewing.completeness || undefined : undefined,
+        language: hasLanguageSpecific(fastReviewing) ? fastReviewing.language || undefined : undefined,
         bookTitle: fastReviewing.bookTitle || undefined,
         author: fastReviewing.author || undefined,
         ebayCategoryId: fastReviewing.ebayCategoryId || undefined,
@@ -1996,9 +2020,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       description: editing.description || undefined,
       category: editing.category || undefined,
       condition: editing.condition || undefined,
-      language: editing.language || undefined,
+      language: hasLanguageSpecific(editing) ? editing.language || undefined : undefined,
       bookTitle: editing.bookTitle || undefined,
       author: editing.author || undefined,
+      completeness: hasMediaCompleteness(editing) ? editing.completeness || undefined : undefined,
       cardProductType: isCardListing(editing) ? editing.cardProductType || 'Single Card' : undefined,
       cardGame: isCardListing(editing) && editing.assetType !== 'Sports Card' ? editing.cardGame || defaultCardGame(editing.assetType) : undefined,
       cardSport: editing.assetType === 'Sports Card' ? editing.cardSport || undefined : undefined,
@@ -2422,10 +2447,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <section className="fastReviewFields">
               <label>eBay Title<input value={fastReviewing.title} maxLength={80} onChange={(event) => patchFastReview({ title: event.target.value })}/><small>{fastReviewing.title.length}/80 characters</small></label>
               <div className="fastReviewFieldRow">
-                <label>Condition<select value={fastReviewing.condition || ''} onChange={(event) => patchFastReview({ condition: event.target.value })}><option value="">Choose condition</option>{['New','Like New','Very Good','Good','Acceptable','For Parts'].map((value) => <option key={value}>{value}</option>)}</select></label>
+                <label>Condition<select value={fastReviewing.condition || ''} onChange={(event) => patchFastReview({ condition: event.target.value })}><option value="">Choose condition</option>{fastReviewing.condition && !conditionOptionsFor(fastReviewing).includes(fastReviewing.condition) ? <option value={fastReviewing.condition}>{fastReviewing.condition}</option> : null}{conditionOptionsFor(fastReviewing).map((value) => <option key={value}>{value}</option>)}</select></label>
                 <label>Price<input type="number" inputMode="decimal" min="0.99" step="0.01" value={fastReviewing.currentPrice ?? fastReviewing.listedPrice ?? ''} onChange={(event) => patchFastReview({ currentPrice: optionalNumber(event.target.value) })}/></label>
               </div>
-              <label>Completeness<select value={fastReviewing.completeness || ''} onChange={(event) => patchFastReview({ completeness: event.target.value || undefined })}><option value="">No completeness value</option>{['Complete','Disc Only','Case Only','Case + Disc','No Manual','Sealed','Loose','Incomplete'].map((value) => <option key={value}>{value}</option>)}</select></label>
+              {hasMediaCompleteness(fastReviewing) ? <label>Completeness<select value={fastReviewing.completeness || ''} onChange={(event) => patchFastReview({ completeness: event.target.value || undefined })}><option value="">No completeness value</option>{fastReviewing.completeness && !completenessOptionsFor(fastReviewing).includes(fastReviewing.completeness) ? <option value={fastReviewing.completeness}>{fastReviewing.completeness}</option> : null}{completenessOptionsFor(fastReviewing).map((value) => <option key={value}>{value}</option>)}</select></label> : null}
               <div className="fastReviewFieldRow">
                 <label>Shipping Profile<select value={fastReviewing.shippingPreset || 'custom'} onChange={(event) => selectFastShippingPreset(event.target.value)}>{EBAY_SHIPPING_PROFILES.map((profile) => <option key={profile.key} value={profile.key}>{profile.label}</option>)}</select></label>
                 <label>eBay Shipping Policy<select value={fastReviewing.fulfillmentPolicyId || ''} onChange={(event) => patchFastReview({ fulfillmentPolicyId: event.target.value || undefined })}><option value="">Use seller default</option>{ebaySetup?.policies.fulfillment.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
@@ -2435,7 +2460,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                 <div><span>Item cost</span><strong>{money(fastReviewing.purchasePrice)}</strong></div>
                 <div><span>Estimated net</span><strong className={fastReviewNet < 0 ? 'lossValue' : 'profitValue'}>{money(fastReviewNet)}</strong><small>after {listingSpeedPresetFor(fastReviewing)?.feePercent ?? 15}% fee estimate{fastReviewing.shippingCost ? ' and saved shipping cost' : ''}</small></div>
               </div>
-              <label className="checkRow fastPresetToggle"><input type="checkbox" checked={rememberFastDefaults} onChange={(event) => setRememberFastDefaults(event.target.checked)}/><span><strong>Remember these defaults for {listingFamily(fastReviewing)} items</strong><small>Condition, completeness, shipping profile, policy, and image source stay on this browser.</small></span></label>
+              <label className="checkRow fastPresetToggle"><input type="checkbox" checked={rememberFastDefaults} onChange={(event) => setRememberFastDefaults(event.target.checked)}/><span><strong>Remember these defaults for {listingFamily(fastReviewing)} items</strong><small>{hasMediaCompleteness(fastReviewing) ? 'Condition, completeness, shipping profile, policy, and image source' : 'Condition, shipping profile, policy, and image source'} stay on this browser.</small></span></label>
             </section>
           </div>
           <section className={`fastReviewReadiness ${fastReviewIssues.some((issue) => issue.blocking) ? 'blocked' : 'ready'}`}>
@@ -2575,15 +2600,16 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             <label>SKU<input value={editing.sku || ''} onChange={(event) => patchEditing({ sku: event.target.value })}/></label>
             <label>Marketplace Item ID<input value={editing.externalListingId || ''} onChange={(event) => patchEditing({ externalListingId: event.target.value })}/></label>
             <label className="span2">Listing URL<input type="url" value={editing.listingUrl || ''} onChange={(event) => patchEditing({ listingUrl: event.target.value })}/></label>
-            <label>Condition<input value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}/></label>
-            <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label>
+            <label>Condition<select value={editing.condition || ''} onChange={(event) => patchEditing({ condition: event.target.value, imageMode: isNewCondition(event.target.value) || (isBookListing(editing) && Boolean(editing.photoUrl)) ? editing.imageMode : 'Actual Item Photo' })}><option value="">Choose condition</option>{editing.condition && !conditionOptionsFor(editing).includes(editing.condition) ? <option value={editing.condition}>{editing.condition}</option> : null}{conditionOptionsFor(editing).map((value) => <option key={value}>{value}</option>)}</select>{isClothingListing(editing) ? <small>Uses eBay's apparel condition labels.</small> : null}</label>
+            {hasLanguageSpecific(editing) ? <label>Language<select value={editing.language || 'English'} onChange={(event) => patchEditing({ language: event.target.value })}>{editing.language && !LANGUAGE_OPTIONS.includes(editing.language) ? <option value={editing.language}>{editing.language}</option> : null}{LANGUAGE_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}</select><small>Sent to eBay as the Language item specific.</small></label> : null}
+            {hasMediaCompleteness(editing) ? <label>Completeness<select value={editing.completeness || ''} onChange={(event) => patchEditing({ completeness: event.target.value || undefined })}><option value="">No completeness value</option>{editing.completeness && !completenessOptionsFor(editing).includes(editing.completeness) ? <option value={editing.completeness}>{editing.completeness}</option> : null}{completenessOptionsFor(editing).map((value) => <option key={value}>{value}</option>)}</select></label> : null}
             </> : null}
             {editorStep === 'details' ? <>
             <div className="categoryAutoRoute span2"><Tags size={20}/><div><strong>Automatic category</strong><span>{editing.category || editing.assetType || 'eBay will use the item type and product identifier'}</span><small>{editing.ebayCategoryId ? `Leaf category ${editing.ebayCategoryId}` : editing.assetBarcode ? `Routed from ${editing.assetBarcode}` : 'Confirm an exception below only when the automatic category is not right.'}</small></div></div>
             <label className="span2">Category Route<select value={selectedCategoryRoute(editing)} onChange={(event) => selectListingCategory(event.target.value)}><option value="auto">Automatic for this item</option>{EBAY_CATEGORY_CHOICES.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}{choice.requiresLeafSelection ? ' — choose leaf category next' : ''}</option>)}</select><small>Books, movies, games, CDs, and cards route automatically. Clothing and general merchandise need a more specific leaf category.</small></label>
             <details className="advancedListingOptions span2"><summary>Choose a different eBay category</summary><div className="advancedListingBody"><EbayCategoryFinder query={[editing.title, editing.assetType, editing.mediaFormat].filter(Boolean).join(' ')} selectedCategoryId={editing.ebayCategoryId} onSelect={(suggestion) => patchEditing({ category: suggestion.categoryPath, ebayCategoryId: suggestion.categoryId })}/></div></details>
-            <div className="span2"><EbayCategoryAspects categoryId={editing.ebayCategoryId} marketplaceId={ebaySettings.marketplaceId || 'EBAY_US'} itemSpecifics={editing.itemSpecifics} onChange={(itemSpecifics) => patchEditing({ itemSpecifics })} onMissingRequiredChange={setTaxonomyMissingAspects}/></div>
-            <label className="span2">eBay Type<input list="ebay-type-suggestions" value={itemSpecificValue(editing.itemSpecifics, 'Type') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Type', event.target.value) })} placeholder="Textbook, Handbook, Novel, Movie, TV Series..."/><small>This is eBay's category-specific Type, separate from FlipTracker's inventory format. Use the value that best describes this edition.</small></label>
+            <div className="span2"><EbayCategoryAspects categoryId={editing.ebayCategoryId} marketplaceId={ebaySettings.marketplaceId || 'EBAY_US'} itemSpecifics={editing.itemSpecifics} onChange={(itemSpecifics) => patchEditing({ itemSpecifics })} onMissingRequiredChange={setTaxonomyMissingAspects} hiddenRecommendedNames={isClothingListing(editing) ? CLOTHING_HIDDEN_PRODUCT_CODES : []}/></div>
+            {!isClothingListing(editing) ? <label className="span2">eBay Type<input list="ebay-type-suggestions" value={itemSpecificValue(editing.itemSpecifics, 'Type') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Type', event.target.value) })} placeholder="Textbook, Handbook, Novel, Movie, TV Series..."/><small>This is eBay's category-specific Type, separate from FlipTracker's inventory format. Use the value that best describes this edition.</small></label> : null}
             <datalist id="ebay-type-suggestions"><option value="Textbook"/><option value="Handbook"/><option value="Study Guide"/><option value="Reference"/><option value="Novel"/><option value="Movie"/><option value="TV Series"/><option value="Album"/><option value="Single"/><option value="Video Game"/></datalist>
             {isBookListing(editing) ? <label className="span2">Book Title<input maxLength={65} value={editing.bookTitle || ''} onChange={(event) => patchEditing({ bookTitle: event.target.value })}/><small>Required by eBay for book categories. Maximum 65 characters. {(editing.bookTitle || '').length}/65</small></label> : null}
             {isBookListing(editing) ? <label className="span2">Author<input value={editing.author || ''} onChange={(event) => patchEditing({ author: event.target.value })}/><small>Required by eBay for book categories. Confirm the credited author before staging.</small></label> : null}
@@ -2598,7 +2624,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               {editing.assetType === 'Sports Card' ? <label>Team<input value={editing.cardTeam || ''} onChange={(event) => patchEditing({ cardTeam: event.target.value })}/></label> : null}
             </div></div> : null}
             {isClothingListing(editing) ? <div className="formSection span2"><h3>Clothing Details</h3><div className="sectionGrid">
-              {['Brand', 'Department', 'Size', 'Color', 'Material'].map((name) => <label key={name}>{name}<input value={itemSpecificValue(editing.itemSpecifics, name) || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, name, event.target.value) })}/></label>)}
+              <label>Type<input list="clothing-type-suggestions" value={itemSpecificValue(editing.itemSpecifics, 'Type') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Type', event.target.value) })} placeholder="T-Shirt, Jeans, Dress..."/></label>
+              <datalist id="clothing-type-suggestions">{CLOTHING_TYPES.map((value) => <option key={value} value={value}/>)}</datalist>
+              <label>Department<select value={itemSpecificValue(editing.itemSpecifics, 'Department') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Department', event.target.value) })}><option value="">Choose department</option>{CLOTHING_DEPARTMENTS.map((value) => <option key={value}>{value}</option>)}</select></label>
+              {['Brand', 'Size', 'Color', 'Material'].map((name) => <label key={name}>{name}<input value={itemSpecificValue(editing.itemSpecifics, name) || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, name, event.target.value) })}/></label>)}
               <label>Style / Model<input value={itemSpecificValue(editing.itemSpecifics, 'Style') || ''} onChange={(event) => patchEditing({ itemSpecifics: setItemSpecificValue(editing.itemSpecifics, 'Style', event.target.value) })}/></label>
             </div></div> : null}
             <label className="span2">Additional Item Specifics<textarea value={editing.itemSpecifics || ''} onChange={(event) => patchEditing({ itemSpecifics: event.target.value })}/><small>One per line in Name: Value format. Use this for details that are not already captured above.</small></label>

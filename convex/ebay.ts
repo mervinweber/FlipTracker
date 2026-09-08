@@ -513,7 +513,12 @@ function isEbayError(error: unknown, errorId: number) {
 
 function conditionForEbay(condition?: string) {
   const normalized = condition?.trim().toLowerCase() ?? "";
-  if (["new", "brand new", "sealed"].includes(normalized)) return "NEW";
+  if (["new", "brand new", "sealed", "new with tags"].includes(normalized)) return "NEW";
+  if (["new other", "new without tags"].includes(normalized)) return "NEW_OTHER";
+  if (normalized === "new with defects") return "NEW_WITH_DEFECTS";
+  if (normalized === "pre-owned - excellent" || normalized === "pre-owned excellent") return "PRE_OWNED_EXCELLENT";
+  if (normalized === "pre-owned - good" || normalized === "pre-owned good") return "USED_EXCELLENT";
+  if (normalized === "pre-owned - fair" || normalized === "pre-owned fair") return "PRE_OWNED_FAIR";
   if (normalized.includes("like new")) return "LIKE_NEW";
   if (normalized.includes("very good")) return "USED_VERY_GOOD";
   if (normalized.includes("acceptable")) return "USED_ACCEPTABLE";
