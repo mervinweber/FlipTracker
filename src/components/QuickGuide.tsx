@@ -82,6 +82,8 @@ export default function QuickGuide() {
           <li>Open <strong>Listings</strong> and use its lifecycle views: Queue for draft work, Active for live-listing maintenance, Shipping for paid orders, Sold for completed-sale history, and Needs Attention for exceptions.</li>
           <li>Use <strong>Listing Templates</strong> to remember family defaults for books, movies, games, cards, clothing, and general items.</li>
           <li>Find the item in Inventory and select <strong>Draft</strong>.</li>
+          <li>For a lot, select 2-12 compatible Inventory items and choose <strong>Create eBay Bundle</strong>. Review the generated title, item list, price, condition, and shipping plan.</li>
+          <li>A bundle uses actual photos attached across all its member items, up to 12. All members stay linked when the listing is published, ended, or sold.</li>
           <li>FlipTracker creates an internal eBay draft using the prepared title, description, category, condition, item specifics, and price.</li>
           <li>In the <strong>Queue</strong> view, select the drafts you want to process and choose <strong>Update Pricing</strong>.</li>
           <li>Check sold comps, enter each approved price, and apply the updates. Blank rows stay in Ready for Pricing.</li>
@@ -117,7 +119,14 @@ export default function QuickGuide() {
           <li>FlipTracker updates inventory status, sales history, revenue, net profit, and fulfillment state.</li>
         </ol></div></section>
 
-        <section><div className="guideNumber">9</div><div><h3>Back up and migrate data</h3><ol>
+        <section><div className="guideNumber">9</div><div><h3>Write-offs and year-end closeout</h3><ol>
+          <li>In Inventory, choose <strong>Write Off</strong> for an unsold item that is damaged, lost, donated, used personally, or otherwise no longer sellable.</li>
+          <li>Confirm the effective date and cost amount. FlipTracker keeps the item in history and subtracts that amount from profit for the selected year.</li>
+          <li>Expand <strong>Business year</strong> above Inventory to review sales profit, write-offs, and net profit.</li>
+          <li>After a calendar year ends, choose <strong>Close Year</strong> to preserve an immutable snapshot. Closed-year totals remain authoritative even if old records are later corrected.</li>
+        </ol><p className="guideNote"><CircleDollarSign size={15}/> FlipTracker provides operational records, not tax advice. Confirm tax treatment with your tax professional.</p></div></section>
+
+        <section><div className="guideNumber">10</div><div><h3>Back up and migrate data</h3><ol>
           <li>Use <strong>Export Excel</strong> from Inventory for an inventory backup.</li>
           <li>Use <strong>Export CSV</strong> from Listings for listing and sales records.</li>
           <li>Use <strong>Import Old JSON</strong> only for a Sales Tracker JSON export. It creates new records and does not deduplicate.</li>

@@ -7,6 +7,17 @@ function midpoint(low?: number, high?: number) {
   return low ?? high;
 }
 
+function bundleFamily(asset: { type?: string; mediaFormat?: string; cardGame?: string }) {
+  const identity = `${asset.type ?? ""} ${asset.mediaFormat ?? ""}`.toLowerCase();
+  if (identity.includes("book")) return "books";
+  if (identity.includes("dvd") || identity.includes("blu-ray") || identity.includes("blu ray")) return "movies";
+  if (/\bcd\b|music/.test(identity)) return "music";
+  if (identity.includes("game")) return "video-games";
+  if (identity.includes("card")) return `cards:${(asset.cardGame || asset.type || "cards").toLowerCase()}`;
+  if (identity.includes("clothing") || identity.includes("apparel")) return "clothing";
+  return `other:${(asset.type || asset.mediaFormat || "general").toLowerCase()}`;
+}
+
 const listingFields = {
   platform: v.string(),
   salePlatform: v.optional(v.string()),
@@ -129,19 +140,25 @@ export const list = query({
     return await Promise.all(
       listings.map(async (listing) => {
         const asset = await ctx.db.get(listing.assetId);
-        const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", listing.assetId)).collect();
+        const bundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+        const bundleAssets = bundleLinks.length
+          ? (await Promise.all(bundleLinks.sort((a, b) => a.position - b.position).map((link) => ctx.db.get(link.assetId)))).filter((row) => row !== null)
+          : asset ? [asset] : [];
+        const photos = (await Promise.all(bundleAssets.map((row) => ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", row._id)).collect()))).flat();
         const primaryPhoto = photos.sort((a, b) => a.position - b.position)[0];
         const primaryPhotoUrl = primaryPhoto ? await ctx.storage.getUrl(primaryPhoto.storageId) : undefined;
         return {
           ...listing,
           assetTitle: asset?.title ?? "Missing inventory item",
           assetType: asset?.type,
-          purchasePrice: asset?.purchasePrice,
+          purchasePrice: bundleAssets.reduce((sum, row) => sum + (row.purchasePrice || 0), 0),
+          bundleCount: bundleAssets.length,
+          bundleTitles: bundleAssets.map((row) => row.title),
           completeness: asset?.completeness,
           storageLocation: asset?.storageLocation,
           photoUrl: primaryPhotoUrl || asset?.photoDataUrl || asset?.coverImageUrl,
-          hasActualPhoto: Boolean(primaryPhoto || asset?.photoDataUrl),
-          actualPhotoCount: photos.length + (asset?.photoDataUrl ? 1 : 0),
+          hasActualPhoto: Boolean(primaryPhoto || bundleAssets.some((row) => row.photoDataUrl)),
+          actualPhotoCount: photos.length + bundleAssets.filter((row) => row.photoDataUrl).length,
           hasCatalogIdentifier: Boolean(asset?.upc || asset?.barcode),
           assetBarcode: asset?.upc || asset?.barcode,
           mediaFormat: asset?.mediaFormat,
@@ -238,10 +255,12 @@ export const stats = query({
       return sum + Math.max(0, Math.round((soldAt - listedAt) / 86_400_000));
     }, 0);
 
-    const soldWithAssets = await Promise.all(sold.map(async (listing) => ({
-      listing,
-      asset: await ctx.db.get(listing.assetId),
-    })));
+    const soldWithAssets = await Promise.all(sold.map(async (listing) => {
+      const links = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+      const assetIds = links.length ? links.map((link) => link.assetId) : [listing.assetId];
+      const assets = (await Promise.all(assetIds.map((assetId) => ctx.db.get(assetId)))).filter((asset) => asset !== null);
+      return { listing, purchasePrice: assets.reduce((sum, asset) => sum + (asset.purchasePrice ?? 0), 0) };
+    }));
 
     return {
       draftCount: listings.filter((listing) => listing.status === "Draft").length,
@@ -249,10 +268,10 @@ export const stats = query({
       activeValue: active.reduce((sum, listing) => sum + (listing.currentPrice ?? listing.listedPrice ?? 0), 0),
       soldCount: sold.length,
       soldRevenue: sold.reduce((sum, listing) => sum + (listing.soldPrice ?? 0), 0),
-      soldNetProfit: soldWithAssets.reduce((sum, { listing, asset }) => sum
+      soldNetProfit: soldWithAssets.reduce((sum, { listing, purchasePrice }) => sum
         + (listing.soldPrice ?? 0)
         + (listing.shippingCharged ?? 0)
-        - (asset?.purchasePrice ?? 0)
+        - purchasePrice
         - (listing.fees ?? 0)
         - (listing.shippingCost ?? 0), 0),
       averageDaysToSell: soldWithDates.length ? totalDays / soldWithDates.length : 0,
@@ -336,6 +355,52 @@ export const create = mutation({
   },
 });
 
+export const createBundle = mutation({
+  args: { assetIds: v.array(v.id("assets")), ...listingFields },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    if (args.platform.toLowerCase() !== "ebay" || args.status !== "Draft") throw new Error("Bundles must begin as an eBay draft.");
+    const uniqueAssetIds = [...new Set(args.assetIds)];
+    if (uniqueAssetIds.length < 2 || uniqueAssetIds.length > 12) throw new Error("Choose between 2 and 12 inventory items for a bundle.");
+    const assets = [];
+    for (const assetId of uniqueAssetIds) {
+      const asset = await ctx.db.get(assetId);
+      assertOwner(asset, ownerId, "Inventory item");
+      if (["Sold", "Written Off"].includes(asset.status || "")) throw new Error(`${asset.title} is already closed and cannot be bundled.`);
+      const linked = await ctx.db.query("listingBundleItems").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect();
+      const linkedListings = await Promise.all(linked.map((row) => ctx.db.get(row.listingId)));
+      if (linkedListings.some((row) => row && ["Draft", "Pending", "Active"].includes(row.status))) throw new Error(`${asset.title} is already assigned to another open bundle.`);
+      const directListings = await ctx.db.query("marketplaceListings").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect();
+      if (directListings.some((row) => ["Draft", "Pending", "Active"].includes(row.status))) throw new Error(`${asset.title} already has an open listing.`);
+      assets.push(asset);
+    }
+    const family = bundleFamily(assets[0]);
+    if (assets.some((asset) => bundleFamily(asset) !== family)) throw new Error("Bundle items must use one compatible category family.");
+
+    const now = Date.now();
+    const { assetIds, ...fields } = args;
+    void assetIds;
+    const listingId = await ctx.db.insert("marketplaceListings", {
+      ownerId,
+      assetId: uniqueAssetIds[0],
+      ...fields,
+      currentPrice: fields.currentPrice ?? fields.listedPrice,
+      pricingStatus: fields.pricingStatus ?? (fields.currentPrice !== undefined || fields.listedPrice !== undefined ? "Ready for eBay" : "Ready for Pricing"),
+      pricingUpdatedAt: fields.currentPrice !== undefined || fields.listedPrice !== undefined ? now : undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (let position = 0; position < uniqueAssetIds.length; position += 1) {
+      await ctx.db.insert("listingBundleItems", { ownerId, listingId, assetId: uniqueAssetIds[position], position, createdAt: now });
+      await ctx.db.patch(uniqueAssetIds[position], { status: fields.status === "Active" ? "Listed" : "Bundle", updatedAt: now });
+    }
+    const initialPrice = fields.currentPrice ?? fields.listedPrice;
+    if (initialPrice !== undefined) await ctx.db.insert("listingPriceHistory", { ownerId, listingId, assetId: uniqueAssetIds[0], date: now, price: initialPrice, reason: "Initial bundle price", createdAt: now });
+    await ctx.db.insert("listingEvents", { ownerId, listingId, assetId: uniqueAssetIds[0], eventType: "bundle_created", source: "FlipTracker", toStatus: fields.status, message: `${uniqueAssetIds.length}-item eBay bundle created.`, createdAt: now });
+    return { listingId, itemCount: assets.length };
+  },
+});
+
 export const update = mutation({
   args: {
     id: v.id("marketplaceListings"),
@@ -348,6 +413,9 @@ export const update = mutation({
     const existing = await ctx.db.get(id);
     const ownerId = await currentOwnerId(ctx);
     assertOwner(existing, ownerId, "Listing");
+    const bundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", id)).collect();
+    const memberIds = bundleLinks.length ? bundleLinks.sort((a, b) => a.position - b.position).map((row) => row.assetId) : [existing.assetId];
+    const memberAssets = (await Promise.all(memberIds.map((assetId) => ctx.db.get(assetId)))).filter((row) => row !== null);
 
     const now = Date.now();
     const monetaryValues = [purchasePrice, patch.soldPrice, patch.shippingCharged, patch.shippingCost, patch.fees];
@@ -410,12 +478,12 @@ export const update = mutation({
         createdAt: now,
       });
     }
-    if (purchasePrice !== undefined || completeness !== undefined) {
-      await ctx.db.patch(existing.assetId, { ...(purchasePrice !== undefined ? { purchasePrice } : {}), ...(completeness !== undefined ? { completeness } : {}), updatedAt: now });
+    if ((purchasePrice !== undefined && memberIds.length === 1) || completeness !== undefined) {
+      await ctx.db.patch(existing.assetId, { ...(purchasePrice !== undefined && memberIds.length === 1 ? { purchasePrice } : {}), ...(completeness !== undefined ? { completeness } : {}), updatedAt: now });
     }
     const nextStatus = patch.status ?? existing.status;
     if (nextStatus === "Active") {
-      await ctx.db.patch(existing.assetId, { status: "Listed", updatedAt: now });
+      for (const assetId of memberIds) await ctx.db.patch(assetId, { status: "Listed", updatedAt: now });
     }
     if (nextStatus === "Sold") {
       const soldPrice = patch.soldPrice ?? patch.currentPrice ?? existing.currentPrice ?? existing.listedPrice ?? 0;
@@ -431,7 +499,7 @@ export const update = mutation({
         saleChannelDetail: patch.saleChannelDetail ?? existing.saleChannelDetail,
         soldDate,
         soldPrice,
-        purchasePrice,
+        purchasePrice: purchasePrice ?? memberAssets.reduce((sum, asset) => sum + (asset.purchasePrice || 0), 0),
         shippingCharged: patch.shippingCharged ?? existing.shippingCharged,
         fees,
         shipping,
@@ -439,14 +507,11 @@ export const update = mutation({
         notes: patch.notes ?? existing.notes,
         updatedAt: now,
       };
-      await ctx.db.patch(existing.assetId, {
+      for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], {
         status: "Sold",
-        soldPrice,
-        fees,
-        shipping,
+        ...(index === 0 ? { soldPrice, fees, shipping, valueSource: "Actual Sale" } : {}),
         needsValueCheck: false,
-        valueSource: "Actual Sale",
-        ...(purchasePrice !== undefined ? { purchasePrice } : {}),
+        ...(purchasePrice !== undefined && memberIds.length === 1 ? { purchasePrice } : {}),
         updatedAt: now,
       });
       const linkedSale = await ctx.db
@@ -481,6 +546,7 @@ export const remove = mutation({
     if (!listing) return null;
     const ownerId = await currentOwnerId(ctx);
     assertOwner(listing, ownerId, "Listing");
+    const bundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", args.id)).collect();
     const history = await ctx.db
       .query("listingPriceHistory")
       .withIndex("by_listingId", (q) => q.eq("listingId", args.id))
@@ -488,6 +554,13 @@ export const remove = mutation({
     for (const entry of history) await ctx.db.delete(entry._id);
     const events = await ctx.db.query("listingEvents").withIndex("by_listingId", (q) => q.eq("listingId", args.id)).take(500);
     for (const event of events) await ctx.db.delete(event._id);
+    for (const link of bundleLinks) {
+      if (["Draft", "Pending", "Cancelled"].includes(listing.status)) {
+        const asset = await ctx.db.get(link.assetId);
+        if (asset?.status === "Bundle") await ctx.db.patch(link.assetId, { status: "Inventory", updatedAt: Date.now() });
+      }
+      await ctx.db.delete(link._id);
+    }
     await ctx.db.delete(args.id);
     return null;
   },

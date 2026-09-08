@@ -111,6 +111,7 @@ export default defineSchema({
     metadataCheckedAt: v.optional(v.number()),
     collectionId: v.optional(v.id("collections")),
     intakeBatchId: v.optional(v.id("intakeBatches")),
+    acquiredDate: v.optional(v.string()),
     storageLocation: v.optional(v.string()),
     estimatedLow: v.optional(v.number()),
     estimatedHigh: v.optional(v.number()),
@@ -146,6 +147,9 @@ export default defineSchema({
     ebayShipping: v.optional(v.string()),
     notes: v.optional(v.string()),
     confidence: v.optional(v.string()),
+    writtenOffDate: v.optional(v.string()),
+    writeOffAmount: v.optional(v.number()),
+    writeOffReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -334,6 +338,50 @@ export default defineSchema({
     .index("by_fulfillmentStatus", ["fulfillmentStatus"])
     .index("by_listedDate", ["listedDate"])
     .index("by_soldDate", ["soldDate"]),
+
+  listingBundleItems: defineTable({
+    ownerId: v.optional(v.string()),
+    listingId: v.id("marketplaceListings"),
+    assetId: v.id("assets"),
+    position: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_listingId", ["listingId"])
+    .index("by_assetId", ["assetId"]),
+
+  inventoryAdjustments: defineTable({
+    ownerId: v.optional(v.string()),
+    assetId: v.id("assets"),
+    adjustmentType: v.string(),
+    effectiveDate: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_assetId", ["assetId"])
+    .index("by_effectiveDate", ["effectiveDate"]),
+
+  yearEndCloseouts: defineTable({
+    ownerId: v.optional(v.string()),
+    year: v.number(),
+    saleCount: v.number(),
+    writeOffCount: v.number(),
+    revenue: v.number(),
+    shippingIncome: v.number(),
+    itemCost: v.number(),
+    fees: v.number(),
+    shippingCost: v.number(),
+    salesProfit: v.number(),
+    writeOffCost: v.number(),
+    netProfit: v.number(),
+    closedAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_ownerId_and_year", ["ownerId", "year"])
+    .index("by_year", ["year"]),
 
   ebayConnections: defineTable({
     ownerId: v.optional(v.string()),

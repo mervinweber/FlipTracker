@@ -162,6 +162,7 @@ export const convertToInventory = mutation({
       upc: analysis.upc,
       condition: analysis.condition,
       completeness: analysis.completeness,
+      acquiredDate: new Date(now).toISOString().slice(0, 10),
       purchasePrice: analysis.purchaseCost,
       estimatedLow: analysis.expectedSalePrice,
       estimatedHigh: analysis.expectedSalePrice,

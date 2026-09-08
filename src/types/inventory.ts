@@ -37,6 +37,8 @@ export type InventoryItem = {
   metadataSource?: string;
   metadataConfidence?: string;
   collectionName?: string;
+  acquiredDate?: string;
+  listedDate?: string;
   storageLocation?: string;
   estLow?: number;
   estHigh?: number;

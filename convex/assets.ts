@@ -28,6 +28,7 @@ const assetInput = {
   metadataConfidence: v.optional(v.string()),
   metadataCheckedAt: v.optional(v.number()),
   collectionId: v.optional(v.id("collections")),
+  acquiredDate: v.optional(v.string()),
   storageLocation: v.optional(v.string()),
   estimatedLow: v.optional(v.number()),
   estimatedHigh: v.optional(v.number()),
@@ -90,6 +91,7 @@ const assetPatch = {
   metadataConfidence: v.optional(v.string()),
   metadataCheckedAt: v.optional(v.number()),
   collectionId: v.optional(v.id("collections")),
+  acquiredDate: v.optional(v.string()),
   storageLocation: v.optional(v.string()),
   estimatedLow: v.optional(v.number()),
   estimatedHigh: v.optional(v.number()),
@@ -132,6 +134,19 @@ function matchesMediaType(type: string, filter?: string) {
   return type === filter;
 }
 
+async function withListingDates(ctx: any, rows: any[], ownerId?: string) {
+  const listings = (await ctx.db.query("marketplaceListings").take(1_000))
+    .filter((listing: { ownerId?: string }) => !ownerId || listing.ownerId === ownerId);
+  const latestByAsset = new Map<string, string>();
+  for (const listing of listings) {
+    if (!listing.listedDate) continue;
+    const key = String(listing.assetId);
+    const current = latestByAsset.get(key);
+    if (!current || listing.listedDate > current) latestByAsset.set(key, listing.listedDate);
+  }
+  return rows.map((row) => ({ ...row, listedDate: latestByAsset.get(String(row._id)) }));
+}
+
 export const list = query({
   args: {
     console: v.optional(v.string()),
@@ -153,31 +168,31 @@ export const list = query({
           return s;
         })
         .take(250);
-      return searched
+      return await withListingDates(ctx, searched
         .filter((r) => !ownerId || r.ownerId === ownerId)
         .filter((r) => matchesMediaType(r.type, args.mediaType))
         .filter((r) => !args.collectionId || r.collectionId === args.collectionId)
-        .filter((r) => !args.unassignedOnly || !r.collectionId);
+        .filter((r) => !args.unassignedOnly || !r.collectionId), ownerId);
     }
 
     if (args.collectionId) {
       const rows = await ctx.db.query("assets").withIndex("by_collection", (q) => q.eq("collectionId", args.collectionId)).take(250);
-      return rows
+      return await withListingDates(ctx, rows
         .filter((r) => !ownerId || r.ownerId === ownerId)
         .filter((r) => matchesMediaType(r.type, args.mediaType))
         .filter((r) => !args.console || args.console === "All" || r.console === args.console)
         .filter((r) => !args.status || args.status === "All" || r.status === args.status)
-        .sort((a, b) => (a.console || "").localeCompare(b.console || "") || (b.estimatedHigh || 0) - (a.estimatedHigh || 0));
+        .sort((a, b) => (a.console || "").localeCompare(b.console || "") || (b.estimatedHigh || 0) - (a.estimatedHigh || 0)), ownerId);
     }
 
     const rows = await ctx.db.query("assets").take(250);
-    return rows
+    return await withListingDates(ctx, rows
       .filter((r) => !ownerId || r.ownerId === ownerId)
       .filter((r) => matchesMediaType(r.type, args.mediaType))
       .filter((r) => !args.console || args.console === "All" || r.console === args.console)
       .filter((r) => !args.status || args.status === "All" || r.status === args.status)
       .filter((r) => !args.unassignedOnly || !r.collectionId)
-      .sort((a, b) => (a.console || "").localeCompare(b.console || "") || (b.estimatedHigh || 0) - (a.estimatedHigh || 0));
+      .sort((a, b) => (a.console || "").localeCompare(b.console || "") || (b.estimatedHigh || 0) - (a.estimatedHigh || 0)), ownerId);
   },
 });
 
@@ -185,7 +200,7 @@ export const create = mutation({
   args: assetInput,
   handler: async (ctx, args) => {
     const now = Date.now();
-    return await ctx.db.insert("assets", { ...args, ownerId: await currentOwnerId(ctx), needsValueCheck: args.needsValueCheck ?? false, createdAt: now, updatedAt: now });
+    return await ctx.db.insert("assets", { ...args, acquiredDate: args.acquiredDate || new Date(now).toISOString().slice(0, 10), ownerId: await currentOwnerId(ctx), needsValueCheck: args.needsValueCheck ?? false, createdAt: now, updatedAt: now });
   },
 });
 
@@ -223,6 +238,10 @@ export const remove = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing) return;
     assertOwner(existing, ownerId, "Asset");
+    const adjustment = await ctx.db.query("inventoryAdjustments").withIndex("by_assetId", (q) => q.eq("assetId", args.id)).first();
+    if (adjustment) throw new Error("Written-off inventory is part of accounting history and cannot be deleted.");
+    const bundleLink = await ctx.db.query("listingBundleItems").withIndex("by_assetId", (q) => q.eq("assetId", args.id)).first();
+    if (bundleLink) throw new Error("Remove the item from its eBay bundle before deleting it.");
     const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", args.id)).collect();
     for (const photo of photos) {
       await ctx.storage.delete(photo.storageId);
@@ -246,15 +265,17 @@ export const removeMany = mutation({
       if (!asset) continue;
       assertOwner(asset, ownerId, "Asset");
       const sales = await ctx.db.query("sales").withIndex("by_asset", (q) => q.eq("assetId", id)).take(1);
+      const adjustment = await ctx.db.query("inventoryAdjustments").withIndex("by_assetId", (q) => q.eq("assetId", id)).first();
       const listings = await ctx.db.query("marketplaceListings").withIndex("by_assetId", (q) => q.eq("assetId", id)).collect();
+      const bundleLink = await ctx.db.query("listingBundleItems").withIndex("by_assetId", (q) => q.eq("assetId", id)).first();
       const protectedListing = listings.find((listing) =>
         !["Draft", "Pending"].includes(listing.status) || Boolean(listing.ebayOfferId || listing.externalListingId),
       );
-      if (sales.length || protectedListing) {
+      if (sales.length || adjustment || protectedListing || bundleLink) {
         return {
           deleted: 0,
           deletedListings: 0,
-          blocked: `Cannot bulk delete "${asset.title}" because it has a sale, staged eBay offer, or active/sold listing. No selected items were deleted.`,
+          blocked: `Cannot bulk delete "${asset.title}" because it has a sale, write-off, staged eBay offer, or active/sold listing. No selected items were deleted.`,
         };
       }
       records.push({ asset, listings });
@@ -336,6 +357,7 @@ export const importMany = mutation({
     for (const asset of args.assets) {
       ids.push(await ctx.db.insert("assets", {
         ...asset,
+        acquiredDate: asset.acquiredDate || new Date(now).toISOString().slice(0, 10),
         ownerId: await currentOwnerId(ctx),
         needsValueCheck: asset.needsValueCheck ?? false,
         createdAt: now,

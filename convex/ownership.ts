@@ -86,7 +86,8 @@ export const claimLegacyData = mutation({
     const tables = [
       "intakeBatches", "intakeBatchItems", "collections", "assets", "assetPhotos", "sales",
       "linkedAccounts", "crossListings", "marketplaceListings", "listingPriceHistory", "listingEvents",
-      "sourcingAnalyses", "sourcingComps", "valueHistory", "researchChecks",
+      "listingBundleItems",
+      "inventoryAdjustments", "yearEndCloseouts", "sourcingAnalyses", "sourcingComps", "valueHistory", "researchChecks",
       "ebayConnections", "ebayOauthStates", "ebaySettings",
     ] as const;
     const counts: Record<string, number> = {};

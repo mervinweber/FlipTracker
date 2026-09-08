@@ -630,8 +630,12 @@ export const getDraftBundle = internalQuery({
     const listing = await ctx.db.get(args.listingId);
     if (!listing || (args.ownerId && listing.ownerId !== args.ownerId)) return null;
     const asset = await ctx.db.get(listing.assetId);
-    const photos = asset ? await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", asset._id)).collect() : [];
-    return asset ? { listing, asset, photos: photos.sort((a, b) => a.position - b.position) } : null;
+    const links = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+    const assetIds = links.length ? links.sort((a, b) => a.position - b.position).map((link) => link.assetId) : [listing.assetId];
+    const assets = (await Promise.all(assetIds.map((assetId) => ctx.db.get(assetId)))).filter((row) => row !== null);
+    const photoGroups = await Promise.all(assetIds.map((assetId) => ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect()));
+    const photos = photoGroups.flatMap((group, bundlePosition) => group.sort((a, b) => a.position - b.position).map((photo) => ({ ...photo, bundlePosition })));
+    return asset ? { listing, asset, assets, photos: photos.slice(0, 12) } : null;
   },
 });
 
@@ -787,6 +791,11 @@ export const markOfferPublished = internalMutation({
       pricingStatus: "Published",
       updatedAt: Date.now(),
     });
+    if (listing) {
+      const links = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+      const assetIds = links.length ? links.map((link) => link.assetId) : [listing.assetId];
+      for (const assetId of assetIds) await ctx.db.patch(assetId, { status: "Listed", updatedAt: Date.now() });
+    }
     if (listing) await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: listing.status === "Active" ? "link_refreshed" : "published", source: "eBay", message: listing.status === "Active" ? `Refreshed eBay item ${args.ebayListingId}.` : `Published as eBay item ${args.ebayListingId}.`, fromStatus: listing.status, toStatus: "Active", createdAt: Date.now() });
   },
 });
@@ -863,12 +872,15 @@ export const markOfferWithdrawn = internalMutation({
       updatedAt: now,
     });
     await ctx.db.insert("listingEvents", { ownerId: listing.ownerId, listingId: listing._id, assetId: listing.assetId, eventType: "ended", source: "eBay", message: "Live eBay listing ended.", fromStatus: listing.status, toStatus: "Cancelled", createdAt: now });
-    const relatedListings = await ctx.db
-      .query("marketplaceListings")
-      .withIndex("by_assetId", (q) => q.eq("assetId", listing.assetId))
-      .take(100);
-    if (!relatedListings.some((related) => related._id !== listing._id && related.status === "Active")) {
-      await ctx.db.patch(listing.assetId, { status: "Inventory", updatedAt: now });
+    const links = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+    const assetIds = links.length ? links.map((link) => link.assetId) : [listing.assetId];
+    for (const assetId of assetIds) {
+      const relatedListings = await ctx.db.query("marketplaceListings").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).take(100);
+      const otherBundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect();
+      const otherBundles = await Promise.all(otherBundleLinks.filter((link) => link.listingId !== listing._id).map((link) => ctx.db.get(link.listingId)));
+      if (!relatedListings.some((related) => related._id !== listing._id && related.status === "Active") && !otherBundles.some((related) => related?.status === "Active")) {
+        await ctx.db.patch(assetId, { status: "Inventory", updatedAt: now });
+      }
     }
   },
 });
@@ -1030,6 +1042,9 @@ export const reconcileSoldOrderLine = internalMutation({
     }
 
     const now = Date.now();
+    const bundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+    const memberIds = bundleLinks.length ? bundleLinks.sort((a, b) => a.position - b.position).map((link) => link.assetId) : [listing.assetId];
+    const memberAssets = (await Promise.all(memberIds.map((assetId) => ctx.db.get(assetId)))).filter((row) => row !== null);
     const nextFulfillmentStatus = fulfillmentStatus === "Shipped" ? "Shipped" : listing.fulfillmentStatus || fulfillmentStatus;
     const alreadyCurrent = listing.status === "Sold"
       && listing.ebayOrderId === args.orderId
@@ -1045,14 +1060,7 @@ export const reconcileSoldOrderLine = internalMutation({
         fulfillmentStatus: nextFulfillmentStatus,
         updatedAt: now,
       });
-      await ctx.db.patch(listing.assetId, {
-        status: "Sold",
-        soldPrice: args.soldPrice,
-        fees: args.fees,
-        needsValueCheck: false,
-        valueSource: "Actual Sale",
-        updatedAt: now,
-      });
+      for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], { status: "Sold", ...(index === 0 ? { soldPrice: args.soldPrice, fees: args.fees, valueSource: "Actual Sale" } : {}), needsValueCheck: false, updatedAt: now });
       return { matched: true, updated: false, imported: false };
     }
 
@@ -1073,15 +1081,7 @@ export const reconcileSoldOrderLine = internalMutation({
       ebayLastError: undefined,
       updatedAt: now,
     });
-    const asset = await ctx.db.get(listing.assetId);
-    await ctx.db.patch(listing.assetId, {
-      status: "Sold",
-      soldPrice: args.soldPrice,
-      fees: args.fees,
-      needsValueCheck: false,
-      valueSource: "Actual Sale",
-      updatedAt: now,
-    });
+    for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], { status: "Sold", ...(index === 0 ? { soldPrice: args.soldPrice, fees: args.fees, valueSource: "Actual Sale" } : {}), needsValueCheck: false, updatedAt: now });
     const existingSale = await ctx.db.query("sales").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).unique();
     const saleRecord = {
       assetId: listing.assetId,
@@ -1090,7 +1090,7 @@ export const reconcileSoldOrderLine = internalMutation({
       reference: args.orderId,
       soldDate: args.soldDate,
       soldPrice: args.soldPrice,
-      purchasePrice: asset?.purchasePrice,
+      purchasePrice: memberAssets.reduce((sum, asset) => sum + (asset.purchasePrice ?? 0), 0),
       shippingCharged: args.shippingCharged,
       fees: args.fees,
       shipping: listing.shippingCost,

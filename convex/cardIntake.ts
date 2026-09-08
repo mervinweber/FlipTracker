@@ -64,6 +64,7 @@ export const createCard = mutation({
       metadataSource: args.provider,
       metadataConfidence: args.identificationConfidence >= 0.9 ? "High" : args.identificationConfidence >= 0.7 ? "Medium" : "Low",
       metadataCheckedAt: now,
+      acquiredDate: new Date(now).toISOString().slice(0, 10),
       storageLocation: args.storageLocation,
       purchasePrice: args.purchasePrice,
       condition: args.condition,

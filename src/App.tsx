@@ -3,12 +3,13 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { BadgeDollarSign, Barcode, BookOpen, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Archive, BadgeDollarSign, Barcode, BookOpen, Boxes, CalendarDays, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, LockKeyhole, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
 import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
 import { EBAY_CATEGORY_CHOICES, categoryChoiceForKey, resolveEbayCategory, resolveShippingProfile, type EbayCategoryKey } from './config/ebayListingDefaults';
+import { bundleDescription, bundleSuggestedPrice, bundleTitle, validateBundleItems } from './utils/listingBundles';
 
 const ListingsPanel = lazy(() => import('./components/ListingsPanel'));
 const CrossListingsPanel = lazy(() => import('./components/CrossListingsPanel'));
@@ -61,6 +62,8 @@ type Asset = {
   metadataConfidence?: string;
   metadataCheckedAt?: number;
   collectionId?: Id<'collections'>;
+  acquiredDate?: string;
+  listedDate?: string;
   storageLocation?: string;
   estimatedLow?: number;
   estimatedHigh?: number;
@@ -94,6 +97,10 @@ type Asset = {
   ebayItemSpecifics?: string;
   ebayPrice?: number;
   ebayShipping?: string;
+  writtenOffDate?: string;
+  writeOffAmount?: number;
+  writeOffReason?: string;
+  createdAt?: number;
 };
 
 type Collection = {
@@ -115,6 +122,21 @@ type ResearchDraft = {
   confidence: string;
   recommendation?: string;
   notes?: string;
+};
+
+type WriteOffDraft = {
+  effectiveDate: string;
+  amount: string;
+  reason: string;
+  notes: string;
+};
+
+type BundleDraft = {
+  title: string;
+  description: string;
+  price: string;
+  condition: string;
+  shippingPlan: string;
 };
 
 type LookupResult = {
@@ -311,6 +333,7 @@ function blankAsset(): Partial<Asset> {
     condition: 'Good',
     completeness: 'Complete',
     strategy: 'Flip Now',
+    acquiredDate: new Date().toISOString().slice(0, 10),
   });
 }
 
@@ -326,6 +349,7 @@ function blankGeneralAsset(): Partial<Asset> {
     completeness: 'Complete',
     strategy: 'Review',
     ebayCategory: '',
+    acquiredDate: new Date().toISOString().slice(0, 10),
   });
 }
 
@@ -341,6 +365,12 @@ function toNumber(value: string): number | undefined {
   if (value.trim() === '') return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
+}
+
+function formatInventoryDate(value?: string | number) {
+  if (!value) return '';
+  const date = typeof value === 'number' ? new Date(value) : new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem {
@@ -363,6 +393,8 @@ function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem 
     metadataSource: asset.metadataSource,
     metadataConfidence: asset.metadataConfidence,
     collectionName,
+    acquiredDate: asset.acquiredDate,
+    listedDate: asset.listedDate,
     storageLocation: asset.storageLocation,
     estLow: asset.estimatedLow,
     estHigh: asset.estimatedHigh,
@@ -396,7 +428,7 @@ function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem 
     ebayItemSpecifics: asset.ebayItemSpecifics,
     ebayPrice: asset.ebayPrice,
     ebayShipping: asset.ebayShipping,
-    createdAt: new Date().toISOString(),
+    createdAt: asset.createdAt ? new Date(asset.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -432,12 +464,25 @@ export default function App() {
   const [bulkCostAmount, setBulkCostAmount] = useState('');
   const [bulkCostBusy, setBulkCostBusy] = useState(false);
   const [bulkCostError, setBulkCostError] = useState('');
+  const [bundleOpen, setBundleOpen] = useState(false);
+  const [bundleDraft, setBundleDraft] = useState<BundleDraft>({ title: '', description: '', price: '', condition: 'Good', shippingPlan: 'Calculated shipping' });
+  const [bundleError, setBundleError] = useState('');
+  const [bundleBusy, setBundleBusy] = useState(false);
+  const [accountingYear, setAccountingYear] = useState(new Date().getFullYear());
+  const [writeOffAsset, setWriteOffAsset] = useState<Asset | null>(null);
+  const [writeOffDraft, setWriteOffDraft] = useState<WriteOffDraft>({ effectiveDate: new Date().toISOString().slice(0, 10), amount: '', reason: 'Unsellable', notes: '' });
+  const [writeOffBusy, setWriteOffBusy] = useState(false);
+  const [writeOffError, setWriteOffError] = useState('');
+  const [closeYearBusy, setCloseYearBusy] = useState(false);
+  const [closeYearMessage, setCloseYearMessage] = useState('');
   const pendingPhotosRef = useRef<PendingPhoto[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControls = useRef<IScannerControls | null>(null);
 
   const dashboard = useQuery(api.reports.dashboard);
   const collections = useQuery(api.collections.list);
+  const yearSummary = useQuery(api.accounting.yearSummary, { year: accountingYear });
+  const closeouts = useQuery(api.accounting.listCloseouts);
   const assets = useQuery(api.assets.list, {
     search: query || undefined,
     mediaType: typeFilter === 'All' ? undefined : typeFilter,
@@ -458,8 +503,11 @@ export default function App() {
   const removeCollection = useMutation(api.collections.remove);
   const addValueCheck = useMutation(api.research.addValueCheck);
   const createListing = useMutation(api.listings.create);
+  const createBundleListing = useMutation(api.listings.createBundle);
   const generatePhotoUploadUrl = useMutation(api.photos.generateUploadUrl);
   const attachPhoto = useMutation(api.photos.attach);
+  const writeOffItem = useMutation(api.accounting.writeOffItem);
+  const closeYear = useMutation(api.accounting.closeYear);
 
   useEffect(() => {
     pendingPhotosRef.current = pendingPhotos;
@@ -476,9 +524,9 @@ export default function App() {
   const collectionRows: Collection[] = collections || [];
 
   useEffect(() => {
-    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || scannerOpen || bulkCostOpen);
+    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || writeOffAsset !== null || scannerOpen || bulkCostOpen || bundleOpen);
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkCostOpen, editing, editingCollection, researchAsset, scannerOpen]);
+  }, [bulkCostOpen, bundleOpen, editing, editingCollection, researchAsset, scannerOpen, writeOffAsset]);
 
   useEffect(() => {
     const visibleIds = new Set(rows.map((item) => item._id));
@@ -566,6 +614,15 @@ export default function App() {
       return { collection, assetCount: collectionAssets.length, estimatedValue, estimatedProfit: estimatedValue - (collection.purchasePrice || 0) };
     });
   }, [collectionRows, rows]);
+
+  const accountingYears = useMemo(() => {
+    const current = new Date().getFullYear();
+    const years = new Set(Array.from({ length: 10 }, (_, index) => current - index));
+    closeouts?.forEach((closeout) => years.add(closeout.year));
+    return [...years].sort((a, b) => b - a);
+  }, [closeouts]);
+
+  const accountingTotals = yearSummary?.locked && yearSummary.closeout ? yearSummary.closeout : yearSummary?.current;
 
   function collectionName(id?: Id<'collections'>) {
     if (!id) return '';
@@ -816,6 +873,7 @@ export default function App() {
       metadataConfidence: prepared.metadataConfidence || undefined,
       metadataCheckedAt: prepared.metadataCheckedAt,
       collectionId: prepared.collectionId,
+      acquiredDate: prepared.acquiredDate || undefined,
       storageLocation: prepared.storageLocation || undefined,
       estimatedLow: prepared.estimatedLow,
       estimatedHigh: prepared.estimatedHigh,
@@ -943,6 +1001,76 @@ export default function App() {
     setBulkCostOpen(true);
   }
 
+  function selectedBundleItems() {
+    return rows.filter((item) => selectedAssetIds.has(item._id));
+  }
+
+  function openBundleEditor() {
+    const items = selectedBundleItems();
+    const error = validateBundleItems(items);
+    if (error) {
+      setBulkDeleteMessage(error);
+      return;
+    }
+    const blocked = items.find((item) => !['Inventory', 'Hold'].includes(item.status || 'Inventory'));
+    if (blocked) {
+      setBulkDeleteMessage(`${blocked.title} is ${blocked.status} and cannot be added to a new bundle.`);
+      return;
+    }
+    const suggestedPrice = bundleSuggestedPrice(items);
+    setBundleDraft({
+      title: bundleTitle(items),
+      description: bundleDescription(items),
+      price: suggestedPrice?.toFixed(2) || '',
+      condition: items.every((item) => item.condition === items[0].condition) ? items[0].condition || 'Good' : 'Pre-owned',
+      shippingPlan: items[0].ebayShipping || 'Calculated shipping',
+    });
+    setBundleError('');
+    setBundleOpen(true);
+  }
+
+  async function saveBundleDraft() {
+    const items = selectedBundleItems();
+    const validationError = validateBundleItems(items);
+    const price = Number(bundleDraft.price);
+    if (validationError) return setBundleError(validationError);
+    if (!bundleDraft.title.trim()) return setBundleError('Enter a bundle title.');
+    if (!Number.isFinite(price) || price <= 0) return setBundleError('Enter a bundle price above zero.');
+    setBundleBusy(true);
+    setBundleError('');
+    try {
+      const first = items[0];
+      const delivery = listingDeliveryDefaults(first);
+      const totalWeight = items.reduce((sum, item) => sum + (listingDeliveryDefaults(item).packageWeightOz || 0), 0);
+      await createBundleListing({
+        assetIds: items.map((item) => item._id),
+        platform: 'eBay',
+        status: 'Draft',
+        title: bundleDraft.title.trim().slice(0, 80),
+        description: bundleDraft.description.trim(),
+        category: first.ebayCategory || ebayCategoryFor(first),
+        ebayCategoryId: first.ebayCategoryId,
+        condition: bundleDraft.condition,
+        language: 'English',
+        bookTitle: first.type.toLowerCase().includes('book') ? bundleDraft.title.trim().slice(0, 65) : undefined,
+        author: first.type.toLowerCase().includes('book') ? [...new Set(items.map((item) => item.author).filter(Boolean))].join(', ').slice(0, 65) || 'Various' : undefined,
+        itemSpecifics: `Lot: Yes\nNumber of Items: ${items.length}`,
+        listedPrice: price,
+        currentPrice: price,
+        notes: `Bundle of ${items.length} inventory items. Shipping plan: ${bundleDraft.shippingPlan}`,
+        ...delivery,
+        packageWeightOz: Math.max(delivery.packageWeightOz || 1, Math.round(totalWeight * 100) / 100),
+      });
+      setSelectedAssetIds(new Set());
+      setBundleOpen(false);
+      changeView('Listings');
+    } catch (error) {
+      setBundleError(error instanceof Error ? error.message : 'Could not create the bundle listing.');
+    } finally {
+      setBundleBusy(false);
+    }
+  }
+
   async function saveBulkCost() {
     const amount = Number(bulkCostAmount);
     if (!Number.isFinite(amount) || amount < 0) {
@@ -962,6 +1090,59 @@ export default function App() {
       setBulkCostError(error instanceof Error ? error.message : 'Could not update the selected purchase costs.');
     } finally {
       setBulkCostBusy(false);
+    }
+  }
+
+  function openWriteOff(asset: Asset) {
+    setWriteOffAsset(asset);
+    setWriteOffDraft({
+      effectiveDate: new Date().toISOString().slice(0, 10),
+      amount: asset.purchasePrice !== undefined ? asset.purchasePrice.toFixed(2) : '',
+      reason: 'Unsellable',
+      notes: '',
+    });
+    setWriteOffError('');
+  }
+
+  async function saveWriteOff() {
+    if (!writeOffAsset || writeOffBusy) return;
+    const amount = Number(writeOffDraft.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setWriteOffError('Enter the positive cost amount to deduct from profit.');
+      return;
+    }
+    setWriteOffBusy(true);
+    setWriteOffError('');
+    try {
+      const result = await writeOffItem({
+        assetId: writeOffAsset._id,
+        effectiveDate: writeOffDraft.effectiveDate,
+        amount,
+        reason: writeOffDraft.reason,
+        notes: writeOffDraft.notes.trim() || undefined,
+      });
+      setAccountingYear(result.year);
+      setBulkDeleteMessage(`Wrote off ${writeOffAsset.title} for $${result.amount.toFixed(2)} in ${result.year}.`);
+      setWriteOffAsset(null);
+    } catch (error) {
+      setWriteOffError(error instanceof Error ? error.message : 'Could not write off this item.');
+    } finally {
+      setWriteOffBusy(false);
+    }
+  }
+
+  async function closeAccountingYear() {
+    if (closeYearBusy || !accountingTotals || yearSummary?.locked) return;
+    if (!confirm(`Lock ${accountingYear} with net profit of $${accountingTotals.netProfit.toFixed(2)}? The closeout snapshot cannot be edited.`)) return;
+    setCloseYearBusy(true);
+    setCloseYearMessage('');
+    try {
+      const result = await closeYear({ year: accountingYear });
+      setCloseYearMessage(result.alreadyClosed ? `${accountingYear} was already locked.` : `${accountingYear} closeout locked at $${result.netProfit.toFixed(2)} net profit.`);
+    } catch (error) {
+      setCloseYearMessage(error instanceof Error ? error.message : 'Could not close this year.');
+    } finally {
+      setCloseYearBusy(false);
     }
   }
 
@@ -1023,6 +1204,7 @@ export default function App() {
           coverImageUrl: item.coverImageUrl || undefined,
           metadataSource: item.metadataSource || undefined,
           metadataConfidence: item.metadataConfidence || undefined,
+          acquiredDate: item.acquiredDate || undefined,
           storageLocation: item.storageLocation || undefined,
           estimatedLow: item.estLow,
           estimatedHigh: item.estHigh,
@@ -1137,10 +1319,29 @@ export default function App() {
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search inventory..." value={query} onChange={e => setQuery(e.target.value)} /></div>
         <select aria-label="Filter by category" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>{TYPE_FILTERS.map(type => <option key={type}>{type}</option>)}</select>
         <select value={consoleFilter} onChange={e => setConsoleFilter(e.target.value)}>{consoles.map(c => <option key={c}>{c}</option>)}</select>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>{['All','Inventory','Listed','Sold','Hold','Bundle'].map(s => <option key={s}>{s}</option>)}</select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>{['All','Inventory','Listed','Sold','Written Off','Hold','Bundle'].map(s => <option key={s}>{s}</option>)}</select>
         <select value={collectionFilter} onChange={e => setCollectionFilter(e.target.value)}>{collectionOptions.map(c => <option key={c} value={c}>{c === 'All' || c === 'Unassigned' ? c : collectionName(c as Id<'collections'>)}</option>)}</select>
         <button className="secondary" onClick={() => window.location.reload()}><RefreshCw size={16}/> Refresh</button>
       </section>
+
+      <details className="panel accountingPanel">
+        <summary>
+          <div><p className="eyebrow">Business year</p><h2>{accountingYear} profit and closeout</h2><span>Sales profit, inventory write-offs, and a locked year-end snapshot.</span></div>
+          <div className="accountingSummaryValue"><small>{yearSummary?.locked ? 'Locked net profit' : 'Live net profit'}</small><strong>{accountingTotals ? `$${accountingTotals.netProfit.toFixed(2)}` : '-'}</strong>{yearSummary?.locked ? <LockKeyhole size={16}/> : <CalendarDays size={16}/>}</div>
+        </summary>
+        <div className="accountingBody">
+          <div className="accountingToolbar"><label>Reporting Year<select value={accountingYear} onChange={(event) => { setAccountingYear(Number(event.target.value)); setCloseYearMessage(''); }}>{accountingYears.map((year) => <option key={year}>{year}</option>)}</select></label><span className={yearSummary?.locked ? 'statusPill' : 'statusPill warning'}>{yearSummary?.locked ? `Locked ${formatInventoryDate(yearSummary.closeout?.closedAt)}` : 'Open year'}</span></div>
+          <div className="accountingMetrics">
+            <div><span>Revenue + shipping</span><strong>${accountingTotals ? (accountingTotals.revenue + accountingTotals.shippingIncome).toFixed(2) : '-'}</strong></div>
+            <div><span>Profit from sales</span><strong>${accountingTotals?.salesProfit.toFixed(2) ?? '-'}</strong></div>
+            <div><span>Write-offs</span><strong className="negativeAmount">{accountingTotals ? accountingTotals.writeOffCost > 0 ? `-$${accountingTotals.writeOffCost.toFixed(2)}` : '$0.00' : '-'}</strong></div>
+            <div><span>Net profit</span><strong>${accountingTotals?.netProfit.toFixed(2) ?? '-'}</strong></div>
+          </div>
+          <p className="accountingBreakdown">{accountingTotals ? `${accountingTotals.saleCount} sales · $${accountingTotals.itemCost.toFixed(2)} item cost · $${accountingTotals.fees.toFixed(2)} fees · $${accountingTotals.shippingCost.toFixed(2)} shipping · ${accountingTotals.writeOffCount} write-offs` : 'Loading accounting totals...'}</p>
+          <div className="accountingActions"><p>{yearSummary?.locked ? 'This saved snapshot remains the official FlipTracker total for the closed year, even if historical records are later corrected.' : accountingYear === new Date().getFullYear() ? 'The current year stays live. Close it after the calendar year ends.' : 'Review these totals before locking the completed year. This is an operational report, not tax advice.'}</p>{!yearSummary?.locked && accountingYear < new Date().getFullYear() ? <button disabled={closeYearBusy || !accountingTotals} onClick={closeAccountingYear}><LockKeyhole size={16}/>{closeYearBusy ? 'Locking...' : `Close ${accountingYear}`}</button> : null}</div>
+          {closeYearMessage ? <p className="setupNotice">{closeYearMessage}</p> : null}
+        </div>
+      </details>
 
       <section className="panel collectionPanel">
         <div className="panelHeader">
@@ -1161,7 +1362,7 @@ export default function App() {
       </section>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{selectedAssetIds.size ? <button className="secondary" disabled={bulkDeleteBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size ? <button className="danger" disabled={bulkDeleteBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
+        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{selectedAssetIds.size >= 2 ? <button disabled={bundleBusy} onClick={openBundleEditor}><Boxes size={16}/>{`Create eBay Bundle (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size ? <button className="secondary" disabled={bulkDeleteBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size ? <button className="danger" disabled={bulkDeleteBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
         {bulkDeleteMessage ? <p className={`bulkDeleteNotice ${bulkDeleteMessage.startsWith('Deleted') || bulkDeleteMessage.startsWith('Selected') ? 'successNotice' : 'errorNotice'}`}>{bulkDeleteMessage}</p> : null}
         {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>No inventory yet</h2><p>Import your spreadsheet, add your first item, or scan media.</p></div> : (
           <div className="tableWrap">
@@ -1172,14 +1373,14 @@ export default function App() {
                   <tr key={item._id} className={item.needsValueCheck ? 'needsCheck' : ''}>
                     <td className="selectionCell"><input type="checkbox" aria-label={`Select ${item.title}`} checked={selectedAssetIds.has(item._id)} onChange={() => toggleAssetSelection(item._id)}/></td>
                     <td className="inventoryFormatCell"><span className="consoleTag">{item.mediaFormat || item.console || item.type}</span></td>
-                    <td className="inventoryTitleCell"><strong>{item.title}</strong>{item.edition ? <small>{item.edition}</small> : null}{item.upc || item.barcode ? <small>UPC {item.upc || item.barcode}</small> : null}</td>
+                    <td className="inventoryTitleCell"><strong>{item.title}</strong>{item.edition ? <small>{item.edition}</small> : null}{item.upc || item.barcode ? <small>UPC {item.upc || item.barcode}</small> : null}<small className="inventoryDates">Added {formatInventoryDate(item.createdAt)}{item.acquiredDate ? ` · Acquired ${formatInventoryDate(item.acquiredDate)}` : ''}{item.listedDate ? ` · Listed ${formatInventoryDate(item.listedDate)}` : ''}</small></td>
                     <td className="inventoryCollectionCell">{item.collectionId ? <span className="consoleTag">{collectionName(item.collectionId)}</span> : ''}</td>
                     <td className="inventoryLocationCell">{item.storageLocation}</td>
-                    <td className="valueCell inventoryValueCell">{item.status === 'Sold' && item.soldPrice !== undefined ? `$${item.soldPrice.toFixed(2)} sold` : effectiveLow(item) || effectiveHigh(item) ? `$${effectiveLow(item)}-$${effectiveHigh(item)}` : ''}</td>
-                    <td className="inventorySourceCell"><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
-                    <td className="inventoryPlanCell"><span className={badgeClass(String(item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{item.status === 'Sold' ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
+                    <td className="valueCell inventoryValueCell">{item.status === 'Sold' && item.soldPrice !== undefined ? `$${item.soldPrice.toFixed(2)} sold` : item.status === 'Written Off' ? `-$${(item.writeOffAmount || 0).toFixed(2)}` : effectiveLow(item) || effectiveHigh(item) ? `$${effectiveLow(item)}-$${effectiveHigh(item)}` : ''}</td>
+                    <td className="inventorySourceCell"><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.status === 'Written Off' ? 'Write Off' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.status === 'Written Off' ? 'Write Off' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
+                    <td className="inventoryPlanCell"><span className={badgeClass(String(['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
                     <td className="inventoryStatusCell"><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell inventoryActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button></div></td>
+                    <td className="tableActionsCell inventoryActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button>{!['Sold', 'Written Off', 'Bundle'].includes(item.status || '') ? <><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="secondary" title="Remove this unsold item from inventory and deduct its cost from profit" onClick={() => openWriteOff(item)}><Archive size={14}/> Write Off</button></> : null}{!['Written Off', 'Bundle'].includes(item.status || '') ? <button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button> : null}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1187,6 +1388,24 @@ export default function App() {
           </div>
         )}
       </section></> : <Suspense fallback={<section className="panel"><p className="panelMessage">Loading workspace...</p></section>}>{activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Cross' ? <CrossListingsPanel/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Cards' ? <CardScannerPanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}</Suspense>}
+
+      {bundleOpen ? (
+        <div className="modalBackdrop"><section className="modal bundleModal">
+          <header className="modalHeader"><div><p className="eyebrow">eBay lot builder</p><h2>Create Bundle Listing</h2><p>{selectedBundleItems().length} inventory items will become one eBay listing.</p></div><button className="iconButton secondary" aria-label="Close bundle editor" onClick={() => setBundleOpen(false)}><X size={18}/></button></header>
+          <div className="bundleSummary"><div><span>Items</span><strong>{selectedBundleItems().length}</strong></div><div><span>Total cost</span><strong>${selectedBundleItems().reduce((sum, item) => sum + (item.purchasePrice || 0), 0).toFixed(2)}</strong></div><div><span>Suggested lot price</span><strong>{bundleSuggestedPrice(selectedBundleItems()) ? `$${bundleSuggestedPrice(selectedBundleItems())?.toFixed(2)}` : 'Review'}</strong></div></div>
+          <div className="bundleItemList">{selectedBundleItems().map((item, index) => <div key={item._id}><span>{index + 1}</span><strong>{item.title}</strong><small>{[item.mediaFormat || item.type, item.condition, item.storageLocation].filter(Boolean).join(' · ')}</small></div>)}</div>
+          <div className="formGrid">
+            <label className="span2">eBay Title<input maxLength={80} value={bundleDraft.title} onChange={(event) => setBundleDraft({ ...bundleDraft, title: event.target.value })}/><small>{bundleDraft.title.length}/80 characters</small></label>
+            <label className="span2">Description<textarea value={bundleDraft.description} onChange={(event) => setBundleDraft({ ...bundleDraft, description: event.target.value })}/></label>
+            <label>Bundle Price<input type="number" min="0.99" step="0.01" inputMode="decimal" value={bundleDraft.price} onChange={(event) => setBundleDraft({ ...bundleDraft, price: event.target.value })}/></label>
+            <label>Condition<input value={bundleDraft.condition} onChange={(event) => setBundleDraft({ ...bundleDraft, condition: event.target.value })}/></label>
+            <label className="span2">Shipping Plan<select value={bundleDraft.shippingPlan} onChange={(event) => setBundleDraft({ ...bundleDraft, shippingPlan: event.target.value })}><option>USPS Media Mail, buyer paid</option><option>USPS Ground Advantage, buyer paid</option><option>Calculated shipping</option><option>Free shipping</option></select></label>
+          </div>
+          <p className="bundleHelp">Photos already attached to every selected item are combined, up to eBay's 12-photo limit. You can add or reorder photos in the listing before staging.</p>
+          {bundleError ? <p className="setupNotice errorNotice">{bundleError}</p> : null}
+          <div className="actions right"><button className="secondary" disabled={bundleBusy} onClick={() => setBundleOpen(false)}>Cancel</button><button disabled={bundleBusy} onClick={saveBundleDraft}><Boxes size={16}/>{bundleBusy ? 'Creating...' : 'Create Listing Draft'}</button></div>
+        </section></div>
+      ) : null}
 
       {bulkCostOpen ? (
         <div className="modalBackdrop"><section className="modal bulkCostModal">
@@ -1196,6 +1415,22 @@ export default function App() {
           {Number.isFinite(Number(bulkCostAmount)) && bulkCostAmount !== '' ? <div className="bulkCostPreview"><span>{bulkCostMode === 'splitTotal' ? 'Approximate cost per item' : 'Total assigned cost'}</span><strong>{bulkCostMode === 'splitTotal' ? `$${(Number(bulkCostAmount) / Math.max(1, selectedAssetIds.size)).toFixed(2)}` : `$${(Number(bulkCostAmount) * selectedAssetIds.size).toFixed(2)}`}</strong><small>Final allocation is rounded to cents without losing any remainder.</small></div> : null}
           {bulkCostError ? <p className="setupNotice errorNotice">{bulkCostError}</p> : null}
           <div className="actions right"><button className="secondary" disabled={bulkCostBusy} onClick={() => setBulkCostOpen(false)}>Cancel</button><button disabled={bulkCostBusy || bulkCostAmount === ''} onClick={saveBulkCost}><Save size={16}/>{bulkCostBusy ? 'Updating...' : 'Apply Cost'}</button></div>
+        </section></div>
+      ) : null}
+
+      {writeOffAsset ? (
+        <div className="modalBackdrop"><section className="modal writeOffModal">
+          <header className="modalHeader"><div><p className="eyebrow">Inventory adjustment</p><h2>Write Off Item</h2><span className="statusPill warning">{writeOffAsset.title}</span></div><button className="iconButton secondary" aria-label="Close write-off form" onClick={() => setWriteOffAsset(null)}><X size={18}/></button></header>
+          <p className="writeOffExplanation">The amount below is recorded as a negative adjustment against profit. The item remains in history as Written Off and cannot be listed or deleted.</p>
+          <div className="formGrid">
+            <label>Write-off Date<input type="date" value={writeOffDraft.effectiveDate} onChange={(event) => setWriteOffDraft({ ...writeOffDraft, effectiveDate: event.target.value })}/></label>
+            <label>Amount<input type="number" min="0.01" step="0.01" inputMode="decimal" value={writeOffDraft.amount} onChange={(event) => setWriteOffDraft({ ...writeOffDraft, amount: event.target.value })} placeholder="0.00"/></label>
+            <label className="span2">Reason<select value={writeOffDraft.reason} onChange={(event) => setWriteOffDraft({ ...writeOffDraft, reason: event.target.value })}><option>Unsellable</option><option>Damaged</option><option>Lost</option><option>Donated</option><option>Personal Use</option><option>Other</option></select></label>
+            <label className="span2">Notes<textarea value={writeOffDraft.notes} onChange={(event) => setWriteOffDraft({ ...writeOffDraft, notes: event.target.value })} placeholder="Optional details for your records..."/></label>
+          </div>
+          {writeOffError ? <p className="setupNotice errorNotice">{writeOffError}</p> : null}
+          <div className="writeOffImpact"><span>Profit impact</span><strong>{Number(writeOffDraft.amount || 0) > 0 ? `-$${Number(writeOffDraft.amount).toFixed(2)}` : '$0.00'}</strong></div>
+          <div className="actions right"><button className="secondary" disabled={writeOffBusy} onClick={() => setWriteOffAsset(null)}>Cancel</button><button className="danger" disabled={writeOffBusy || !writeOffDraft.effectiveDate || !writeOffDraft.reason} onClick={saveWriteOff}><Archive size={16}/>{writeOffBusy ? 'Writing Off...' : 'Confirm Write-Off'}</button></div>
         </section></div>
       ) : null}
 
@@ -1266,6 +1501,7 @@ export default function App() {
                 <label>Status<select value={editing.status || 'Inventory'} onChange={e => updateEditing({ status:e.target.value }, false)}>{['Inventory','Listed','Sold','Hold','Bundle'].map(s => <option key={s}>{s}</option>)}</select></label>
                 <label>Collection<select value={editing.collectionId || ''} onChange={e => updateEditing({ collectionId:e.target.value ? e.target.value as Id<'collections'> : undefined }, false)}><option value="">Unassigned</option>{collectionRows.map(collection => <option key={collection._id} value={collection._id}>{collection.name}</option>)}</select></label>
                 <label>Storage Location / Bin<input value={editing.storageLocation || ''} onChange={e => updateEditing({ storageLocation:e.target.value }, false)}/></label>
+                <div className="formSection span2"><h3>Inventory Timeline</h3><div className="sectionGrid"><label>Acquired Date<input type="date" value={editing.acquiredDate || ''} onChange={e => updateEditing({ acquiredDate:e.target.value }, false)}/><small>Used to understand how long you have owned the item.</small></label><div className="timelineFacts"><span>Added to FlipTracker<strong>{formatInventoryDate(editing.createdAt) || 'When saved'}</strong></span><span>First/latest eBay listing<strong>{formatInventoryDate(editing.listedDate) || 'Not listed yet'}</strong></span></div></div></div>
 
                 <div className="formSection span2"><h3>Condition & Completeness</h3><div className="sectionGrid">
                   <label>Condition<select value={editing.condition || 'Good'} onChange={e => updateEditing({ condition:e.target.value, needsValueCheck: '_id' in editing })}>{CONDITIONS.map(s => <option key={s}>{s}</option>)}</select></label>
