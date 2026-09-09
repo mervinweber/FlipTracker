@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { completeBookTitle, mergeBookMetadata, primaryAuthorsFromResponsibility } from "./lib/bookMetadata";
+import { completeBookTitle, mergeBookMetadata, primaryAuthorsFromResponsibility, selectGoogleBookCandidate } from "./lib/bookMetadata";
 
 type LookupResult = {
   barcode: string;
@@ -188,12 +188,8 @@ async function lookupGoogleBooks(barcode: string): Promise<LookupResult | null> 
       `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}&maxResults=5&printType=books&key=${encodeURIComponent(apiKey)}`,
     );
     const aliases = isbnAliases(barcode);
-    const item = (Array.isArray(response?.items) ? response.items : []).find((candidate: any) => {
-      const identifiers = Array.isArray(candidate?.volumeInfo?.industryIdentifiers)
-        ? candidate.volumeInfo.industryIdentifiers.map((entry: { identifier?: string }) => cleanBarcode(String(entry.identifier || ""))).filter(Boolean)
-        : [];
-      return identifiers.length === 0 || identifiers.some((identifier: string) => aliases.includes(identifier));
-    });
+    const selected = selectGoogleBookCandidate<any>(Array.isArray(response?.items) ? response.items : [], aliases);
+    const item = selected?.candidate;
     const info = item?.volumeInfo;
     if (!info?.title) continue;
     const images = info.imageLinks || {};
@@ -211,8 +207,10 @@ async function lookupGoogleBooks(barcode: string): Promise<LookupResult | null> 
       rating: info.averageRating ? String(info.averageRating) : undefined,
       coverImageUrl,
       source: "Google Books",
-      confidence: "High",
-      notes: coverImageUrl ? undefined : "Google Books matched this ISBN but does not provide a cover image.",
+      confidence: selected?.exactIdentifierMatch ? "High" : "Medium",
+      notes: !selected?.exactIdentifierMatch
+        ? "Google Books returned a title candidate without a verifiable ISBN. Confirm the edition before listing."
+        : coverImageUrl ? undefined : "Google Books matched this ISBN but does not provide a cover image.",
     };
   }
   return null;

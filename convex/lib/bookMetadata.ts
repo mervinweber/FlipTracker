@@ -12,6 +12,30 @@ export type BookMetadata = {
   notes?: string;
 };
 
+type GoogleBookCandidate = {
+  volumeInfo?: {
+    industryIdentifiers?: Array<{ identifier?: string }>;
+  };
+};
+
+function normalizedIdentifier(value?: string) {
+  return String(value || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+}
+
+export function selectGoogleBookCandidate<T extends GoogleBookCandidate>(candidates: T[], isbnAliases: string[]) {
+  const aliases = new Set(isbnAliases.map(normalizedIdentifier).filter(Boolean));
+  const described = candidates.map((candidate) => ({
+    candidate,
+    identifiers: (candidate.volumeInfo?.industryIdentifiers ?? [])
+      .map((entry) => normalizedIdentifier(entry.identifier))
+      .filter(Boolean),
+  }));
+  const exact = described.find((entry) => entry.identifiers.some((identifier) => aliases.has(identifier)));
+  if (exact) return { candidate: exact.candidate, exactIdentifierMatch: true };
+  const identifierless = described.find((entry) => entry.identifiers.length === 0);
+  return identifierless ? { candidate: identifierless.candidate, exactIdentifierMatch: false } : null;
+}
+
 export function completeBookTitle(title: string, subtitle?: string) {
   const catalogTitle = title.replace(/\s+/g, " ").replace(/\s+:\s+/g, ": ").trim();
   const cleanTitle = catalogTitle.length > 90 && catalogTitle.includes(":")

@@ -3,9 +3,10 @@ import type { Id } from "./_generated/dataModel";
 import { api, internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
 import { action, internalMutation, mutation, query } from "./_generated/server";
+import { EBAY_PHOTO_LIMIT, selectBundlePhotos } from "./lib/bundlePhotos";
 import { assertOwner, currentOwnerId } from "./ownership";
 
-const MAX_PHOTOS = 12;
+const MAX_PHOTOS = EBAY_PHOTO_LIMIT;
 
 function recommendedPhotoCount(asset: { type: string; mediaFormat?: string; title: string }) {
   const identity = `${asset.type} ${asset.mediaFormat ?? ""} ${asset.title}`.toLowerCase();
@@ -145,14 +146,23 @@ export const listForListing = query({
         .query("assetPhotos")
         .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
         .collect();
-      return await Promise.all(photos.sort((a, b) => a.position - b.position).map(async (photo) => ({
+      return {
+        bundlePosition,
+        photos: await Promise.all(photos.sort((a, b) => a.position - b.position).map(async (photo) => ({
         ...photo,
         url: await ctx.storage.getUrl(photo.storageId),
         assetTitle: asset.title,
         bundlePosition,
-      })));
+        }))),
+      };
     }));
-    return groups.flat().slice(0, MAX_PHOTOS);
+    const selection = selectBundlePhotos(groups);
+    return [...selection.included, ...selection.omitted].map((photo, index) => ({
+      ...photo,
+      includedInEbay: index < MAX_PHOTOS,
+      listingPhotoPosition: index,
+      listingPhotoTotal: selection.total,
+    }));
   },
 });
 

@@ -161,6 +161,8 @@ type ActivePricingResult = {
   confidence: string;
   source?: string;
   warning?: string;
+  outlierCount?: number;
+  samples?: Array<{ title: string; price: number; url?: string }>;
 };
 
 type RepriceMode = 'percentage' | 'exact' | 'profit';
@@ -2696,7 +2698,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             </> : null}
             {editorStep === 'price' ? <>
             <div className="formSection span2"><h3>Pricing & Dates</h3><div className="sectionGrid">
-              <div className="listingPricingAssistant span2"><div><strong>{(editing.bundleCount || 0) > 1 ? 'Price the complete bundle' : 'Check eBay pricing'}</strong><small>{(editing.bundleCount || 0) > 1 ? `Search all ${editing.bundleCount} members by ISBN or title, combine their values, and apply the lot discount.` : 'Compare credible active eBay listings and apply the recommendation before publishing.'}</small></div><div className="actions"><a className="button secondary" href={soldCompsUrl(editing)} target="_blank" rel="noreferrer"><Search size={15}/> Sold Comps</a><button type="button" disabled={editingPricingBusy} onClick={refreshEditingPricing}><RefreshCw size={15}/>{editingPricingBusy ? 'Checking...' : 'Find & Apply Price'}</button></div>{editingPricingResult ? <p><span>{editingPricingResult.source || 'eBay pricing'}</span><strong>{editingPricingResult.suggestedPrice ? `${money(editingPricingResult.suggestedPrice)} suggested` : 'No recommendation'}</strong><small>{editingPricingResult.matchCount} matches · {editingPricingResult.confidence} confidence</small></p> : null}{editingPricingError ? <p className="formError">{editingPricingError}</p> : null}</div>
+              <div className="listingPricingAssistant span2"><div><strong>{(editing.bundleCount || 0) > 1 ? 'Price the complete bundle' : 'Check eBay pricing'}</strong><small>{(editing.bundleCount || 0) > 1 ? `Search all ${editing.bundleCount} members by ISBN or title, combine their values, and apply the lot discount.` : 'Compare credible active eBay listings and apply the recommendation before publishing.'}</small></div><div className="actions"><a className="button secondary" href={soldCompsUrl(editing)} target="_blank" rel="noreferrer"><Search size={15}/> Sold Comps</a><button type="button" disabled={editingPricingBusy} onClick={refreshEditingPricing}><RefreshCw size={15}/>{editingPricingBusy ? 'Checking...' : 'Find & Apply Price'}</button></div>{editingPricingResult ? <p><span>{editingPricingResult.source || 'eBay pricing'}</span><strong>{editingPricingResult.suggestedPrice ? `${money(editingPricingResult.suggestedPrice)} suggested` : 'No recommendation'}</strong><small>{editingPricingResult.matchCount} matches · {editingPricingResult.confidence} confidence</small></p> : null}{editingPricingResult?.samples?.length ? <div className="pricingSamples">{editingPricingResult.samples.map((sample, index) => sample.url ? <a key={`${sample.url}-${index}`} href={sample.url} target="_blank" rel="noreferrer"><span>{sample.title}</span><strong>{money(sample.price)}</strong></a> : <div key={`${sample.title}-${index}`}><span>{sample.title}</span><strong>{money(sample.price)}</strong></div>)}</div> : null}{editingPricingError ? <p className="formError">{editingPricingError}</p> : null}</div>
               <label>Original Price<input type="number" step="0.01" value={editing.listedPrice ?? ''} onChange={(event) => patchEditing({ listedPrice: optionalNumber(event.target.value) })}/></label>
               <label>Current Price<input type="number" step="0.01" value={editing.currentPrice ?? ''} onChange={(event) => patchEditing({ currentPrice: optionalNumber(event.target.value) })}/></label>
               <label>Price Change Reason<input value={priceChangeReason} onChange={(event) => setPriceChangeReason(event.target.value)} placeholder="Sale, markdown, relist..."/></label>
@@ -2721,7 +2723,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               returnPolicyId: ebaySettings.returnPolicyId,
               inventoryLocationKey: ebaySettings.merchantLocationKey,
               photoUrls: editingListingPhotos?.length
-                ? editingListingPhotos.map((photo) => photo.url).filter((url): url is string => Boolean(url))
+                ? editingListingPhotos.filter((photo) => photo.includedInEbay).map((photo) => photo.url).filter((url): url is string => Boolean(url))
                 : [...new Set([editing.photoUrl, editing.ebayImageUrl].filter((url): url is string => Boolean(url)))],
             }}/></div></details>
             </> : null}

@@ -12,6 +12,8 @@ import {
 } from "./lib/ebayNativeRevision";
 import { matchExistingFulfillment, matchOrderLine, type ExistingShippingFulfillment } from "./lib/ebayFulfillment";
 import { aggregateBundlePricing } from "./lib/bundlePricing";
+import { selectBundlePhotos } from "./lib/bundlePhotos";
+import { median, removePriceOutliers } from "./lib/pricingStats";
 import { currentOwnerId } from "./ownership";
 
 const EBAY_SCOPES = [
@@ -85,6 +87,7 @@ type ActivePricingLookup = {
   deliveredMedian?: number;
   suggestedPrice?: number;
   source?: string;
+  outlierCount?: number;
   samples?: Array<{ title: string; price: number; url?: string }>;
 };
 type TaxonomyCategory = { categoryId?: string; categoryName?: string };
@@ -327,13 +330,6 @@ export const suggestCategories = action({
   },
 });
 
-function median(values: number[]) {
-  const sorted = [...values].sort((a, b) => a - b);
-  if (!sorted.length) return 0;
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
 function moneyRound(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -375,7 +371,9 @@ async function activePricingFor(accessToken: string, input: { title: string; bar
     queryType = "Title";
     items = await browseFetch(accessToken, new URLSearchParams({ ...baseParams, q: query }));
   }
-  const matches = credibleBrowseItems(items, input.title);
+  const credibleMatches = credibleBrowseItems(items, input.title);
+  const matches = removePriceOutliers(credibleMatches, (item) => Number(item.price?.value));
+  const outlierCount = credibleMatches.length - matches.length;
   if (!matches.length) {
     return { query, queryType, matchCount: 0, confidence: "Low", warning: "No credible active eBay matches were found." };
   }
@@ -395,8 +393,11 @@ async function activePricingFor(accessToken: string, input: { title: string; bar
     deliveredMedian: moneyRound(median(deliveredPrices)),
     suggestedPrice: suggestedListingPrice(activeMedian),
     confidence: matches.length >= 8 ? "High" : matches.length >= 3 ? "Medium" : "Low",
-    source: `eBay Active Listings (${matches.length} matches)`,
-    warning: matches.length < 3 ? "Fewer than three credible matches; verify before publishing." : undefined,
+    source: `eBay Active Listings (${matches.length} matches${outlierCount ? `, ${outlierCount} outlier${outlierCount === 1 ? "" : "s"} removed` : ""})`,
+    outlierCount,
+    warning: matches.length < 3
+      ? "Fewer than three credible matches; verify before publishing."
+      : outlierCount ? `${outlierCount} extreme asking price${outlierCount === 1 ? " was" : "s were"} excluded from the recommendation.` : undefined,
     samples: matches.slice(0, 3).map((item) => ({
       title: item.title || "eBay listing",
       price: moneyRound(Number(item.price?.value)),
@@ -656,9 +657,21 @@ export const getDraftBundle = internalQuery({
     const links = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
     const assetIds = links.length ? links.sort((a, b) => a.position - b.position).map((link) => link.assetId) : [listing.assetId];
     const assets = (await Promise.all(assetIds.map((assetId) => ctx.db.get(assetId)))).filter((row) => row !== null);
-    const photoGroups = await Promise.all(assetIds.map((assetId) => ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect()));
-    const photos = photoGroups.flatMap((group, bundlePosition) => group.sort((a, b) => a.position - b.position).map((photo) => ({ ...photo, bundlePosition })));
-    return asset ? { listing, asset, assets, photos: photos.slice(0, 12) } : null;
+    const photoGroups = await Promise.all(assetIds.map(async (assetId, bundlePosition) => ({
+      bundlePosition,
+      photos: (await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect())
+        .sort((a, b) => a.position - b.position)
+        .map((photo) => ({ ...photo, bundlePosition })),
+    })));
+    const photoSelection = selectBundlePhotos(photoGroups);
+    return asset ? {
+      listing,
+      asset,
+      assets,
+      photos: photoSelection.included,
+      photoCount: photoSelection.total,
+      omittedPhotoCount: photoSelection.omitted.length,
+    } : null;
   },
 });
 
@@ -2204,7 +2217,9 @@ export const createUnpublishedOffer = action({
           product.imageUrls = imageUrls;
           imageUrl = imageUrls[0];
           imageFingerprint = await sha256(bundle.photos.map((photo) => `${photo._id}:${photo.storageId}`).join("|"));
-          imageSource = `Actual item photos (${imageUrls.length})`;
+          imageSource = bundle.omittedPhotoCount
+            ? `Actual item photos (${imageUrls.length} of ${bundle.photoCount}; ${bundle.omittedPhotoCount} omitted)`
+            : `Actual item photos (${imageUrls.length})`;
         } else {
           if (!asset.photoDataUrl) throw new Error("Used items require an actual item photo before they can be sent to eBay.");
           imageFingerprint = await sha256(asset.photoDataUrl);
