@@ -3,13 +3,14 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Archive, BadgeDollarSign, Barcode, BookOpen, Boxes, CalendarDays, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, LockKeyhole, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BadgeDollarSign, Barcode, BookOpen, Boxes, CalendarDays, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, LockKeyhole, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
 import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
 import { EBAY_CATEGORY_CHOICES, categoryChoiceForKey, resolveEbayCategory, resolveShippingProfile, type EbayCategoryKey } from './config/ebayListingDefaults';
 import { bundleDescription, bundleSuggestedPrice, bundleTitle, validateBundleItems } from './utils/listingBundles';
+import { priorityFromValue, recommendationFromAsset } from './utils/inventoryRecommendations';
 
 const ListingsPanel = lazy(() => import('./components/ListingsPanel'));
 const CrossListingsPanel = lazy(() => import('./components/CrossListingsPanel'));
@@ -100,6 +101,8 @@ type Asset = {
   writtenOffDate?: string;
   writeOffAmount?: number;
   writeOffReason?: string;
+  archivedAt?: number;
+  archiveReason?: string;
   createdAt?: number;
 };
 
@@ -207,27 +210,6 @@ function effectiveHigh(item: Asset) {
   return item.valueSource === 'User Override' ? item.userHigh || 0 : item.estimatedHigh || 0;
 }
 
-function effectiveAverage(item: Asset) {
-  return (effectiveLow(item) + effectiveHigh(item)) / 2;
-}
-
-function priorityFromValue(item: Partial<Asset>) {
-  const high = item.valueSource === 'User Override' ? item.userHigh || 0 : item.estimatedHigh || 0;
-  if (high >= 20) return 'List First';
-  if (high >= 10) return 'Worth Listing';
-  return 'Bundle';
-}
-
-function recommendationFromAsset(item: Partial<Asset>): ListingRecommendation {
-  const high = item.valueSource === 'User Override' ? item.userHigh || 0 : item.estimatedHigh || 0;
-  const condition = (item.condition || '').toLowerCase();
-  const complete = (item.completeness || '').toLowerCase();
-  if (condition.includes('parts') || complete === 'case only') return 'Skip';
-  if (high >= 12 || item.type === 'Book') return 'Sell Individually';
-  if (high >= 5 || ['DVD', 'Blu-ray', 'CD'].includes(item.type || '')) return 'Bundle';
-  return 'Review';
-}
-
 function ebayCategoryFor(item: Partial<Asset>) {
   return resolveEbayCategory({ itemType: item.type, barcode: item.upc || item.barcode, barcodeType: item.barcodeType, cardSaleFormat: item.cardProductType }).choice.categoryName;
 }
@@ -321,6 +303,20 @@ function recalcAsset(item: Partial<Asset>): Partial<Asset> {
 
 function badgeClass(value?: string) {
   return `badge ${String(value || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
+function displayedRecommendation(item: Asset) {
+  if (item.status === 'Bundle') return 'Bundle';
+  const saved = item.listingRecommendation || item.strategy || priorityFromValue(item);
+  return saved === 'Bundle' ? recommendationFromAsset(item) : saved;
+}
+
+function addedAfterForFilter(filter: string) {
+  if (filter === 'All') return undefined;
+  const now = new Date();
+  if (filter === 'Today') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const days = filter === '7 days' ? 7 : 30;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
 }
 
 function blankAsset(): Partial<Asset> {
@@ -428,6 +424,8 @@ function toInventoryForExport(asset: Asset, collectionName = ''): InventoryItem 
     ebayItemSpecifics: asset.ebayItemSpecifics,
     ebayPrice: asset.ebayPrice,
     ebayShipping: asset.ebayShipping,
+    archivedAt: asset.archivedAt,
+    archiveReason: asset.archiveReason,
     createdAt: asset.createdAt ? new Date(asset.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -438,8 +436,11 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [consoleFilter, setConsoleFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('Working');
   const [collectionFilter, setCollectionFilter] = useState('All');
+  const [addedDateFilter, setAddedDateFilter] = useState('All');
+  const [inventorySort, setInventorySort] = useState('newest');
+  const [archiveFilter, setArchiveFilter] = useState('Current');
   const [editing, setEditing] = useState<Partial<Asset> | null>(null);
   const [editingCollection, setEditingCollection] = useState<Partial<Collection> | null>(null);
   const [researchAsset, setResearchAsset] = useState<Asset | null>(null);
@@ -459,6 +460,7 @@ export default function App() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<Id<'assets'>>>(new Set());
   const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
   const [bulkDeleteMessage, setBulkDeleteMessage] = useState('');
+  const [archiveBusy, setArchiveBusy] = useState(false);
   const [bulkCostOpen, setBulkCostOpen] = useState(false);
   const [bulkCostMode, setBulkCostMode] = useState<'splitTotal' | 'samePerItem'>('splitTotal');
   const [bulkCostAmount, setBulkCostAmount] = useState('');
@@ -490,6 +492,9 @@ export default function App() {
     status: statusFilter === 'All' ? undefined : statusFilter,
     collectionId: collectionFilter !== 'All' && collectionFilter !== 'Unassigned' ? collectionFilter as Id<'collections'> : undefined,
     unassignedOnly: collectionFilter === 'Unassigned' ? true : undefined,
+    addedAfter: addedAfterForFilter(addedDateFilter),
+    archiveState: archiveFilter,
+    sortOrder: inventorySort,
   });
 
   const createAsset = useMutation(api.assets.create);
@@ -497,10 +502,11 @@ export default function App() {
   const removeAsset = useMutation(api.assets.remove);
   const removeAssets = useMutation(api.assets.removeMany);
   const updatePurchasePrices = useMutation(api.assets.updatePurchasePriceMany);
+  const archiveAssets = useMutation(api.assets.archiveMany);
+  const restoreAssets = useMutation(api.assets.restoreMany);
   const importMany = useMutation(api.assets.importMany);
   const createCollection = useMutation(api.collections.create);
   const updateCollection = useMutation(api.collections.update);
-  const removeCollection = useMutation(api.collections.remove);
   const addValueCheck = useMutation(api.research.addValueCheck);
   const createListing = useMutation(api.listings.create);
   const createBundleListing = useMutation(api.listings.createBundle);
@@ -606,14 +612,6 @@ export default function App() {
   }, [rows]);
 
   const collectionOptions = useMemo(() => ['All', 'Unassigned', ...collectionRows.map((collection) => collection._id)], [collectionRows]);
-
-  const collectionSummaries = useMemo(() => {
-    return collectionRows.map((collection) => {
-      const collectionAssets = rows.filter((item) => item.collectionId === collection._id);
-      const estimatedValue = collectionAssets.reduce((sum, item) => sum + effectiveAverage(item), 0);
-      return { collection, assetCount: collectionAssets.length, estimatedValue, estimatedProfit: estimatedValue - (collection.purchasePrice || 0) };
-    });
-  }, [collectionRows, rows]);
 
   const accountingYears = useMemo(() => {
     const current = new Date().getFullYear();
@@ -994,6 +992,37 @@ export default function App() {
     }
   }
 
+  async function archiveSelectedAssets(ids = [...selectedAssetIds]) {
+    if (!ids.length || archiveBusy) return;
+    if (!confirm(`Archive ${ids.length} completed inventory item${ids.length === 1 ? '' : 's'}? Sales and accounting history will be preserved.`)) return;
+    setArchiveBusy(true);
+    setBulkDeleteMessage('');
+    try {
+      const result = await archiveAssets({ ids });
+      setSelectedAssetIds(new Set());
+      setBulkDeleteMessage(`Archived ${result.archived} completed item${result.archived === 1 ? '' : 's'}.`);
+    } catch (error) {
+      setBulkDeleteMessage(error instanceof Error ? error.message : 'Could not archive the selected items.');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function restoreSelectedAssets(ids = [...selectedAssetIds]) {
+    if (!ids.length || archiveBusy) return;
+    setArchiveBusy(true);
+    setBulkDeleteMessage('');
+    try {
+      const result = await restoreAssets({ ids });
+      setSelectedAssetIds(new Set());
+      setBulkDeleteMessage(`Restored ${result.restored} item${result.restored === 1 ? '' : 's'} to inventory history.`);
+    } catch (error) {
+      setBulkDeleteMessage(error instanceof Error ? error.message : 'Could not restore the selected items.');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
   function openBulkCostEditor() {
     setBulkCostMode('splitTotal');
     setBulkCostAmount('');
@@ -1176,11 +1205,6 @@ export default function App() {
     changeView('Listings');
   }
 
-  async function deleteCollection(id: Id<'collections'>) {
-    if (!confirm('Remove this collection? Items will stay in inventory and become unassigned.')) return;
-    await removeCollection({ id });
-  }
-
   async function onImport(file?: File) {
     if (!file) return;
     const { importInventoryFile } = await import('./utils/excel');
@@ -1292,7 +1316,7 @@ export default function App() {
           <button onClick={() => changeView('Bulk')}><Keyboard size={16}/> Scan Stack</button>
           <button onClick={() => changeView('Photos')}><Camera size={16}/> Add Photos</button>
           <button onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankAsset()); }}><Plus size={16}/> Add Item</button>
-          <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Collection</button>
+          <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Purchase Group</button>
           <label className="button"><Upload size={16}/> Import Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => onImport(e.target.files?.[0])}/></label>
           <button onClick={async () => { const { exportInventory } = await import('./utils/excel'); exportInventory(rows.map((item) => toInventoryForExport(item, collectionName(item.collectionId)))); }}><Download size={16}/> Export Excel</button>
         </div>
@@ -1309,18 +1333,21 @@ export default function App() {
       </nav>
 
       {activeView === 'Inventory' ? <><section className="cards">
-        <div className="metric"><span>Total Assets</span><strong>{dashboard?.assetCount ?? '-'}</strong></div>
-        <div className="metric"><span>Collections</span><strong>{dashboard?.collectionCount ?? '-'}</strong></div>
+        <div className="metric"><span>Working Inventory</span><strong>{dashboard?.workingAssetCount ?? '-'}</strong></div>
+        <div className="metric"><span>Archived</span><strong>{dashboard?.archivedCount ?? '-'}</strong></div>
         <div className="metric"><span>Estimated Value</span><strong>{dashboard ? `$${dashboard.estimatedValue.toFixed(0)}` : '-'}</strong></div>
         <div className="metric attention"><span>Need Value Check</span><strong>{dashboard?.needsValueCheck ?? '-'}</strong></div>
       </section>
 
-      <section className="panel controls">
+      <section className="panel controls inventoryControls">
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search inventory..." value={query} onChange={e => setQuery(e.target.value)} /></div>
         <select aria-label="Filter by category" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>{TYPE_FILTERS.map(type => <option key={type}>{type}</option>)}</select>
-        <select value={consoleFilter} onChange={e => setConsoleFilter(e.target.value)}>{consoles.map(c => <option key={c}>{c}</option>)}</select>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>{['All','Inventory','Listed','Sold','Written Off','Hold','Bundle'].map(s => <option key={s}>{s}</option>)}</select>
-        <select value={collectionFilter} onChange={e => setCollectionFilter(e.target.value)}>{collectionOptions.map(c => <option key={c} value={c}>{c === 'All' || c === 'Unassigned' ? c : collectionName(c as Id<'collections'>)}</option>)}</select>
+        <select aria-label="Filter by console" value={consoleFilter} onChange={e => setConsoleFilter(e.target.value)}>{consoles.map(c => <option key={c} value={c}>{c === 'All' ? 'All consoles' : c}</option>)}</select>
+        <select aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>{['Working','All','Inventory','Listed','Sold','Written Off','Hold','Bundle'].map(s => <option key={s} value={s}>{s === 'Working' ? 'Working inventory' : s === 'All' ? 'All statuses' : s}</option>)}</select>
+        <select aria-label="Filter by purchase group" value={collectionFilter} onChange={e => setCollectionFilter(e.target.value)}>{collectionOptions.map(c => <option key={c} value={c}>{c === 'All' ? 'All purchase groups' : c === 'Unassigned' ? 'No purchase group' : collectionName(c as Id<'collections'>)}</option>)}</select>
+        <select aria-label="Filter by date added" value={addedDateFilter} onChange={e => setAddedDateFilter(e.target.value)}>{['All','Today','7 days','30 days'].map(value => <option key={value} value={value}>{value === 'All' ? 'Added: Any time' : `Added: ${value}`}</option>)}</select>
+        <select aria-label="Show archived inventory" value={archiveFilter} onChange={e => { setArchiveFilter(e.target.value); if (e.target.value === 'Archived' && statusFilter === 'Working') setStatusFilter('All'); }}><option value="Current">Current records</option><option value="Archived">Archived records</option><option value="All">Current + archived</option></select>
+        <select aria-label="Sort inventory" value={inventorySort} onChange={e => setInventorySort(e.target.value)}><option value="newest">Newest added</option><option value="oldest">Oldest added</option><option value="valueHigh">Highest value</option></select>
         <button className="secondary" onClick={() => window.location.reload()}><RefreshCw size={16}/> Refresh</button>
       </section>
 
@@ -1343,33 +1370,15 @@ export default function App() {
         </div>
       </details>
 
-      <section className="panel collectionPanel">
-        <div className="panelHeader">
-          <div><h2>Collections</h2><p>Track purchase lots, source, buy price, and estimated return.</p></div>
-          <button className="secondary" onClick={() => setEditingCollection(blankCollection())}><FolderPlus size={16}/> Add Collection</button>
-        </div>
-        {collectionRows.length === 0 ? <div className="empty compact"><p>No collections yet. Create one for a purchase lot, marketplace pickup, or sourcing run.</p></div> : (
-          <div className="collectionGrid">
-            {collectionSummaries.map(({ collection, assetCount, estimatedValue, estimatedProfit }) => (
-              <article className="collectionCard" key={collection._id}>
-                <div><h3>{collection.name}</h3><p>{[collection.source, collection.location, collection.purchaseDate].filter(Boolean).join(' · ')}</p></div>
-                <div className="collectionStats"><span>{assetCount} item{assetCount === 1 ? '' : 's'}</span><strong>${estimatedValue.toFixed(0)}</strong><small>Est. profit ${estimatedProfit.toFixed(0)}</small></div>
-                <div className="rowActions"><button onClick={() => setCollectionFilter(collection._id)}>View</button><button className="secondary" onClick={() => setEditingCollection(collection)}>Edit</button><button className="danger iconButton" aria-label={`Delete ${collection.name}`} onClick={() => deleteCollection(collection._id)}><Trash2 size={14}/></button></div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>Inventory</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{selectedAssetIds.size >= 2 ? <button disabled={bundleBusy} onClick={openBundleEditor}><Boxes size={16}/>{`Create eBay Bundle (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size ? <button className="secondary" disabled={bulkDeleteBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size ? <button className="danger" disabled={bulkDeleteBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
-        {bulkDeleteMessage ? <p className={`bulkDeleteNotice ${bulkDeleteMessage.startsWith('Deleted') || bulkDeleteMessage.startsWith('Selected') ? 'successNotice' : 'errorNotice'}`}>{bulkDeleteMessage}</p> : null}
-        {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>No inventory yet</h2><p>Import your spreadsheet, add your first item, or scan media.</p></div> : (
+        <div className="panelHeader"><div><h2>{archiveFilter === 'Archived' ? 'Archived Inventory' : 'Inventory'}</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy || archiveBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{archiveFilter !== 'Archived' && rows.some(item => ['Sold','Written Off','Purged'].includes(item.status || '')) && !selectedAssetIds.size ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets(rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).map(item => item._id))}><Archive size={16}/>{`Archive completed (${rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).length})`}</button> : null}{selectedAssetIds.size >= 2 && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Inventory','Hold'].includes(item.status || 'Inventory')) ? <button disabled={bundleBusy} onClick={openBundleEditor}><Boxes size={16}/>{`Create eBay Bundle (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkDeleteBusy || archiveBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter === 'Archived' ? <button className="secondary" disabled={archiveBusy} onClick={() => restoreSelectedAssets()}><ArchiveRestore size={16}/>{archiveBusy ? 'Restoring...' : `Restore (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Sold','Written Off','Purged'].includes(item.status || '')) ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets()}><Archive size={16}/>{archiveBusy ? 'Archiving...' : `Archive (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="danger" disabled={bulkDeleteBusy || archiveBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
+        {bulkDeleteMessage ? <p className={`bulkDeleteNotice ${['Deleted','Selected','Updated','Archived','Restored'].some(prefix => bulkDeleteMessage.startsWith(prefix)) ? 'successNotice' : 'errorNotice'}`}>{bulkDeleteMessage}</p> : null}
+        {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>{archiveFilter === 'Archived' ? 'No archived items' : dashboard?.assetCount ? 'No items match these filters' : 'No inventory yet'}</h2><p>{archiveFilter === 'Archived' ? 'Completed items you archive will remain available here with their sales and accounting history.' : dashboard?.assetCount ? 'Change the status, added-date, or archive filter to widen the view.' : 'Import your spreadsheet, add your first item, or scan media.'}</p></div> : (
           <div className="tableWrap">
             <table className="inventoryTable">
-              <thead><tr><th className="selectionCell"><input type="checkbox" aria-label="Select all items in current view" checked={rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id))} onChange={toggleVisibleSelection}/></th><th>Format</th><th>Title</th><th>Collection</th><th>Location</th><th>Value</th><th>Source</th><th>Plan</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th className="selectionCell"><input type="checkbox" aria-label="Select all items in current view" checked={rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id))} onChange={toggleVisibleSelection}/></th><th>Format</th><th>Title</th><th>Purchase Group</th><th>Location</th><th>Value</th><th>Source</th><th>Plan</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
-                {rows.slice().sort((a, b) => (a.console || a.mediaFormat || '').localeCompare(b.console || b.mediaFormat || '') || effectiveHigh(b) - effectiveHigh(a)).map((item) => (
+                {rows.map((item) => (
                   <tr key={item._id} className={item.needsValueCheck ? 'needsCheck' : ''}>
                     <td className="selectionCell"><input type="checkbox" aria-label={`Select ${item.title}`} checked={selectedAssetIds.has(item._id)} onChange={() => toggleAssetSelection(item._id)}/></td>
                     <td className="inventoryFormatCell"><span className="consoleTag">{item.mediaFormat || item.console || item.type}</span></td>
@@ -1378,9 +1387,9 @@ export default function App() {
                     <td className="inventoryLocationCell">{item.storageLocation}</td>
                     <td className="valueCell inventoryValueCell">{item.status === 'Sold' && item.soldPrice !== undefined ? `$${item.soldPrice.toFixed(2)} sold` : item.status === 'Written Off' ? `-$${(item.writeOffAmount || 0).toFixed(2)}` : effectiveLow(item) || effectiveHigh(item) ? `$${effectiveLow(item)}-$${effectiveHigh(item)}` : ''}</td>
                     <td className="inventorySourceCell"><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.status === 'Written Off' ? 'Write Off' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.status === 'Written Off' ? 'Write Off' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
-                    <td className="inventoryPlanCell"><span className={badgeClass(String(['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)))}>{['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : item.listingRecommendation || item.strategy || priorityFromValue(item)}</span></td>
+                    <td className="inventoryPlanCell"><span className={badgeClass(String(['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : displayedRecommendation(item)))}>{['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : displayedRecommendation(item)}</span></td>
                     <td className="inventoryStatusCell"><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell inventoryActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button>{!['Sold', 'Written Off', 'Bundle'].includes(item.status || '') ? <><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="secondary" title="Remove this unsold item from inventory and deduct its cost from profit" onClick={() => openWriteOff(item)}><Archive size={14}/> Write Off</button></> : null}{!['Written Off', 'Bundle'].includes(item.status || '') ? <button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button> : null}</div></td>
+                    <td className="tableActionsCell inventoryActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button>{item.archivedAt ? <button className="secondary" onClick={() => restoreSelectedAssets([item._id])}><ArchiveRestore size={14}/> Restore</button> : ['Sold', 'Written Off', 'Purged'].includes(item.status || '') ? <button className="secondary" onClick={() => archiveSelectedAssets([item._id])}><Archive size={14}/> Archive</button> : !['Bundle'].includes(item.status || '') ? <><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="secondary" title="Remove this unsold item from inventory and deduct its cost from profit" onClick={() => openWriteOff(item)}><Archive size={14}/> Write Off</button></> : null}{!item.archivedAt && !['Sold', 'Written Off', 'Bundle'].includes(item.status || '') ? <button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button> : null}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1499,7 +1508,7 @@ export default function App() {
                 <label>Author / Creator<input value={editing.author || ''} onChange={e => updateEditing({ author:e.target.value })}/></label>
                 <label>Rating<input value={editing.rating || ''} onChange={e => updateEditing({ rating:e.target.value })}/></label>
                 <label>Status<select value={editing.status || 'Inventory'} onChange={e => updateEditing({ status:e.target.value }, false)}>{['Inventory','Listed','Sold','Hold','Bundle'].map(s => <option key={s}>{s}</option>)}</select></label>
-                <label>Collection<select value={editing.collectionId || ''} onChange={e => updateEditing({ collectionId:e.target.value ? e.target.value as Id<'collections'> : undefined }, false)}><option value="">Unassigned</option>{collectionRows.map(collection => <option key={collection._id} value={collection._id}>{collection.name}</option>)}</select></label>
+                <label>Purchase Group <span className="optionalLabel">Optional</span><select value={editing.collectionId || ''} onChange={e => updateEditing({ collectionId:e.target.value ? e.target.value as Id<'collections'> : undefined }, false)}><option value="">No purchase group</option>{collectionRows.map(collection => <option key={collection._id} value={collection._id}>{collection.name}</option>)}</select></label>
                 <label>Storage Location / Bin<input value={editing.storageLocation || ''} onChange={e => updateEditing({ storageLocation:e.target.value }, false)}/></label>
                 <div className="formSection span2"><h3>Inventory Timeline</h3><div className="sectionGrid"><label>Acquired Date<input type="date" value={editing.acquiredDate || ''} onChange={e => updateEditing({ acquiredDate:e.target.value }, false)}/><small>Used to understand how long you have owned the item.</small></label><div className="timelineFacts"><span>Added to FlipTracker<strong>{formatInventoryDate(editing.createdAt) || 'When saved'}</strong></span><span>First/latest eBay listing<strong>{formatInventoryDate(editing.listedDate) || 'Not listed yet'}</strong></span></div></div></div>
 
@@ -1545,7 +1554,7 @@ export default function App() {
       ) : null}
 
       {editingCollection ? (
-        <div className="modalBackdrop"><section className="modal"><header className="modalHeader"><div><h2>{'_id' in editingCollection ? 'Edit Collection' : 'Add Collection'}</h2><span className="statusPill">Purchase lot</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setEditingCollection(null)}><X size={18}/></button></header><div className="formGrid"><label className="span2">Name<input value={editingCollection.name || ''} onChange={e => setEditingCollection({...editingCollection, name:e.target.value})}/></label><label>Source<input value={editingCollection.source || ''} onChange={e => setEditingCollection({...editingCollection, source:e.target.value})}/></label><label>Purchase Date<input type="date" value={editingCollection.purchaseDate || ''} onChange={e => setEditingCollection({...editingCollection, purchaseDate:e.target.value})}/></label><label>Purchase Price<input type="number" value={editingCollection.purchasePrice || ''} onChange={e => setEditingCollection({...editingCollection, purchasePrice:toNumber(e.target.value)})}/></label><label>Location<input value={editingCollection.location || ''} onChange={e => setEditingCollection({...editingCollection, location:e.target.value})}/></label><label className="span2">Notes<textarea value={editingCollection.notes || ''} onChange={e => setEditingCollection({...editingCollection, notes:e.target.value})}/></label></div><div className="actions right"><button className="secondary" onClick={() => setEditingCollection(null)}>Cancel</button><button onClick={saveCollection}><Save size={16}/> Save</button></div></section></div>
+        <div className="modalBackdrop"><section className="modal"><header className="modalHeader"><div><h2>{'_id' in editingCollection ? 'Edit Purchase Group' : 'Add Purchase Group'}</h2><span className="statusPill">Optional accounting group</span></div><button className="iconButton secondary" aria-label="Close" onClick={() => setEditingCollection(null)}><X size={18}/></button></header><p className="prototypeNote">Use a purchase group only when several items came from the same buy and you want to report on that source later. Your intake batch already handles scanning and cost allocation.</p><div className="formGrid"><label className="span2">Name<input value={editingCollection.name || ''} onChange={e => setEditingCollection({...editingCollection, name:e.target.value})}/></label><label>Source<input value={editingCollection.source || ''} onChange={e => setEditingCollection({...editingCollection, source:e.target.value})}/></label><label>Purchase Date<input type="date" value={editingCollection.purchaseDate || ''} onChange={e => setEditingCollection({...editingCollection, purchaseDate:e.target.value})}/></label><label>Total Purchase Price<input type="number" value={editingCollection.purchasePrice || ''} onChange={e => setEditingCollection({...editingCollection, purchasePrice:toNumber(e.target.value)})}/></label><label>Location<input value={editingCollection.location || ''} onChange={e => setEditingCollection({...editingCollection, location:e.target.value})}/></label><label className="span2">Notes<textarea value={editingCollection.notes || ''} onChange={e => setEditingCollection({...editingCollection, notes:e.target.value})}/></label></div><div className="actions right"><button className="secondary" onClick={() => setEditingCollection(null)}>Cancel</button><button onClick={saveCollection}><Save size={16}/> Save Purchase Group</button></div></section></div>
       ) : null}
 
       {researchAsset ? (

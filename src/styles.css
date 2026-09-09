@@ -77,6 +77,9 @@ button.danger { background:var(--danger); }
 .accountingActions p { max-width:760px; margin:0; font-size:12px; line-height:1.45; }
 .accountingActions button { flex:0 0 auto; }
 .controls { display:grid; grid-template-columns: minmax(220px, 1fr) 160px 150px 140px 180px auto; gap:12px; margin-bottom:18px; }
+.inventoryControls { grid-template-columns:repeat(4, minmax(0, 1fr)); }
+.inventoryControls .searchWrap { grid-column:span 2; }
+.inventoryControls button { justify-content:center; }
 .search, select { box-sizing:border-box; padding:12px; border-radius:var(--radius); border:1px solid var(--border-strong); background:#020617; color:white; }
 .panelHeader { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:14px; }
 .panelHeader p { margin:6px 0 0; font-size:13px; }
@@ -128,6 +131,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
   line-height: 1.2;
 }
 .inventoryDates { margin-top:7px !important; color:#7dd3fc !important; font-size:11px; }
+.optionalLabel { margin-left:5px; color:var(--muted); font-size:10px; font-weight:800; text-transform:uppercase; }
 .badge { display:inline-flex; align-items:center; min-height:24px; width:max-content; max-width:150px; border:1px solid var(--border); border-radius:999px; padding:2px 9px; color:#cbd5e1; background:#020617; font-size:12px; font-weight:900; white-space:nowrap; }
 .badge.needs-check { border-color:rgba(245,158,11,.65); color:#fbbf24; background:rgba(245,158,11,.12); }
 .badge.user-override { border-color:rgba(20,184,166,.6); color:#5eead4; background:rgba(20,184,166,.1); }
@@ -679,6 +683,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .bulkMarkdownProgress { margin-top:10px; border:1px solid var(--border); border-radius:6px; }
 @media (max-width:1050px) { .sandboxSetupGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards, .collectionGrid { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
+@media (max-width:900px) { .inventoryControls .searchWrap { grid-column:auto; } }
 @media (max-width:700px) { .accountingPanel > summary { align-items:flex-start; } .accountingMetrics { grid-template-columns:1fr 1fr; } .accountingActions { align-items:stretch; flex-direction:column; } .accountingActions button { justify-content:center; } }
 @media (max-width:900px) { .activeMaintenancePanel { grid-template-columns:1fr; } }
 @media (max-width:900px) { .templateFamilyTabs { grid-template-columns:repeat(3, minmax(0, 1fr)); } .templateFormGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }

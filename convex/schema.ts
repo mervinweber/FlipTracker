@@ -150,6 +150,8 @@ export default defineSchema({
     writtenOffDate: v.optional(v.string()),
     writeOffAmount: v.optional(v.number()),
     writeOffReason: v.optional(v.string()),
+    archivedAt: v.optional(v.number()),
+    archiveReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

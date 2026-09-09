@@ -59,6 +59,8 @@ type PhotoLotRow = {
   reviewNotes: string;
 };
 
+const EMPTY_QUERY_RESULTS: never[] = [];
+
 function optionalNumber(value: string) {
   if (!value.trim()) return undefined;
   const parsed = Number(value);
@@ -113,14 +115,15 @@ function statusIcon(status: QueueStatus) {
 }
 
 export default function BulkIntakePanel() {
-  const collections = useQuery(api.collections.list) || [];
-  const batches = useQuery(api.intakeBatches.list) || [];
+  const collections = useQuery(api.collections.list) ?? EMPTY_QUERY_RESULTS;
+  const batches = useQuery(api.intakeBatches.list) ?? EMPTY_QUERY_RESULTS;
   const lookupByBarcode = useAction(api.mediaLookup.lookupByBarcode);
   const identifyVideoGameLot = useAction(api.mediaLookup.identifyVideoGameLot);
   const createScannedItem = useMutation(api.intake.createScannedItem);
   const createPhotoLot = useMutation(api.intake.createPhotoLot);
   const createBatch = useMutation(api.intakeBatches.create);
   const updateBatch = useMutation(api.intakeBatches.update);
+  const allocateBatchPurchaseTotal = useMutation(api.intakeBatches.allocatePurchaseTotal);
   const setBatchStatus = useMutation(api.intakeBatches.setStatus);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -133,6 +136,7 @@ export default function BulkIntakePanel() {
   const [batchName, setBatchName] = useState(`Intake ${new Date().toLocaleDateString()}`);
   const [batchSource, setBatchSource] = useState('');
   const [batchError, setBatchError] = useState('');
+  const [batchNotice, setBatchNotice] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraAttempt, setCameraAttempt] = useState(0);
   const [cameraError, setCameraError] = useState('');
@@ -141,6 +145,7 @@ export default function BulkIntakePanel() {
   const [completeness, setCompleteness] = useState('Complete');
   const [collectionId, setCollectionId] = useState('');
   const [storageLocation, setStorageLocation] = useState('');
+  const [purchaseTotal, setPurchaseTotal] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [listingPrice, setListingPrice] = useState('');
   const [shippingPlan, setShippingPlan] = useState('USPS Media Mail, buyer paid');
@@ -155,7 +160,7 @@ export default function BulkIntakePanel() {
   const [photoLotBusy, setPhotoLotBusy] = useState<'image' | 'identify' | 'save' | ''>('');
   const [photoLotError, setPhotoLotError] = useState('');
   const [photoLotNotice, setPhotoLotNotice] = useState('');
-  const batchItems = useQuery(api.intakeBatches.getItems, { batchId: activeBatchId ? activeBatchId as Id<'intakeBatches'> : undefined }) || [];
+  const batchItems = useQuery(api.intakeBatches.getItems, { batchId: activeBatchId ? activeBatchId as Id<'intakeBatches'> : undefined }) ?? EMPTY_QUERY_RESULTS;
 
   useEffect(() => {
     if (activeBatchId || batches.length === 0) return;
@@ -222,6 +227,7 @@ export default function BulkIntakePanel() {
     setActiveBatchId(id);
     setRows([]);
     setBatchError('');
+    setBatchNotice('');
     const batch = batches.find((candidate) => String(candidate._id) === id);
     if (!batch) return;
     setBatchName(batch.name);
@@ -230,7 +236,8 @@ export default function BulkIntakePanel() {
     setCompleteness(batch.defaultCompleteness || 'Complete');
     setCollectionId(batch.defaultCollectionId ? String(batch.defaultCollectionId) : '');
     setStorageLocation(batch.defaultStorageLocation || '');
-    setPurchasePrice(batch.defaultPurchasePrice?.toString() || '');
+    setPurchaseTotal(batch.purchaseTotal?.toString() || '');
+    setPurchasePrice(batch.purchaseTotal === undefined ? batch.defaultPurchasePrice?.toString() || '' : '');
     setListingPrice(batch.defaultListingPrice?.toString() || '');
     setShippingPlan(batch.defaultShippingPlan || 'USPS Media Mail, buyer paid');
     setSkuPrefix(batch.defaultSkuPrefix || 'FT-DVD');
@@ -240,6 +247,7 @@ export default function BulkIntakePanel() {
   function batchDefaults() {
     return {
       source: batchSource.trim() || undefined,
+      purchaseTotal: optionalNumber(purchaseTotal),
       defaultCondition: condition,
       defaultCompleteness: completeness,
       defaultCollectionId: collectionId ? collectionId as Id<'collections'> : undefined,
@@ -254,6 +262,7 @@ export default function BulkIntakePanel() {
 
   async function startBatch() {
     setBatchError('');
+    setBatchNotice('');
     try {
       const id = await createBatch({ name: batchName, ...batchDefaults() });
       setActiveBatchId(String(id));
@@ -267,10 +276,33 @@ export default function BulkIntakePanel() {
   async function saveBatchDefaults() {
     if (!activeBatchId) return;
     setBatchError('');
+    setBatchNotice('');
     try {
-      await updateBatch({ id: activeBatchId as Id<'intakeBatches'>, name: batchName, ...batchDefaults() });
+      await updateBatch({ id: activeBatchId as Id<'intakeBatches'>, name: batchName, clearPurchaseTotal: purchaseTotal.trim() === '' && purchasePrice.trim() !== '', ...batchDefaults() });
+      const total = optionalNumber(purchaseTotal);
+      if (total !== undefined && batchItems.length) {
+        const result = await allocateBatchPurchaseTotal({ id: activeBatchId as Id<'intakeBatches'>, purchaseTotal: total });
+        setBatchNotice(`Saved $${result.purchaseTotal.toFixed(2)} total and allocated it across ${result.count} inventory item${result.count === 1 ? '' : 's'}.`);
+      } else {
+        setBatchNotice('Batch defaults saved.');
+      }
     } catch (error) {
       setBatchError(error instanceof Error ? error.message : 'Batch defaults could not be saved.');
+    }
+  }
+
+  async function completeBatch() {
+    if (!selectedBatch) return;
+    setBatchError('');
+    setBatchNotice('');
+    try {
+      await updateBatch({ id: selectedBatch._id, name: batchName, clearPurchaseTotal: purchaseTotal.trim() === '' && purchasePrice.trim() !== '', ...batchDefaults() });
+      const total = optionalNumber(purchaseTotal);
+      if (total !== undefined && batchItems.length) await allocateBatchPurchaseTotal({ id: selectedBatch._id, purchaseTotal: total });
+      await setBatchStatus({ id: selectedBatch._id, status: 'Completed' });
+      setBatchNotice(total !== undefined ? `Batch completed with $${total.toFixed(2)} allocated across its inventory items.` : 'Batch completed.');
+    } catch (error) {
+      setBatchError(error instanceof Error ? error.message : 'The batch could not be completed.');
     }
   }
 
@@ -286,12 +318,14 @@ export default function BulkIntakePanel() {
         releaseDate: result.releaseDate, studio: result.studio, author: result.author, rating: result.rating, coverImageUrl: result.coverImageUrl,
         metadataSource: result.source, metadataConfidence: result.confidence,
         collectionId: collectionId ? collectionId as Id<'collections'> : undefined,
-        storageLocation: storageLocation.trim() || undefined, purchasePrice: optionalNumber(purchasePrice), condition, completeness,
+        storageLocation: storageLocation.trim() || undefined, purchasePrice: optionalNumber(purchaseTotal) === undefined ? optionalNumber(purchasePrice) : undefined, condition, completeness,
         ebayTitle: prepared.title, ebayDescription: prepared.description, ebayCategory: categoryFor(result.type),
         ebayCondition: condition === 'New' || completeness === 'Sealed' ? 'Brand New' : condition,
         ebayItemSpecifics: prepared.specifics, ebayPrice: optionalNumber(listingPrice), ebayShipping: shippingPlan.trim() || undefined,
         createDraft, skuPrefix, batchId: targetBatchId as Id<'intakeBatches'>, scanToken: id,
       });
+      const total = optionalNumber(purchaseTotal);
+      if (total !== undefined) await allocateBatchPurchaseTotal({ id: targetBatchId as Id<'intakeBatches'>, purchaseTotal: total });
       const review = result.confidence === 'Low' || result.mediaFormat === 'Unknown';
       updateRow(id, { status: review ? 'Review' : 'Saved', sku: saved.sku, copyNumber: saved.copyNumber, draftCreated: saved.listingId !== null, message: review ? (result.notes || 'Confirm title and format before publishing.') : undefined });
     } catch (error) {
@@ -421,6 +455,7 @@ export default function BulkIntakePanel() {
     setPhotoLotError('');
     setPhotoLotNotice('');
     try {
+      const photoLotPurchaseTotal = photoLotRows.reduce((sum, row) => sum + (optionalNumber(row.purchasePrice) || 0), 0);
       const result = await createPhotoLot({
         batchId: activeBatchId as Id<'intakeBatches'>,
         source: batchSource.trim() || undefined,
@@ -447,6 +482,8 @@ export default function BulkIntakePanel() {
           reviewNotes: row.reviewNotes.trim() || undefined,
         })),
       });
+      setPurchaseTotal(((selectedBatch?.purchaseTotal || 0) + photoLotPurchaseTotal).toFixed(2));
+      setPurchasePrice('');
       setPhotoLotRows([]);
       setPhotoLotImage('');
       setPhotoLotNotice(`${result.count} inventory records and ${result.draftCount} eBay drafts created. Open Photos to add each game's listing photos.`);
@@ -478,9 +515,10 @@ export default function BulkIntakePanel() {
           <label>Open batch<select value={activeBatchId} onChange={(event) => selectBatch(event.target.value)}><option value="">New batch</option>{batches.map((batch) => <option key={batch._id} value={batch._id}>{batch.name} · {batch.status} · {batch.counts.total}</option>)}</select></label>
           <label>Batch name<input value={batchName} onChange={(event) => setBatchName(event.target.value)} placeholder="Saturday book lot"/></label>
           <label>Source<input value={batchSource} onChange={(event) => setBatchSource(event.target.value)} placeholder="Library sale, thrift store..."/></label>
-          <div className="actions intakeBatchActions"><button onClick={startBatch}><Plus size={15}/> Start New</button>{activeBatchId ? <button className="secondary" onClick={saveBatchDefaults}><Save size={15}/> Save Defaults</button> : null}{selectedBatch?.status === 'Active' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Paused' })}><Pause size={15}/> Pause</button> : selectedBatch?.status === 'Paused' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Active' })}><Play size={15}/> Resume</button> : null}{selectedBatch && selectedBatch.status !== 'Completed' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Completed' })}><CheckCircle2 size={15}/> Complete</button> : null}</div>
+          <div className="actions intakeBatchActions"><button onClick={startBatch}><Plus size={15}/> Start New</button>{activeBatchId ? <button className="secondary" onClick={saveBatchDefaults}><Save size={15}/> Save Defaults</button> : null}{selectedBatch?.status === 'Active' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Paused' })}><Pause size={15}/> Pause</button> : selectedBatch?.status === 'Paused' ? <button className="secondary" onClick={() => setBatchStatus({ id: selectedBatch._id, status: 'Active' })}><Play size={15}/> Resume</button> : null}{selectedBatch && selectedBatch.status !== 'Completed' ? <button className="secondary" onClick={completeBatch}><CheckCircle2 size={15}/> Complete</button> : null}</div>
         </div>
         {batchError ? <p className="warningText">{batchError}</p> : null}
+        {batchNotice ? <p className="photoLotNotice">{batchNotice}</p> : null}
       </section>
 
       <section className="panel photoLotPanel">
@@ -535,9 +573,10 @@ export default function BulkIntakePanel() {
         <div className="bulkDefaultsGrid">
           <label>Condition<select value={condition} onChange={(event) => setCondition(event.target.value)}>{['New','Like New','Very Good','Good','Acceptable','For Parts'].map((value) => <option key={value}>{value}</option>)}</select></label>
           <label>Completeness<select value={completeness} onChange={(event) => setCompleteness(event.target.value)}>{['Complete','Disc Only','Case Only','Case + Disc','Sealed','Incomplete'].map((value) => <option key={value}>{value}</option>)}</select></label>
-          <label>Collection<select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}><option value="">Unassigned</option>{collections.map((collection) => <option key={collection._id} value={collection._id}>{collection.name}</option>)}</select></label>
+          <label>Purchase group <span className="optionalLabel">Optional</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}><option value="">No purchase group</option>{collections.map((collection) => <option key={collection._id} value={collection._id}>{collection.name}</option>)}</select><small>Use only when you want to report on this source lot later.</small></label>
           <label>Storage bin<input value={storageLocation} onChange={(event) => setStorageLocation(event.target.value)} placeholder="DVD-A01"/></label>
-          <label>Cost per item<input type="number" min="0" step="0.01" value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} placeholder="0.50"/></label>
+          <label>Total paid for batch<input type="number" min="0" step="0.01" value={purchaseTotal} onChange={(event) => { setPurchaseTotal(event.target.value); if (event.target.value) setPurchasePrice(''); }} placeholder="25.00"/><small>{batchItems.length ? `Split across ${batchItems.length} saved item${batchItems.length === 1 ? '' : 's'} when defaults are saved.` : 'Automatically divides across every item added to this batch.'}</small></label>
+          <label>Fixed cost per item<input type="number" min="0" step="0.01" value={purchasePrice} disabled={purchaseTotal !== ''} onChange={(event) => { setPurchasePrice(event.target.value); if (event.target.value) setPurchaseTotal(''); }} placeholder="Use only when known"/><small>{purchaseTotal !== '' ? 'Batch total allocation is active.' : 'Optional alternative to a batch total.'}</small></label>
           <label>Default listing price<input type="number" min="0" step="0.01" value={listingPrice} onChange={(event) => setListingPrice(event.target.value)} placeholder="Leave blank for review"/></label>
           <label>SKU prefix<input value={skuPrefix} onChange={(event) => setSkuPrefix(event.target.value)} placeholder="FT-DVD"/></label>
           <label>Shipping plan<input value={shippingPlan} onChange={(event) => setShippingPlan(event.target.value)}/></label>

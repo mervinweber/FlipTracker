@@ -63,6 +63,8 @@ const assetInput = {
   ebayShipping: v.optional(v.string()),
   notes: v.optional(v.string()),
   confidence: v.optional(v.string()),
+  archivedAt: v.optional(v.number()),
+  archiveReason: v.optional(v.string()),
 };
 
 const assetPatch = {
@@ -126,12 +128,32 @@ const assetPatch = {
   ebayShipping: v.optional(v.string()),
   notes: v.optional(v.string()),
   confidence: v.optional(v.string()),
+  archivedAt: v.optional(v.number()),
+  archiveReason: v.optional(v.string()),
 };
 
 function matchesMediaType(type: string, filter?: string) {
   if (!filter || filter === "All") return true;
   if (filter === "Cards") return type.toLowerCase().includes("card");
   return type === filter;
+}
+
+function matchesStatus(status?: string, filter?: string) {
+  if (!filter || filter === "All") return true;
+  if (filter === "Working") return !["Sold", "Written Off", "Purged"].includes(status || "Inventory");
+  return status === filter;
+}
+
+function matchesArchiveState(archivedAt?: number, state?: string) {
+  if (state === "Archived") return Boolean(archivedAt);
+  if (state === "All") return true;
+  return !archivedAt;
+}
+
+function sortAssets(rows: any[], order?: string) {
+  if (order === "oldest") return rows.sort((a, b) => a.createdAt - b.createdAt);
+  if (order === "valueHigh") return rows.sort((a, b) => (b.userHigh || b.estimatedHigh || 0) - (a.userHigh || a.estimatedHigh || 0));
+  return rows.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 async function withListingDates(ctx: any, rows: any[], ownerId?: string) {
@@ -155,6 +177,9 @@ export const list = query({
     search: v.optional(v.string()),
     collectionId: v.optional(v.id("collections")),
     unassignedOnly: v.optional(v.boolean()),
+    addedAfter: v.optional(v.number()),
+    archiveState: v.optional(v.string()),
+    sortOrder: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const ownerId = await currentOwnerId(ctx);
@@ -164,35 +189,41 @@ export const list = query({
         .withSearchIndex("search_title", (q) => {
           let s = q.search("title", args.search!.trim());
           if (args.console && args.console !== "All") s = s.eq("console", args.console);
-          if (args.status && args.status !== "All") s = s.eq("status", args.status);
+          if (args.status && !["All", "Working"].includes(args.status)) s = s.eq("status", args.status);
           return s;
         })
         .take(250);
-      return await withListingDates(ctx, searched
+      return await withListingDates(ctx, sortAssets(searched
         .filter((r) => !ownerId || r.ownerId === ownerId)
         .filter((r) => matchesMediaType(r.type, args.mediaType))
+        .filter((r) => matchesStatus(r.status, args.status))
+        .filter((r) => matchesArchiveState(r.archivedAt, args.archiveState))
+        .filter((r) => !args.addedAfter || r.createdAt >= args.addedAfter)
         .filter((r) => !args.collectionId || r.collectionId === args.collectionId)
-        .filter((r) => !args.unassignedOnly || !r.collectionId), ownerId);
+        .filter((r) => !args.unassignedOnly || !r.collectionId), args.sortOrder), ownerId);
     }
 
     if (args.collectionId) {
       const rows = await ctx.db.query("assets").withIndex("by_collection", (q) => q.eq("collectionId", args.collectionId)).take(250);
-      return await withListingDates(ctx, rows
+      return await withListingDates(ctx, sortAssets(rows
         .filter((r) => !ownerId || r.ownerId === ownerId)
         .filter((r) => matchesMediaType(r.type, args.mediaType))
         .filter((r) => !args.console || args.console === "All" || r.console === args.console)
-        .filter((r) => !args.status || args.status === "All" || r.status === args.status)
-        .sort((a, b) => (a.console || "").localeCompare(b.console || "") || (b.estimatedHigh || 0) - (a.estimatedHigh || 0)), ownerId);
+        .filter((r) => matchesStatus(r.status, args.status))
+        .filter((r) => matchesArchiveState(r.archivedAt, args.archiveState))
+        .filter((r) => !args.addedAfter || r.createdAt >= args.addedAfter), args.sortOrder), ownerId);
     }
 
-    const rows = await ctx.db.query("assets").take(250);
-    return await withListingDates(ctx, rows
+    const rows = await ctx.db.query("assets").take(1_000);
+    return await withListingDates(ctx, sortAssets(rows
       .filter((r) => !ownerId || r.ownerId === ownerId)
       .filter((r) => matchesMediaType(r.type, args.mediaType))
       .filter((r) => !args.console || args.console === "All" || r.console === args.console)
-      .filter((r) => !args.status || args.status === "All" || r.status === args.status)
+      .filter((r) => matchesStatus(r.status, args.status))
+      .filter((r) => matchesArchiveState(r.archivedAt, args.archiveState))
+      .filter((r) => !args.addedAfter || r.createdAt >= args.addedAfter)
       .filter((r) => !args.unassignedOnly || !r.collectionId)
-      .sort((a, b) => (a.console || "").localeCompare(b.console || "") || (b.estimatedHigh || 0) - (a.estimatedHigh || 0)), ownerId);
+      , args.sortOrder), ownerId);
   },
 });
 
@@ -345,6 +376,54 @@ export const updatePurchasePriceMany = mutation({
       minimumPerItem: Math.min(...costs) / 100,
       maximumPerItem: Math.max(...costs) / 100,
     };
+  },
+});
+
+export const archiveMany = mutation({
+  args: { ids: v.array(v.id("assets")) },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const ids = [...new Set(args.ids)];
+    if (!ids.length) throw new Error("Select at least one completed inventory item.");
+    if (ids.length > 100) throw new Error("Archiving supports up to 100 inventory items at a time.");
+
+    const records = [];
+    for (const id of ids) {
+      const asset = await ctx.db.get(id);
+      if (!asset) continue;
+      assertOwner(asset, ownerId, "Asset");
+      if (!["Sold", "Written Off", "Purged"].includes(asset.status || "Inventory")) {
+        throw new Error(`Finish or write off "${asset.title}" before archiving it.`);
+      }
+      records.push(asset);
+    }
+
+    const now = Date.now();
+    for (const asset of records) {
+      await ctx.db.patch(asset._id, { archivedAt: now, archiveReason: asset.status || "Completed", updatedAt: now });
+    }
+    return { archived: records.length };
+  },
+});
+
+export const restoreMany = mutation({
+  args: { ids: v.array(v.id("assets")) },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const ids = [...new Set(args.ids)];
+    if (!ids.length) throw new Error("Select at least one archived inventory item.");
+    if (ids.length > 100) throw new Error("Restoring supports up to 100 inventory items at a time.");
+
+    let restored = 0;
+    for (const id of ids) {
+      const asset = await ctx.db.get(id);
+      if (!asset) continue;
+      assertOwner(asset, ownerId, "Asset");
+      if (!asset.archivedAt) continue;
+      await ctx.db.patch(id, { archivedAt: undefined, archiveReason: undefined, updatedAt: Date.now() });
+      restored += 1;
+    }
+    return { restored };
   },
 });
 

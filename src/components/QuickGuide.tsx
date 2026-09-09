@@ -35,7 +35,7 @@ export default function QuickGuide() {
 
         <section><div className="guideNumber">2</div><div><h3>Scan a stack with a USB scanner</h3><ol>
           <li>Open <strong>Bulk Intake</strong> or select <strong>Scan Stack</strong>.</li>
-          <li>Set the condition, completeness, collection, storage bin, cost, SKU prefix, and shipping defaults.</li>
+          <li>Set condition, completeness, storage bin, and shipping defaults. A purchase group is optional accounting context. Enter either the total paid for the batch to split it automatically or a known fixed cost per item.</li>
           <li>For a small game lot without visible barcodes, use <strong>Photo Lot</strong>: choose one clear group photo, enter the item count and total paid, then review the AI-proposed title, platform, cost allocation, price, and description for every game.</li>
           <li>Leave <strong>Create eBay draft</strong> enabled, then scan each UPC. Most USB scanners type the code and press Enter automatically.</li>
           <li>Continue scanning while the queue processes. Every physical copy receives its own inventory record and unique SKU.</li>

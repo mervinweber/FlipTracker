@@ -74,6 +74,8 @@ export type InventoryItem = {
   ebayItemSpecifics?: string;
   ebayPrice?: number;
   ebayShipping?: string;
+  archivedAt?: number;
+  archiveReason?: string;
   createdAt: string;
   updatedAt: string;
 };

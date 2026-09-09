@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { applyOwnerFilter, assertOwner, currentOwnerId } from "./ownership";
+import { allocateLotTotal } from "./lib/costAllocation";
 
 const defaults = {
   source: v.optional(v.string()),
@@ -77,14 +78,43 @@ export const create = mutation({
 });
 
 export const update = mutation({
-  args: { id: v.id("intakeBatches"), name: v.optional(v.string()), ...defaults },
-  handler: async (ctx, { id, ...patch }) => {
+  args: { id: v.id("intakeBatches"), name: v.optional(v.string()), clearPurchaseTotal: v.optional(v.boolean()), ...defaults },
+  handler: async (ctx, { id, clearPurchaseTotal, ...patch }) => {
     const ownerId = await currentOwnerId(ctx);
     const batch = await ctx.db.get(id);
     assertOwner(batch, ownerId, "Intake batch");
     if (patch.name !== undefined && !patch.name.trim()) throw new Error("Batch name is required.");
     if (patch.purchaseTotal !== undefined && patch.purchaseTotal < 0) throw new Error("Purchase total cannot be negative.");
-    await ctx.db.patch(id, { ...patch, name: patch.name?.trim(), updatedAt: Date.now() });
+    const purchaseTotalPatch = clearPurchaseTotal
+      ? { purchaseTotal: undefined }
+      : patch.purchaseTotal !== undefined
+        ? { purchaseTotal: patch.purchaseTotal }
+        : {};
+    await ctx.db.patch(id, { ...patch, ...purchaseTotalPatch, name: patch.name?.trim(), updatedAt: Date.now() });
+  },
+});
+
+export const allocatePurchaseTotal = mutation({
+  args: { id: v.id("intakeBatches"), purchaseTotal: v.number() },
+  handler: async (ctx, args) => {
+    if (!Number.isFinite(args.purchaseTotal) || args.purchaseTotal < 0) throw new Error("Purchase total cannot be negative.");
+    const ownerId = await currentOwnerId(ctx);
+    const batch = await ctx.db.get(args.id);
+    assertOwner(batch, ownerId, "Intake batch");
+    const items = applyOwnerFilter(
+      await ctx.db.query("intakeBatchItems").withIndex("by_batchId", (q) => q.eq("batchId", args.id)).order("asc").take(500),
+      ownerId,
+    );
+    const assetIds = [...new Set(items.map((item) => item.assetId))];
+    const allocations = allocateLotTotal(args.purchaseTotal, assetIds.length);
+    const now = Date.now();
+    for (let index = 0; index < assetIds.length; index += 1) {
+      const asset = await ctx.db.get(assetIds[index]);
+      assertOwner(asset, ownerId, "Inventory item");
+      await ctx.db.patch(assetIds[index], { purchasePrice: allocations[index], updatedAt: now });
+    }
+    await ctx.db.patch(args.id, { purchaseTotal: Math.round(args.purchaseTotal * 100) / 100, defaultPurchasePrice: undefined, updatedAt: now });
+    return { count: assetIds.length, purchaseTotal: Math.round(args.purchaseTotal * 100) / 100, allocations };
   },
 });
 
