@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { XMLParser } from "fast-xml-parser";
+import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { api, internal } from "./_generated/api";
@@ -10,6 +11,7 @@ import {
   remoteItemSpecifics,
 } from "./lib/ebayNativeRevision";
 import { matchExistingFulfillment, matchOrderLine, type ExistingShippingFulfillment } from "./lib/ebayFulfillment";
+import { aggregateBundlePricing } from "./lib/bundlePricing";
 import { currentOwnerId } from "./ownership";
 
 const EBAY_SCOPES = [
@@ -68,6 +70,22 @@ type BrowseItem = {
   condition?: string;
   price?: { value?: string; currency?: string };
   shippingOptions?: Array<{ shippingCost?: { value?: string; currency?: string } }>;
+};
+
+type ActivePricingLookup = {
+  listingId: Id<"marketplaceListings">;
+  query?: string;
+  queryType?: string;
+  matchCount: number;
+  confidence: string;
+  warning?: string;
+  low?: number;
+  median?: number;
+  high?: number;
+  deliveredMedian?: number;
+  suggestedPrice?: number;
+  source?: string;
+  samples?: Array<{ title: string; price: number; url?: string }>;
 };
 type TaxonomyCategory = { categoryId?: string; categoryName?: string };
 type TaxonomyAncestor = TaxonomyCategory & { categoryTreeNodeLevel?: number };
@@ -1737,7 +1755,7 @@ export const saveSettings = action({
 
 export const lookupActivePricing = action({
   args: { adminKey: v.string(), listingIds: v.array(v.id("marketplaceListings")) },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<ActivePricingLookup[]> => {
     requireAdminKey(args.adminKey);
     if (!args.listingIds.length) throw new ConvexError("Select at least one listing to price.");
     if (args.listingIds.length > 25) throw new ConvexError("Price up to 25 listings at a time.");
@@ -1751,6 +1769,43 @@ export const lookupActivePricing = action({
         continue;
       }
       try {
+        const isBundle = bundle.assets.length > 1;
+        if (isBundle) {
+          const memberResults = await Promise.all(bundle.assets.map(async (member) => {
+            try {
+              return await activePricingFor(accessToken, {
+                title: member.title,
+                barcode: member.upc || member.barcode,
+                format: member.mediaFormat || member.type,
+              });
+            } catch {
+              return undefined;
+            }
+          }));
+          const aggregate = aggregateBundlePricing(bundle.assets.map((member, index) => ({
+            summary: memberResults[index],
+            fallbackValue: member.ebayPrice
+              ?? (member.valueSource === "User Override" ? member.userHigh ?? member.userLow : member.estimatedHigh ?? member.estimatedLow),
+          })));
+          const coverage = `${aggregate.pricedBySearch}/${bundle.assets.length} members matched`;
+          results.push({
+            listingId,
+            query: bundle.listing.title,
+            queryType: "Bundle components",
+            matchCount: aggregate.matchCount,
+            low: aggregate.low,
+            high: aggregate.high,
+            median: aggregate.componentValue || undefined,
+            suggestedPrice: aggregate.suggestedPrice,
+            confidence: aggregate.confidence,
+            source: `Combined member pricing (${coverage}, 10% lot discount)`,
+            warning: aggregate.missingMembers
+              ? `${aggregate.missingMembers} bundle member${aggregate.missingMembers === 1 ? " has" : "s have"} no usable market value. Review before publishing.`
+              : aggregate.fallbackMembers ? `${aggregate.fallbackMembers} member value${aggregate.fallbackMembers === 1 ? " uses" : "s use"} a saved estimate because live matches were unavailable.` : undefined,
+            samples: memberResults.flatMap((summary) => summary?.samples ?? []).slice(0, 3),
+          });
+          continue;
+        }
         const summary = await activePricingFor(accessToken, {
           title: bundle.listing.title || bundle.asset.title,
           barcode: bundle.asset.upc || bundle.asset.barcode,
@@ -2105,7 +2160,9 @@ export const createUnpublishedOffer = action({
         description: listing.description?.trim() || listing.title.trim(),
         aspects,
       };
-      const barcode = asset.upc || asset.barcode;
+      // A bundle can contain several identifiers. Sending the first member's
+      // barcode would incorrectly catalog-match the entire lot to one item.
+      const barcode = bundle.assets.length > 1 ? undefined : asset.upc || asset.barcode;
       if (barcode) {
         const digits = barcode.replace(/\D/g, "");
         if (isBook) product.isbn = [barcode.replace(/[^0-9X]/gi, "").toUpperCase()];

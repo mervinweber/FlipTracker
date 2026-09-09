@@ -125,6 +125,37 @@ export const listForAsset = query({
   },
 });
 
+export const listForListing = query({
+  args: { listingId: v.id("marketplaceListings") },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const listing = await ctx.db.get(args.listingId);
+    assertOwner(listing, ownerId, "Listing");
+    const bundleLinks = await ctx.db
+      .query("listingBundleItems")
+      .withIndex("by_listingId", (q) => q.eq("listingId", listing._id))
+      .collect();
+    const assetIds = bundleLinks.length
+      ? bundleLinks.sort((a, b) => a.position - b.position).map((link) => link.assetId)
+      : [listing.assetId];
+    const groups = await Promise.all(assetIds.map(async (assetId, bundlePosition) => {
+      const asset = await ctx.db.get(assetId);
+      assertOwner(asset, ownerId, "Inventory item");
+      const photos = await ctx.db
+        .query("assetPhotos")
+        .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+        .collect();
+      return await Promise.all(photos.sort((a, b) => a.position - b.position).map(async (photo) => ({
+        ...photo,
+        url: await ctx.storage.getUrl(photo.storageId),
+        assetTitle: asset.title,
+        bundlePosition,
+      })));
+    }));
+    return groups.flat().slice(0, MAX_PHOTOS);
+  },
+});
+
 async function targetForAsset(ctx: QueryCtx, assetId: Id<"assets">, ownerId?: string) {
   const asset = await ctx.db.get(assetId);
   if (!asset || (ownerId && asset.ownerId !== ownerId)) return null;
@@ -156,13 +187,24 @@ export const markComplete = mutation({
     const ownerId = await currentOwnerId(ctx);
     const listing = await ctx.db.get(args.listingId);
     assertOwner(listing, ownerId, "Listing");
-    const asset = await ctx.db.get(listing.assetId);
-    assertOwner(asset, ownerId, "Inventory item");
-    const photos = await ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", listing.assetId)).collect();
-    if (!photos.length && !asset.photoDataUrl) throw new Error("Add at least one actual item photo before completing this item.");
+    const bundleLinks = await ctx.db
+      .query("listingBundleItems")
+      .withIndex("by_listingId", (q) => q.eq("listingId", listing._id))
+      .collect();
+    const assetIds = bundleLinks.length
+      ? bundleLinks.sort((a, b) => a.position - b.position).map((link) => link.assetId)
+      : [listing.assetId];
+    const assets = await Promise.all(assetIds.map((assetId) => ctx.db.get(assetId)));
+    for (const asset of assets) assertOwner(asset, ownerId, "Inventory item");
+    const photoGroups = await Promise.all(assetIds.map((assetId) =>
+      ctx.db.query("assetPhotos").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect()
+    ));
+    const photoCount = photoGroups.reduce((count, photos) => count + photos.length, 0)
+      + assets.filter((asset) => Boolean(asset?.photoDataUrl)).length;
+    if (!photoCount) throw new Error("Add at least one actual item photo before completing this item.");
     const completedAt = Date.now();
     await ctx.db.patch(listing._id, { photosCompleteAt: completedAt, updatedAt: completedAt });
-    return { completedAt, photoCount: photos.length + (asset.photoDataUrl ? 1 : 0) };
+    return { completedAt, photoCount };
   },
 });
 

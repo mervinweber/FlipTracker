@@ -154,6 +154,13 @@ export const list = query({
           purchasePrice: bundleAssets.reduce((sum, row) => sum + (row.purchasePrice || 0), 0),
           bundleCount: bundleAssets.length,
           bundleTitles: bundleAssets.map((row) => row.title),
+          bundleMembers: bundleAssets.map((row) => ({
+            assetId: row._id,
+            title: row.title,
+            purchasePrice: row.purchasePrice,
+            barcode: row.upc || row.barcode,
+          })),
+          bundleCostMissingCount: bundleAssets.filter((row) => row.purchasePrice === undefined).length,
           completeness: asset?.completeness,
           storageLocation: asset?.storageLocation,
           photoUrl: primaryPhotoUrl || asset?.photoDataUrl || asset?.coverImageUrl,

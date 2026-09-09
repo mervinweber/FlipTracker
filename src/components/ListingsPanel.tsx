@@ -108,6 +108,8 @@ type Listing = {
   assetAuthor?: string;
   bundleCount?: number;
   bundleTitles?: string[];
+  bundleMembers?: Array<{ assetId: Id<'assets'>; title: string; purchasePrice?: number; barcode?: string }>;
+  bundleCostMissingCount?: number;
   needsValueCheck?: boolean;
   listingRecommendation?: string;
   suggestedPrice?: number;
@@ -434,15 +436,16 @@ function canUseCatalogImage(listing: Pick<Listing, 'assetType' | 'mediaFormat' |
     || (isBookListing(listing) && Boolean(listing.photoUrl));
 }
 
-function ebayResearchQuery(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
+function ebayResearchQuery(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat' | 'bundleCount'>) {
+  if ((listing.bundleCount || 0) > 1) return listing.title;
   return listing.assetBarcode || `${listing.title} ${listing.mediaFormat || ''}`.trim();
 }
 
-function soldCompsUrl(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
+function soldCompsUrl(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat' | 'bundleCount'>) {
   return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(ebayResearchQuery(listing))}&LH_Sold=1&LH_Complete=1`;
 }
 
-function terapeakUrl(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat'>) {
+function terapeakUrl(listing: Pick<Listing, 'assetBarcode' | 'title' | 'mediaFormat' | 'bundleCount'>) {
   return `https://www.ebay.com/sh/research?marketplace=EBAY-US&keywords=${encodeURIComponent(ebayResearchQuery(listing))}`;
 }
 
@@ -497,6 +500,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [fulfillmentError, setFulfillmentError] = useState('');
   const [rememberFastDefaults, setRememberFastDefaults] = useState(true);
   const listingActivity = useQuery(api.listings.activity, editing ? { listingId: editing._id } : 'skip');
+  const editingListingPhotos = useQuery(api.photos.listForListing, editing ? { listingId: editing._id } : 'skip');
   const [editorStep, setEditorStep] = useState<ListingEditorStep>('details');
   const [taxonomyMissingAspects, setTaxonomyMissingAspects] = useState<string[]>([]);
   const [exceptionWorkflow, setExceptionWorkflow] = useState(false);
@@ -531,6 +535,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [bulkValidationOpen, setBulkValidationOpen] = useState(false);
   const [listingSaveBusy, setListingSaveBusy] = useState(false);
   const [listingSaveError, setListingSaveError] = useState('');
+  const [editingPricingBusy, setEditingPricingBusy] = useState(false);
+  const [editingPricingResult, setEditingPricingResult] = useState<ActivePricingResult | null>(null);
+  const [editingPricingError, setEditingPricingError] = useState('');
   const markEditingPhotoReady = useCallback(() => {
     setEditing((current) => current ? { ...current, hasActualPhoto: true, actualPhotoCount: (current.actualPhotoCount || 0) + 1 } : current);
   }, []);
@@ -868,8 +875,40 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setTaxonomyMissingAspects([]);
     setDescriptionError('');
     setListingSaveError('');
+    setEditingPricingResult(null);
+    setEditingPricingError('');
     setEditorStep(compactEditorStep(initialStep));
     setEditing(listingWithWorkflowDefaults(listing));
+  }
+
+  async function refreshEditingPricing() {
+    if (!editing) return;
+    if (!adminKey) {
+      setEditingPricingError('Load your Seller Access Key before retrieving eBay pricing.');
+      return;
+    }
+    setEditingPricingBusy(true);
+    setEditingPricingError('');
+    try {
+      const [result] = await lookupActivePricing({ adminKey, listingIds: [editing._id] }) as ActivePricingResult[];
+      if (!result?.suggestedPrice) {
+        setEditingPricingResult(result || null);
+        setEditingPricingError(result?.warning || 'No reliable price was found. Use Sold Comps and enter a manual price.');
+        return;
+      }
+      setEditingPricingResult(result);
+      setPriceChangeReason((editing.bundleCount || 0) > 1 ? 'Combined member pricing review' : 'eBay active pricing review');
+      setEditing((current) => current ? {
+        ...current,
+        listedPrice: current.listedPrice || result.suggestedPrice,
+        currentPrice: result.suggestedPrice,
+        pricingSource: result.source || 'eBay active pricing review',
+      } : current);
+    } catch (error) {
+      setEditingPricingError(readableActionError(error, 'Could not retrieve eBay pricing.'));
+    } finally {
+      setEditingPricingBusy(false);
+    }
   }
 
   function openFulfillmentEditor(listing: Listing) {
@@ -1755,7 +1794,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         return {
           listingId: listing._id,
           title: listing.title,
-          barcode: listing.assetBarcode,
+          barcode: (listing.bundleCount || 0) > 1 ? undefined : listing.assetBarcode,
           format: listing.mediaFormat,
           currentPrice: listing.currentPrice ?? listing.listedPrice,
           suggestedPrice: listing.suggestedPrice,
@@ -2534,7 +2573,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <p className="pricingIntro">FlipTracker uses the median of credible active eBay listings as an asking-price recommendation. These are active listings, not verified sold prices.</p>
           <div className="pricingReviewList">
             {pricingRows.map((row) => {
-              const researchListing = { assetBarcode: row.barcode, title: row.title, mediaFormat: row.format };
+              const sourceListing = listings?.find((listing) => listing._id === row.listingId);
+              const researchListing = { assetBarcode: row.barcode, title: row.title, mediaFormat: row.format, bundleCount: sourceListing?.bundleCount };
               const workingValue = Number(row.price) || row.suggestedPrice || row.currentPrice || 0;
               return <article className="pricingReviewRow" key={row.listingId}>
                 <div className="pricingIdentity"><strong>{row.title}</strong><small>{[row.format, row.barcode].filter(Boolean).join(' · ')}</small>{row.suggestedPrice !== undefined ? <span>Suggested {money(row.suggestedPrice)} · {row.suggestionSource}</span> : <span className="needsPrice"><AlertTriangle size={13}/> No reliable active match; check comps</span>}{row.pricingWarning ? <small className="warningText">{row.pricingWarning}</small> : null}</div>
@@ -2651,17 +2691,19 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               <label>eBay Image Source<select value={editing.imageMode || 'Actual Item Photo'} onChange={(event) => patchEditing({ imageMode: event.target.value })}><option>Actual Item Photo</option><option disabled={!canUseCatalogImage(editing)}>eBay Catalog</option></select><small>{isBookListing(editing) && editing.photoUrl ? 'The metadata cover can be used as the stock image for this book.' : isNewCondition(editing.condition) ? 'Catalog matching uses the UPC/EAN/ISBN.' : 'Used discs remain flagged for an actual photo.'}</small></label>
               <div className={`photoReadiness ${editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? 'ready' : 'missing' : editing.hasActualPhoto ? 'ready' : 'missing'}`}><Camera size={18}/><div><strong>{editing.imageMode === 'eBay Catalog' ? canUseCatalogImage(editing) ? isBookListing(editing) ? 'Stock book cover ready' : 'Catalog identifier ready' : 'Catalog image unavailable' : editing.hasActualPhoto ? 'Actual photo ready' : 'Actual photo required'}</strong><small>{editing.ebayImageSource ? `Last eBay image: ${editing.ebayImageSource}` : 'Photo selection comes from the linked inventory item.'}</small></div></div>
               <div className="photoChecklist span2"><div><strong>{photoChecklistFor(editing).recommendedCount} recommended photos</strong><small>{editing.actualPhotoCount || 0} actual item photos saved</small></div><ul>{photoChecklistFor(editing).shots.map((shot, index) => <li key={shot} className={index < (editing.actualPhotoCount || 0) ? 'complete' : ''}>{index < (editing.actualPhotoCount || 0) ? <CheckCircle2 size={14}/> : <Camera size={14}/>} {shot}</li>)}</ul></div>
-              <ListingPhotoManager assetId={editing.assetId} title={editing.title} onPhotoAttached={markEditingPhotoReady}/>
+              <ListingPhotoManager assetId={editing.assetId} listingId={editing._id} title={editing.title} onPhotoAttached={markEditingPhotoReady}/>
             </div></div>
             </> : null}
             {editorStep === 'price' ? <>
             <div className="formSection span2"><h3>Pricing & Dates</h3><div className="sectionGrid">
+              <div className="listingPricingAssistant span2"><div><strong>{(editing.bundleCount || 0) > 1 ? 'Price the complete bundle' : 'Check eBay pricing'}</strong><small>{(editing.bundleCount || 0) > 1 ? `Search all ${editing.bundleCount} members by ISBN or title, combine their values, and apply the lot discount.` : 'Compare credible active eBay listings and apply the recommendation before publishing.'}</small></div><div className="actions"><a className="button secondary" href={soldCompsUrl(editing)} target="_blank" rel="noreferrer"><Search size={15}/> Sold Comps</a><button type="button" disabled={editingPricingBusy} onClick={refreshEditingPricing}><RefreshCw size={15}/>{editingPricingBusy ? 'Checking...' : 'Find & Apply Price'}</button></div>{editingPricingResult ? <p><span>{editingPricingResult.source || 'eBay pricing'}</span><strong>{editingPricingResult.suggestedPrice ? `${money(editingPricingResult.suggestedPrice)} suggested` : 'No recommendation'}</strong><small>{editingPricingResult.matchCount} matches · {editingPricingResult.confidence} confidence</small></p> : null}{editingPricingError ? <p className="formError">{editingPricingError}</p> : null}</div>
               <label>Original Price<input type="number" step="0.01" value={editing.listedPrice ?? ''} onChange={(event) => patchEditing({ listedPrice: optionalNumber(event.target.value) })}/></label>
               <label>Current Price<input type="number" step="0.01" value={editing.currentPrice ?? ''} onChange={(event) => patchEditing({ currentPrice: optionalNumber(event.target.value) })}/></label>
               <label>Price Change Reason<input value={priceChangeReason} onChange={(event) => setPriceChangeReason(event.target.value)} placeholder="Sale, markdown, relist..."/></label>
               <label>Listed Date<input type="date" value={editing.listedDate || ''} onChange={(event) => patchEditing({ listedDate: event.target.value })}/></label>
               <label>Sold Price<input type="number" step="0.01" value={editing.soldPrice ?? ''} onChange={(event) => patchEditing({ soldPrice: optionalNumber(event.target.value) })}/></label>
-              <label>What You Paid<input type="number" min="0" step="0.01" value={editing.purchasePrice ?? ''} onChange={(event) => patchEditing({ purchasePrice: optionalNumber(event.target.value) })}/></label>
+              <label>{(editing.bundleCount || 0) > 1 ? 'Total Bundle Cost' : 'What You Paid'}<input type="number" min="0" step="0.01" value={editing.purchasePrice ?? ''} disabled={(editing.bundleCount || 0) > 1} onChange={(event) => patchEditing({ purchasePrice: optionalNumber(event.target.value) })}/>{(editing.bundleCount || 0) > 1 ? <small>Sum of the linked inventory costs. Edit an individual cost from Inventory.</small> : null}</label>
+              {(editing.bundleCount || 0) > 1 ? <details className="bundleCostBreakdown span2"><summary>Cost breakdown for {editing.bundleCount} items</summary><div>{editing.bundleMembers?.map((member) => <p key={member.assetId}><span>{member.title}{member.barcode ? <small>{member.barcode}</small> : null}</span><strong>{member.purchasePrice === undefined ? 'Missing' : money(member.purchasePrice)}</strong></p>)}</div>{editing.bundleCostMissingCount ? <small className="warningText">{editing.bundleCostMissingCount} member cost{editing.bundleCostMissingCount === 1 ? ' is' : 's are'} missing and currently count as $0.00.</small> : <small>All member costs are included in profit calculations.</small>}</details> : null}
               <label>Sold Date<input type="date" value={editing.soldDate || ''} onChange={(event) => patchEditing({ soldDate: event.target.value })}/></label>
               <label>Shipping Charged<input type="number" step="0.01" value={editing.shippingCharged ?? ''} onChange={(event) => patchEditing({ shippingCharged: optionalNumber(event.target.value) })}/></label>
               <label>Actual Shipping Cost<input type="number" step="0.01" value={editing.shippingCost ?? ''} onChange={(event) => patchEditing({ shippingCost: optionalNumber(event.target.value) })}/></label>
@@ -2678,7 +2720,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               paymentPolicyId: ebaySettings.paymentPolicyId,
               returnPolicyId: ebaySettings.returnPolicyId,
               inventoryLocationKey: ebaySettings.merchantLocationKey,
-              photoUrls: [editing.photoUrl, editing.ebayImageUrl].filter(Boolean),
+              photoUrls: editingListingPhotos?.length
+                ? editingListingPhotos.map((photo) => photo.url).filter((url): url is string => Boolean(url))
+                : [...new Set([editing.photoUrl, editing.ebayImageUrl].filter((url): url is string => Boolean(url)))],
             }}/></div></details>
             </> : null}
           </div>

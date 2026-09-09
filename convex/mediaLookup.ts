@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { completeBookTitle, mergeBookMetadata, primaryAuthorsFromResponsibility } from "./lib/bookMetadata";
 
 type LookupResult = {
   barcode: string;
@@ -118,9 +119,15 @@ async function lookupOpenLibrary(barcode: string): Promise<LookupResult | null> 
       .find((result) => result?.title) || null;
   }
 
-  const title = String(data?.title || bookData?.title || searchData?.title || "").trim();
+  const title = completeBookTitle(
+    String(data?.title || bookData?.title || searchData?.title || ""),
+    data?.subtitle || bookData?.subtitle || searchData?.subtitle,
+  );
   if (!title) return null;
-  const authorNames = Array.isArray(bookData?.authors)
+  const responsibilityAuthors = primaryAuthorsFromResponsibility(data?.subtitle || bookData?.subtitle);
+  const authorNames = responsibilityAuthors.length > 0
+    ? responsibilityAuthors
+    : Array.isArray(bookData?.authors)
     ? bookData.authors.map((author: { name?: string }) => String(author.name || "").trim())
     : Array.isArray(searchData?.author_name)
       ? searchData.author_name.map((name: unknown) => String(name || "").trim())
@@ -180,7 +187,13 @@ async function lookupGoogleBooks(barcode: string): Promise<LookupResult | null> 
     const response = await fetchJson(
       `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}&maxResults=5&printType=books&key=${encodeURIComponent(apiKey)}`,
     );
-    const item = Array.isArray(response?.items) ? response.items[0] : null;
+    const aliases = isbnAliases(barcode);
+    const item = (Array.isArray(response?.items) ? response.items : []).find((candidate: any) => {
+      const identifiers = Array.isArray(candidate?.volumeInfo?.industryIdentifiers)
+        ? candidate.volumeInfo.industryIdentifiers.map((entry: { identifier?: string }) => cleanBarcode(String(entry.identifier || ""))).filter(Boolean)
+        : [];
+      return identifiers.length === 0 || identifiers.some((identifier: string) => aliases.includes(identifier));
+    });
     const info = item?.volumeInfo;
     if (!info?.title) continue;
     const images = info.imageLinks || {};
@@ -188,10 +201,9 @@ async function lookupGoogleBooks(barcode: string): Promise<LookupResult | null> 
     return {
       barcode,
       barcodeType: barcodeType(barcode),
-      title: String(info.title).trim(),
+      title: completeBookTitle(String(info.title), info.subtitle ? String(info.subtitle) : undefined),
       type: "Book",
-      mediaFormat: String(info.printType || "Book"),
-      edition: info.subtitle ? String(info.subtitle) : undefined,
+      mediaFormat: "Book",
       releaseDate: info.publishedDate ? String(info.publishedDate) : undefined,
       releaseYear: yearFromDate(info.publishedDate ? String(info.publishedDate) : undefined),
       studio: info.publisher ? String(info.publisher) : undefined,
@@ -253,25 +265,11 @@ export const lookupByBarcode = action({
     const barcode = cleanBarcode(args.barcode);
     if (!barcode) throw new Error("Enter or scan a barcode first.");
 
-    const book = isLikelyBook(barcode) ? await lookupOpenLibrary(barcode) : null;
-    if (book?.coverImageUrl) return book;
-    const googleBook = isLikelyBook(barcode) ? await lookupGoogleBooks(barcode) : null;
-    if (book && googleBook) {
-      return {
-        ...book,
-        edition: book.edition || googleBook.edition,
-        releaseYear: book.releaseYear || googleBook.releaseYear,
-        releaseDate: book.releaseDate || googleBook.releaseDate,
-        studio: book.studio || googleBook.studio,
-        author: book.author || googleBook.author,
-        rating: book.rating || googleBook.rating,
-        coverImageUrl: googleBook.coverImageUrl,
-        source: "Open Library + Google Books",
-        notes: googleBook.coverImageUrl ? undefined : book.notes || googleBook.notes,
-      };
-    }
-    if (book) return book;
-    if (googleBook) return googleBook;
+    const [book, googleBook] = isLikelyBook(barcode)
+      ? await Promise.all([lookupOpenLibrary(barcode), lookupGoogleBooks(barcode)])
+      : [null, null];
+    const mergedBook = mergeBookMetadata(book, googleBook);
+    if (mergedBook) return { ...mergedBook, barcode, barcodeType: barcodeType(barcode), type: "Book", mediaFormat: mergedBook.mediaFormat || "Book" };
 
     const upc = await lookupUpcItemDb(barcode);
     if (upc) return upc;

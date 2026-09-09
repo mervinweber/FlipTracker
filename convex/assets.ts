@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { assertOwner, currentOwnerId } from "./ownership";
+import { appendUniqueDisclosure, updateListingDescription } from "./lib/bulkInventory";
 
 const assetInput = {
   type: v.string(),
@@ -376,6 +378,100 @@ export const updatePurchasePriceMany = mutation({
       minimumPerItem: Math.min(...costs) / 100,
       maximumPerItem: Math.max(...costs) / 100,
     };
+  },
+});
+
+export const updateDetailsMany = mutation({
+  args: {
+    ids: v.array(v.id("assets")),
+    condition: v.optional(v.string()),
+    completeness: v.optional(v.string()),
+    storageLocation: v.optional(v.string()),
+    disclosure: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await currentOwnerId(ctx);
+    const ids = [...new Set(args.ids)];
+    if (!ids.length) throw new Error("Select at least one inventory item.");
+    if (ids.length > 100) throw new Error("Bulk editing supports up to 100 inventory items at a time.");
+
+    const condition = args.condition?.trim() || undefined;
+    const completeness = args.completeness?.trim() || undefined;
+    const storageLocation = args.storageLocation?.trim() || undefined;
+    const disclosure = args.disclosure?.trim() || undefined;
+    if (!condition && !completeness && !storageLocation && !disclosure) throw new Error("Choose at least one detail to update.");
+
+    const records = [];
+    for (const id of ids) {
+      const asset = await ctx.db.get(id);
+      if (!asset) continue;
+      assertOwner(asset, ownerId, "Asset");
+      records.push(asset);
+    }
+    if (!records.length) throw new Error("The selected inventory items were not found.");
+
+    const now = Date.now();
+    const listingIds = new Set<Id<"marketplaceListings">>();
+    const selectedByListing = new Map<Id<"marketplaceListings">, typeof records>();
+    for (const asset of records) {
+      const nextDisclosure = disclosure ? appendUniqueDisclosure(asset.itemDisclosures, disclosure) : asset.itemDisclosures;
+      const nextDescription = updateListingDescription({
+        description: asset.ebayDescription,
+        title: asset.title,
+        condition,
+        completeness,
+        disclosure,
+      });
+      await ctx.db.patch(asset._id, {
+        ...(condition ? { condition } : {}),
+        ...(completeness ? { completeness, complete: ["Complete", "Sealed"].includes(completeness) } : {}),
+        ...(storageLocation ? { storageLocation } : {}),
+        ...(disclosure ? { itemDisclosures: nextDisclosure } : {}),
+        ...(condition || completeness || disclosure ? { ebayDescription: nextDescription, needsValueCheck: true } : {}),
+        updatedAt: now,
+      });
+
+      const directListings = await ctx.db.query("marketplaceListings").withIndex("by_assetId", (q) => q.eq("assetId", asset._id)).collect();
+      const bundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_assetId", (q) => q.eq("assetId", asset._id)).collect();
+      for (const id of [...directListings.map((listing) => listing._id), ...bundleLinks.map((link) => link.listingId)]) {
+        listingIds.add(id);
+        selectedByListing.set(id, [...(selectedByListing.get(id) || []), asset]);
+      }
+    }
+
+    let draftListingsUpdated = 0;
+    let stagedListingsUpdated = 0;
+    let activeListingsSkipped = 0;
+    for (const listingId of listingIds) {
+      const listing = await ctx.db.get(listingId);
+      if (!listing || listing.ownerId !== ownerId) continue;
+      if (!['Draft', 'Pending'].includes(listing.status)) {
+        if (listing.status === 'Active') activeListingsSkipped += 1;
+        continue;
+      }
+      const selectedMembers = selectedByListing.get(listingId) || [];
+      const bundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
+      let description = listing.description;
+      for (const member of selectedMembers) {
+        description = updateListingDescription({
+          description,
+          title: member.title,
+          condition: bundleLinks.length ? undefined : condition,
+          completeness: bundleLinks.length ? undefined : completeness,
+          disclosure,
+          bundleMember: bundleLinks.length > 0,
+        });
+      }
+      await ctx.db.patch(listing._id, {
+        ...(condition && !bundleLinks.length ? { condition } : {}),
+        ...(condition || completeness || disclosure ? { description } : {}),
+        updatedAt: now,
+      });
+      draftListingsUpdated += 1;
+      if (listing.ebayOfferId) stagedListingsUpdated += 1;
+    }
+
+    return { updated: records.length, draftListingsUpdated, stagedListingsUpdated, activeListingsSkipped };
   },
 });
 

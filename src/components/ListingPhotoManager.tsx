@@ -5,8 +5,17 @@ import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import { resizeForListing, rotatePhotoClockwise } from '../utils/listingPhotos';
 
-export default function ListingPhotoManager({ assetId, title, onPhotoAttached }: { assetId: Id<'assets'>; title: string; onPhotoAttached?: () => void }) {
-  const photos = useQuery(api.photos.listForAsset, { assetId });
+type ListingPhotoManagerProps = {
+  assetId: Id<'assets'>;
+  listingId?: Id<'marketplaceListings'>;
+  title: string;
+  onPhotoAttached?: () => void;
+};
+
+export default function ListingPhotoManager({ assetId, listingId, title, onPhotoAttached }: ListingPhotoManagerProps) {
+  const assetPhotos = useQuery(api.photos.listForAsset, listingId ? 'skip' : { assetId });
+  const listingPhotos = useQuery(api.photos.listForListing, listingId ? { listingId } : 'skip');
+  const photos = listingId ? listingPhotos : assetPhotos;
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
   const attachPhoto = useMutation(api.photos.attach);
   const removePhoto = useMutation(api.photos.remove);
@@ -69,10 +78,17 @@ export default function ListingPhotoManager({ assetId, title, onPhotoAttached }:
 
   return (
     <div className="listingPhotoManager">
-      <div className="listingPhotoHeader"><div><strong>Listing Photos</strong><small>First image is primary. These upload to eBay in this order.</small></div><span className="statusPill">{photos?.length ?? 0} / 12</span></div>
+      <div className="listingPhotoHeader"><div><strong>Listing Photos</strong><small>{listingId ? 'Includes every bundle item, ordered by item and photo. All are sent to eBay.' : 'First image is primary. These upload to eBay in this order.'}</small></div><span className="statusPill">{photos?.length ?? 0} / 12</span></div>
       <div className="photoCaptureActions"><label className="button photoCaptureButton"><Camera size={18}/>{busy ? 'Uploading...' : 'Take Photo'}<input type="file" accept="image/*" capture="environment" hidden disabled={busy} onChange={handleFiles}/></label><label className="button secondary photoCaptureButton"><ImagePlus size={18}/> Choose Photos<input type="file" accept="image/*" multiple hidden disabled={busy} onChange={handleFiles}/></label></div>
       {error ? <p className="setupNotice errorNotice">{error}</p> : null}
-      {photos === undefined ? <p className="compactText">Loading photos...</p> : photos.length === 0 ? <div className="listingPhotoEmpty"><Camera size={24}/><span>No actual item photos yet.</span></div> : <div className="photoGrid listingPhotoGrid">{photos.map((photo, index) => <article key={photo._id} className={`photoTile ${index === 0 ? 'primary' : ''}`}>{photo.url ? <img src={photo.url} alt={`${title} photo ${index + 1}`}/> : <div className="previewPlaceholder">Loading...</div>}<div className="photoTileBar"><span>{index === 0 ? <><Star size={13}/> Primary</> : `Photo ${index + 1}`}</span><div><button type="button" className="iconButton secondary" title="Rotate clockwise" aria-label={`Rotate photo ${index + 1} clockwise`} disabled={busy} onClick={() => rotateStoredPhoto(photo)}><RotateCw size={15}/></button>{index !== 0 ? <button type="button" className="iconButton secondary" title="Make primary" aria-label="Make this the primary photo" disabled={busy} onClick={() => makePrimary({ photoId: photo._id })}><Star size={15}/></button> : null}<button type="button" className="iconButton danger" title="Delete photo" aria-label="Delete photo" disabled={busy} onClick={() => removePhoto({ photoId: photo._id })}><Trash2 size={15}/></button></div></div></article>)}</div>}
+      {photos === undefined ? <p className="compactText">Loading photos...</p> : photos.length === 0 ? <div className="listingPhotoEmpty"><Camera size={24}/><span>No actual item photos yet.</span></div> : <div className="photoGrid listingPhotoGrid">{photos.map((photo, index) => {
+        const assetTitle = 'assetTitle' in photo && typeof photo.assetTitle === 'string' ? photo.assetTitle : undefined;
+        return <article key={photo._id} className={`photoTile ${index === 0 ? 'primary' : ''}`}>
+          {photo.url ? <img src={photo.url} alt={`${assetTitle || title} photo ${index + 1}`}/> : <div className="previewPlaceholder">Loading...</div>}
+          {assetTitle ? <div className="photoAssetLabel" title={assetTitle}>{assetTitle}</div> : null}
+          <div className="photoTileBar"><span>{index === 0 ? <><Star size={13}/> Primary</> : `Photo ${index + 1}`}</span><div><button type="button" className="iconButton secondary" title="Rotate clockwise" aria-label={`Rotate photo ${index + 1} clockwise`} disabled={busy} onClick={() => rotateStoredPhoto(photo)}><RotateCw size={15}/></button>{!listingId && index !== 0 ? <button type="button" className="iconButton secondary" title="Make primary" aria-label="Make this the primary photo" disabled={busy} onClick={() => makePrimary({ photoId: photo._id })}><Star size={15}/></button> : null}<button type="button" className="iconButton danger" title="Delete photo" aria-label="Delete photo" disabled={busy} onClick={() => removePhoto({ photoId: photo._id })}><Trash2 size={15}/></button></div></div>
+        </article>;
+      })}</div>}
     </div>
   );
 }

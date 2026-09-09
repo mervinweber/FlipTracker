@@ -142,6 +142,13 @@ type BundleDraft = {
   shippingPlan: string;
 };
 
+type BulkEditDraft = {
+  condition: string;
+  completeness: string;
+  storageLocation: string;
+  disclosure: string;
+};
+
 type LookupResult = {
   barcode: string;
   barcodeType: string;
@@ -466,6 +473,10 @@ export default function App() {
   const [bulkCostAmount, setBulkCostAmount] = useState('');
   const [bulkCostBusy, setBulkCostBusy] = useState(false);
   const [bulkCostError, setBulkCostError] = useState('');
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEditDraft, setBulkEditDraft] = useState<BulkEditDraft>({ condition: '', completeness: '', storageLocation: '', disclosure: '' });
+  const [bulkEditBusy, setBulkEditBusy] = useState(false);
+  const [bulkEditError, setBulkEditError] = useState('');
   const [bundleOpen, setBundleOpen] = useState(false);
   const [bundleDraft, setBundleDraft] = useState<BundleDraft>({ title: '', description: '', price: '', condition: 'Good', shippingPlan: 'Calculated shipping' });
   const [bundleError, setBundleError] = useState('');
@@ -502,6 +513,7 @@ export default function App() {
   const removeAsset = useMutation(api.assets.remove);
   const removeAssets = useMutation(api.assets.removeMany);
   const updatePurchasePrices = useMutation(api.assets.updatePurchasePriceMany);
+  const updateAssetDetails = useMutation(api.assets.updateDetailsMany);
   const archiveAssets = useMutation(api.assets.archiveMany);
   const restoreAssets = useMutation(api.assets.restoreMany);
   const importMany = useMutation(api.assets.importMany);
@@ -530,9 +542,9 @@ export default function App() {
   const collectionRows: Collection[] = collections || [];
 
   useEffect(() => {
-    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || writeOffAsset !== null || scannerOpen || bulkCostOpen || bundleOpen);
+    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || writeOffAsset !== null || scannerOpen || bulkCostOpen || bulkEditOpen || bundleOpen);
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkCostOpen, bundleOpen, editing, editingCollection, researchAsset, scannerOpen, writeOffAsset]);
+  }, [bulkCostOpen, bulkEditOpen, bundleOpen, editing, editingCollection, researchAsset, scannerOpen, writeOffAsset]);
 
   useEffect(() => {
     const visibleIds = new Set(rows.map((item) => item._id));
@@ -1122,6 +1134,44 @@ export default function App() {
     }
   }
 
+  function openBulkDetailsEditor() {
+    setBulkEditDraft({ condition: '', completeness: '', storageLocation: '', disclosure: '' });
+    setBulkEditError('');
+    setBulkEditOpen(true);
+  }
+
+  async function saveBulkDetails() {
+    const condition = bulkEditDraft.condition.trim();
+    const completeness = bulkEditDraft.completeness.trim();
+    const storageLocation = bulkEditDraft.storageLocation.trim();
+    const disclosure = bulkEditDraft.disclosure.trim();
+    if (!condition && !completeness && !storageLocation && !disclosure) {
+      setBulkEditError('Choose at least one detail to update.');
+      return;
+    }
+    setBulkEditBusy(true);
+    setBulkEditError('');
+    try {
+      const result = await updateAssetDetails({
+        ids: [...selectedAssetIds],
+        condition: condition || undefined,
+        completeness: completeness || undefined,
+        storageLocation: storageLocation || undefined,
+        disclosure: disclosure || undefined,
+      });
+      const draftMessage = result.draftListingsUpdated ? ` Updated ${result.draftListingsUpdated} linked draft${result.draftListingsUpdated === 1 ? '' : 's'}.` : '';
+      const stagedMessage = result.stagedListingsUpdated ? ` ${result.stagedListingsUpdated} staged draft${result.stagedListingsUpdated === 1 ? '' : 's'} will need Save & Update eBay.` : '';
+      const activeMessage = result.activeListingsSkipped ? ` ${result.activeListingsSkipped} active eBay listing${result.activeListingsSkipped === 1 ? '' : 's'} must be revised separately.` : '';
+      setBulkDeleteMessage(`Updated details for ${result.updated} inventory item${result.updated === 1 ? '' : 's'}.${draftMessage}${stagedMessage}${activeMessage}`);
+      setSelectedAssetIds(new Set());
+      setBulkEditOpen(false);
+    } catch (error) {
+      setBulkEditError(error instanceof Error ? error.message : 'Could not update the selected items.');
+    } finally {
+      setBulkEditBusy(false);
+    }
+  }
+
   function openWriteOff(asset: Asset) {
     setWriteOffAsset(asset);
     setWriteOffDraft({
@@ -1371,7 +1421,7 @@ export default function App() {
       </details>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>{archiveFilter === 'Archived' ? 'Archived Inventory' : 'Inventory'}</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy || archiveBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{archiveFilter !== 'Archived' && rows.some(item => ['Sold','Written Off','Purged'].includes(item.status || '')) && !selectedAssetIds.size ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets(rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).map(item => item._id))}><Archive size={16}/>{`Archive completed (${rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).length})`}</button> : null}{selectedAssetIds.size >= 2 && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Inventory','Hold'].includes(item.status || 'Inventory')) ? <button disabled={bundleBusy} onClick={openBundleEditor}><Boxes size={16}/>{`Create eBay Bundle (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkDeleteBusy || archiveBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter === 'Archived' ? <button className="secondary" disabled={archiveBusy} onClick={() => restoreSelectedAssets()}><ArchiveRestore size={16}/>{archiveBusy ? 'Restoring...' : `Restore (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Sold','Written Off','Purged'].includes(item.status || '')) ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets()}><Archive size={16}/>{archiveBusy ? 'Archiving...' : `Archive (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="danger" disabled={bulkDeleteBusy || archiveBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
+        <div className="panelHeader"><div><h2>{archiveFilter === 'Archived' ? 'Archived Inventory' : 'Inventory'}</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy || archiveBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{archiveFilter !== 'Archived' && rows.some(item => ['Sold','Written Off','Purged'].includes(item.status || '')) && !selectedAssetIds.size ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets(rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).map(item => item._id))}><Archive size={16}/>{`Archive completed (${rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).length})`}</button> : null}{selectedAssetIds.size >= 2 && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Inventory','Hold'].includes(item.status || 'Inventory')) ? <button disabled={bundleBusy} onClick={openBundleEditor}><Boxes size={16}/>{`Create eBay Bundle (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkEditBusy || archiveBusy} onClick={openBulkDetailsEditor}><Tags size={16}/>{`Bulk Edit Details (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkDeleteBusy || archiveBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter === 'Archived' ? <button className="secondary" disabled={archiveBusy} onClick={() => restoreSelectedAssets()}><ArchiveRestore size={16}/>{archiveBusy ? 'Restoring...' : `Restore (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Sold','Written Off','Purged'].includes(item.status || '')) ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets()}><Archive size={16}/>{archiveBusy ? 'Archiving...' : `Archive (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="danger" disabled={bulkDeleteBusy || archiveBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
         {bulkDeleteMessage ? <p className={`bulkDeleteNotice ${['Deleted','Selected','Updated','Archived','Restored'].some(prefix => bulkDeleteMessage.startsWith(prefix)) ? 'successNotice' : 'errorNotice'}`}>{bulkDeleteMessage}</p> : null}
         {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>{archiveFilter === 'Archived' ? 'No archived items' : dashboard?.assetCount ? 'No items match these filters' : 'No inventory yet'}</h2><p>{archiveFilter === 'Archived' ? 'Completed items you archive will remain available here with their sales and accounting history.' : dashboard?.assetCount ? 'Change the status, added-date, or archive filter to widen the view.' : 'Import your spreadsheet, add your first item, or scan media.'}</p></div> : (
           <div className="tableWrap">
@@ -1402,7 +1452,7 @@ export default function App() {
         <div className="modalBackdrop"><section className="modal bundleModal">
           <header className="modalHeader"><div><p className="eyebrow">eBay lot builder</p><h2>Create Bundle Listing</h2><p>{selectedBundleItems().length} inventory items will become one eBay listing.</p></div><button className="iconButton secondary" aria-label="Close bundle editor" onClick={() => setBundleOpen(false)}><X size={18}/></button></header>
           <div className="bundleSummary"><div><span>Items</span><strong>{selectedBundleItems().length}</strong></div><div><span>Total cost</span><strong>${selectedBundleItems().reduce((sum, item) => sum + (item.purchasePrice || 0), 0).toFixed(2)}</strong></div><div><span>Suggested lot price</span><strong>{bundleSuggestedPrice(selectedBundleItems()) ? `$${bundleSuggestedPrice(selectedBundleItems())?.toFixed(2)}` : 'Review'}</strong></div></div>
-          <div className="bundleItemList">{selectedBundleItems().map((item, index) => <div key={item._id}><span>{index + 1}</span><strong>{item.title}</strong><small>{[item.mediaFormat || item.type, item.condition, item.storageLocation].filter(Boolean).join(' · ')}</small></div>)}</div>
+          <div className="bundleItemList">{selectedBundleItems().map((item, index) => <div key={item._id}><span>{index + 1}</span><strong>{item.title}</strong><small>{[item.mediaFormat || item.type, item.condition, item.storageLocation].filter(Boolean).join(' · ')}</small><b className={item.purchasePrice === undefined ? 'warningText' : ''}>{item.purchasePrice === undefined ? 'Cost missing' : `$${item.purchasePrice.toFixed(2)}`}</b></div>)}</div>
           <div className="formGrid">
             <label className="span2">eBay Title<input maxLength={80} value={bundleDraft.title} onChange={(event) => setBundleDraft({ ...bundleDraft, title: event.target.value })}/><small>{bundleDraft.title.length}/80 characters</small></label>
             <label className="span2">Description<textarea value={bundleDraft.description} onChange={(event) => setBundleDraft({ ...bundleDraft, description: event.target.value })}/></label>
@@ -1424,6 +1474,21 @@ export default function App() {
           {Number.isFinite(Number(bulkCostAmount)) && bulkCostAmount !== '' ? <div className="bulkCostPreview"><span>{bulkCostMode === 'splitTotal' ? 'Approximate cost per item' : 'Total assigned cost'}</span><strong>{bulkCostMode === 'splitTotal' ? `$${(Number(bulkCostAmount) / Math.max(1, selectedAssetIds.size)).toFixed(2)}` : `$${(Number(bulkCostAmount) * selectedAssetIds.size).toFixed(2)}`}</strong><small>Final allocation is rounded to cents without losing any remainder.</small></div> : null}
           {bulkCostError ? <p className="setupNotice errorNotice">{bulkCostError}</p> : null}
           <div className="actions right"><button className="secondary" disabled={bulkCostBusy} onClick={() => setBulkCostOpen(false)}>Cancel</button><button disabled={bulkCostBusy || bulkCostAmount === ''} onClick={saveBulkCost}><Save size={16}/>{bulkCostBusy ? 'Updating...' : 'Apply Cost'}</button></div>
+        </section></div>
+      ) : null}
+
+      {bulkEditOpen ? (
+        <div className="modalBackdrop"><section className="modal bulkEditModal">
+          <header className="modalHeader"><div><p className="eyebrow">Selected inventory</p><h2>Bulk Edit Details</h2><p>{selectedAssetIds.size} item{selectedAssetIds.size === 1 ? '' : 's'} will receive only the filled details.</p></div><button className="iconButton secondary" aria-label="Close bulk details editor" onClick={() => setBulkEditOpen(false)}><X size={18}/></button></header>
+          <button type="button" className="secondary bulkEditPreset" onClick={() => setBulkEditDraft((current) => ({ ...current, disclosure: 'Library copy.' }))}><BookOpen size={17}/><span><strong>Library Copy</strong><small>Append this disclosure without removing existing item notes.</small></span></button>
+          <div className="formGrid">
+            <label>Condition<select value={bulkEditDraft.condition} onChange={(event) => setBulkEditDraft({ ...bulkEditDraft, condition: event.target.value })}><option value="">Leave unchanged</option>{CONDITIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label>Completeness<select value={bulkEditDraft.completeness} onChange={(event) => setBulkEditDraft({ ...bulkEditDraft, completeness: event.target.value })}><option value="">Leave unchanged</option>{COMPLETENESS.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label className="span2">Storage Location / Bin<input value={bulkEditDraft.storageLocation} onChange={(event) => setBulkEditDraft({ ...bulkEditDraft, storageLocation: event.target.value })} placeholder="Leave blank to keep each item's current location"/></label>
+            <label className="span2">Item Disclosure<textarea value={bulkEditDraft.disclosure} onChange={(event) => setBulkEditDraft({ ...bulkEditDraft, disclosure: event.target.value })} placeholder="Library copy, writing, missing disc, case damage..."/><small>Appended to each item and its linked FlipTracker draft. Existing disclosures are preserved.</small></label>
+          </div>
+          {bulkEditError ? <p className="setupNotice errorNotice">{bulkEditError}</p> : null}
+          <div className="actions right"><button className="secondary" disabled={bulkEditBusy} onClick={() => setBulkEditOpen(false)}>Cancel</button><button disabled={bulkEditBusy} onClick={saveBulkDetails}><Save size={16}/>{bulkEditBusy ? 'Updating...' : `Apply to ${selectedAssetIds.size} Items`}</button></div>
         </section></div>
       ) : null}
 
