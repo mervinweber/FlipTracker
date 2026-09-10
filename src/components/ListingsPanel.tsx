@@ -503,6 +503,23 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [rememberFastDefaults, setRememberFastDefaults] = useState(true);
   const listingActivity = useQuery(api.listings.activity, editing ? { listingId: editing._id } : 'skip');
   const editingListingPhotos = useQuery(api.photos.listForListing, editing ? { listingId: editing._id } : 'skip');
+  const editingPhotoSummary = useMemo(() => {
+    if (!editing) return null;
+    if (editingListingPhotos === undefined) return null;
+
+    const includedPhotoUrls = editingListingPhotos
+      .filter((photo) => !('includedInEbay' in photo) || photo.includedInEbay)
+      .map((photo) => photo.url)
+      .filter((url): url is string => Boolean(url));
+
+    const uniqueIncludedPhotoUrls = [...new Set(includedPhotoUrls)];
+
+    return {
+      photoUrls: uniqueIncludedPhotoUrls,
+      photoCount: editingListingPhotos.length,
+      omittedPhotoCount: Math.max(0, editingListingPhotos.length - includedPhotoUrls.length),
+    };
+  }, [editing, editingListingPhotos]);
   const [editorStep, setEditorStep] = useState<ListingEditorStep>('details');
   const [taxonomyMissingAspects, setTaxonomyMissingAspects] = useState<string[]>([]);
   const [exceptionWorkflow, setExceptionWorkflow] = useState(false);
@@ -2722,9 +2739,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
               paymentPolicyId: ebaySettings.paymentPolicyId,
               returnPolicyId: ebaySettings.returnPolicyId,
               inventoryLocationKey: ebaySettings.merchantLocationKey,
-              photoUrls: editingListingPhotos?.length
-                ? editingListingPhotos.filter((photo) => photo.includedInEbay).map((photo) => photo.url).filter((url): url is string => Boolean(url))
-                : [...new Set([editing.photoUrl, editing.ebayImageUrl].filter((url): url is string => Boolean(url)))],
+              ...editingPhotoSummary,
+              photoUrls: editingPhotoSummary?.photoUrls ?? [...new Set([editing.photoUrl, editing.ebayImageUrl].filter((url): url is string => Boolean(url)))],
             }}/></div></details>
             </> : null}
           </div>

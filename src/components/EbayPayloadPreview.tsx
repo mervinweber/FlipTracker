@@ -89,6 +89,10 @@ export default function EbayPayloadPreview({
 
         <section aria-labelledby={sectionId('photos')}>
           <h3 id={sectionId('photos')}>Photos</h3>
+          <p className="ebayPayloadPhotoSummary">Showing {preview.photoSummary.shown} photo{preview.photoSummary.shown === 1 ? '' : 's'} for eBay payload.</p>
+          {preview.photoSummary.total > preview.photoSummary.shown ? (
+            <p className="ebayPayloadPhotoSummary note">Total photos on record: {preview.photoSummary.total}. {preview.photoSummary.omitted} not included due to the active photo limit of {preview.photoSummary.limit}.</p>
+          ) : null}
           {preview.photos.length ? (
             <ol className="ebayPayloadPreviewPhotos">
               {preview.photos.map((photo) => (

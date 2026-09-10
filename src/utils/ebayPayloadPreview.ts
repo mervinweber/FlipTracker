@@ -13,6 +13,9 @@ export type EbayPayloadPreviewListing = Readonly<Record<string, unknown>> & {
   imageUrls?: unknown;
   photoUrls?: unknown;
   photos?: unknown;
+  photoCount?: unknown;
+  omittedPhotoCount?: unknown;
+  photoLimit?: unknown;
   ebayImageUrl?: unknown;
   photoUrl?: unknown;
   currentPrice?: unknown;
@@ -59,6 +62,12 @@ export type EbayPayloadPreviewModel = {
   specifics: EbayPayloadPreviewSpecific[];
   description: string;
   photos: EbayPayloadPreviewPhoto[];
+  photoSummary: {
+    shown: number;
+    total: number;
+    omitted: number;
+    limit: number;
+  };
   price: {
     amount?: number;
     currency: string;
@@ -214,6 +223,13 @@ function formatPrice(amount: number | undefined, currency: string): string {
   }
 }
 
+function clampLimit(value: number | undefined, defaultValue: number): number {
+  if (value === undefined) return defaultValue;
+  if (!Number.isFinite(value)) return defaultValue;
+  const rounded = Math.floor(value);
+  return rounded > 0 ? rounded : defaultValue;
+}
+
 /** Builds the exact, network-free view model consumed by EbayPayloadPreview. */
 export function buildEbayPayloadPreview(
   listing: EbayPayloadPreviewListing,
@@ -230,6 +246,17 @@ export function buildEbayPayloadPreview(
     ? `${length} × ${width} × ${height} in`
     : EMPTY_VALUE;
 
+  const photos = collectPhotos(listing);
+  const knownPhotoTotal = finiteNumber(listing.photoCount);
+  const explicitPhotoLimit = finiteNumber(listing.photoLimit);
+  const explicitOmittedCount = finiteNumber(listing.omittedPhotoCount);
+  const photoLimit = clampLimit(explicitPhotoLimit, 12);
+  const shown = photos.length;
+  const total = Math.max(knownPhotoTotal ?? shown, shown);
+  const omitted =
+    explicitOmittedCount !== undefined ? Math.max(0, explicitOmittedCount)
+    : Math.max(0, total - shown);
+
   return {
     title: firstText(listing.title, listing.listingTitle) || EMPTY_VALUE,
     category: {
@@ -242,7 +269,13 @@ export function buildEbayPayloadPreview(
     },
     specifics: parseEbayPayloadSpecifics(listing.itemSpecifics ?? listing.specifics),
     description: firstText(listing.description, listing.listingDescription) || EMPTY_VALUE,
-    photos: collectPhotos(listing),
+    photos,
+    photoSummary: {
+      shown,
+      total,
+      omitted,
+      limit: photoLimit,
+    },
     price: {
       amount,
       currency,
@@ -261,4 +294,3 @@ export function buildEbayPayloadPreview(
     },
   };
 }
-

@@ -12,6 +12,8 @@ type ListingPhotoManagerProps = {
   onPhotoAttached?: () => void;
 };
 
+const EBAY_PHOTO_LIMIT = 12;
+
 export default function ListingPhotoManager({ assetId, listingId, title, onPhotoAttached }: ListingPhotoManagerProps) {
   const assetPhotos = useQuery(api.photos.listForAsset, listingId ? 'skip' : { assetId });
   const listingPhotos = useQuery(api.photos.listForListing, listingId ? { listingId } : 'skip');
@@ -23,12 +25,13 @@ export default function ListingPhotoManager({ assetId, listingId, title, onPhoto
   const makePrimary = useMutation(api.photos.makePrimary);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const totalPhotoCount = photos?.length ?? 0;
   const includedPhotoCount = photos?.filter((photo) => !('includedInEbay' in photo) || photo.includedInEbay).length ?? 0;
-  const omittedPhotoCount = Math.max(0, (photos?.length ?? 0) - includedPhotoCount);
+  const omittedPhotoCount = Math.max(0, totalPhotoCount - includedPhotoCount);
 
   async function uploadFiles(files: FileList | File[]) {
     const selected = Array.from(files);
-    const room = 12 - includedPhotoCount;
+    const room = EBAY_PHOTO_LIMIT - includedPhotoCount;
     if (room <= 0) {
       setError('This listing already has the maximum of 12 photos.');
       return;
@@ -80,7 +83,8 @@ export default function ListingPhotoManager({ assetId, listingId, title, onPhoto
 
   return (
     <div className="listingPhotoManager">
-      <div className="listingPhotoHeader"><div><strong>Listing Photos</strong><small>{listingId ? 'Includes every bundle item, ordered by item and photo. eBay receives the first 12.' : 'First image is primary. These upload to eBay in this order.'}</small></div><span className="statusPill">{includedPhotoCount} / 12</span></div>
+      <div className="listingPhotoHeader"><div><strong>Listing Photos</strong><small>{listingId ? 'Includes every bundle item, ordered by item and photo. eBay receives the first 12.' : 'First image is primary. These upload to eBay in this order.'}</small></div><span className="statusPill">{listingId ? `${includedPhotoCount} / ${EBAY_PHOTO_LIMIT} for eBay` : `${totalPhotoCount} / ${EBAY_PHOTO_LIMIT}`}</span></div>
+      {listingId && omittedPhotoCount > 0 ? <p className="setupNotice">This listing has {omittedPhotoCount} photo{omittedPhotoCount === 1 ? '' : 's'} beyond the first {EBAY_PHOTO_LIMIT}; reorder or remove earlier photos to control which images are sent.</p> : null}
       <div className="photoCaptureActions"><label className="button photoCaptureButton"><Camera size={18}/>{busy ? 'Uploading...' : 'Take Photo'}<input type="file" accept="image/*" capture="environment" hidden disabled={busy} onChange={handleFiles}/></label><label className="button secondary photoCaptureButton"><ImagePlus size={18}/> Choose Photos<input type="file" accept="image/*" multiple hidden disabled={busy} onChange={handleFiles}/></label></div>
       {omittedPhotoCount ? <p className="setupNotice warningNotice"><strong>{omittedPhotoCount} photo{omittedPhotoCount === 1 ? '' : 's'} will not be sent to eBay.</strong> Remove unneeded earlier photos from the bundle members to change which 12 are included.</p> : null}
       {error ? <p className="setupNotice errorNotice">{error}</p> : null}

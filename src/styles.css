@@ -264,9 +264,10 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .attentionClearPanel h2 { margin:0; font-size:17px; }
 .attentionClearPanel p { margin:3px 0 0; color:var(--muted); font-size:13px; }
 .selectionCount { align-self:center; color:#bfdbfe; font-size:12px; font-weight:900; }
-.simplifiedRowActions { flex-wrap:nowrap; justify-content:flex-start; }
-.rowPrimaryAction { min-width:92px; justify-content:center; padding:8px 10px; }
+.simplifiedRowActions { flex-wrap:wrap; align-items:stretch; justify-content:flex-start; gap:8px; }
+.rowPrimaryAction { min-width:112px; flex:1 1 auto; justify-content:center; padding:8px 10px; }
 .tableActionsCell { position:relative; min-width:150px; }
+.tableActionsCell .rowActionMenu { flex:0 0 auto; }
 .listingIdentityHeader { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px; }
 .listingIdentityCell { min-width:240px; }
 .listingIdentityCell > strong, .listingIdentityCell > small, .listingStateCell > small { display:block; }
