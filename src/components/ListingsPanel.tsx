@@ -15,6 +15,8 @@ import { ebaySpecificsStepForError, readableActionError } from '../utils/actionE
 import { assessMarkdownListing, isFlipTrackerManagedActiveListing, listingAgeDays } from '../utils/listingBulkMarkdown';
 import { buildTodayOperations } from '../utils/todayOperations';
 import { listingOperationsIssue, shouldArchiveSaleByDefault } from '../utils/listingOperations';
+import { summarizeBundleFoundation } from '../utils/bundleFoundation';
+import { summarizeListingLifecycle } from '../utils/listingLifecycle';
 import { applySafeSpecificDefaults, assessListingQuality, photoChecklistFor } from '../utils/listingQuality';
 import { fulfillmentEconomics, recommendFulfillment } from '../utils/fulfillment';
 import { clearSellerSession, createSellerSession, formatSellerSessionDuration, loadSellerSession, pauseSellerSession, recordSellerSessionEvent, resumeSellerSession, saveSellerSession, sellerSessionElapsedMs, type SellerSession, type SellerSessionEvent } from '../utils/sellerSession';
@@ -741,6 +743,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const firstSelectedBlocked = selectedListings.find((listing) => (readinessByListingId.get(listing._id) || []).some((issue) => issue.blocking));
   const editingReadinessIssues = useMemo(() => editing && editing.status !== 'Sold' ? validateListingReadiness({ ...listingReadinessInput(editing), missingCategoryAspects: taxonomyMissingAspects }, sellerReadinessDefaults) : [], [editing, listingReadinessInput, sellerReadinessDefaults, taxonomyMissingAspects]);
   const editingQuality = useMemo(() => editing ? assessListingQuality(editing, editingReadinessIssues, listingSpeedPresetFor(editing)?.feePercent ?? 15) : undefined, [editing, editingReadinessIssues]);
+  const editingBundleFoundation = useMemo(() => editing ? summarizeBundleFoundation(editing) : undefined, [editing]);
   const fastReviewIssues = useMemo(() => fastReviewing ? validateListingReadiness(listingReadinessInput(fastReviewing), sellerReadinessDefaults) : [], [fastReviewing, listingReadinessInput, sellerReadinessDefaults]);
   const fastReviewNet = useMemo(() => {
     if (!fastReviewing) return 0;
@@ -2392,11 +2395,15 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <div className="tableWrap">
             <table className="listingLifecycleTable">
               <thead><tr><th className="selectColumn">{workspaceView === 'Queue' ? <input type="checkbox" aria-label="Select all eligible listings in view" checked={queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id))} onChange={toggleQueueView}/> : null}</th><th>Item</th><th>{workspaceView === 'Shipping' ? 'Fulfillment' : 'Readiness'}</th><th>Price</th><th>Location</th><th>Action</th></tr></thead>
-              <tbody>{filtered.map((listing) => (
+              <tbody>{filtered.map((listing) => {
+                const queueLabel = queueStatus(listing);
+                const lifecycle = summarizeListingLifecycle(listing, queueLabel);
+                const bundleFoundation = summarizeBundleFoundation(listing);
+                return (
                 <tr key={listing._id}>
                   <td className="selectColumn">{workspaceView === 'Queue' && listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <input type="checkbox" aria-label={`Select ${listing.title}`} checked={selectedIds.has(listing._id)} onChange={() => toggleSelected(listing._id)}/> : null}</td>
-                  <td className="listingIdentityCell"><div className="listingIdentityHeader"><span className="consoleTag">{listing.platform}</span><span className={`badge ${listing.status.toLowerCase()}`}>{listing.status}</span>{(listing.bundleCount || 0) > 1 ? <span className="bundleCountBadge"><Boxes size={13}/>{listing.bundleCount}-item lot</span> : null}</div><strong>{listing.title}</strong><small>{(listing.bundleCount || 0) > 1 ? listing.bundleTitles?.join(' · ') : listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
-                  <td className="listingStateCell">{workspaceView === 'Shipping' ? <><div className="queueQualityLine"><span className="queueBadge ready-for-ebay">{listing.fulfillmentStatus || 'Awaiting Shipment'}</span></div><small>{listing.shippingService || recommendFulfillment(listing).service}</small>{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : <small className="warningText">Sync order before tracking</small>}</> : <><div className="queueQualityLine"><span className={`queueBadge ${queueStatus(listing).toLowerCase().replace(/\s+/g, '-')}`}>{queueStatus(listing)}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div>{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</>}</td>
+                  <td className="listingIdentityCell"><div className="listingIdentityHeader"><span className="consoleTag">{listing.platform}</span><span className={`badge lifecycleBadge ${lifecycle.className}`}>{lifecycle.label}</span>{bundleFoundation.isBundle ? <span className="bundleCountBadge"><Boxes size={13}/>{bundleFoundation.count}-item lot</span> : null}</div><strong>{listing.title}</strong><small>{bundleFoundation.isBundle ? bundleFoundation.titleSummary : listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
+                  <td className="listingStateCell">{workspaceView === 'Shipping' ? <><div className="queueQualityLine"><span className="queueBadge ready-for-ebay">{listing.fulfillmentStatus || 'Awaiting Shipment'}</span></div><small>{listing.shippingService || recommendFulfillment(listing).service}</small>{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : <small className="warningText">Sync order before tracking</small>}</> : <><div className="queueQualityLine"><span className={`queueBadge ${queueLabel.toLowerCase().replace(/\s+/g, '-')}`}>{queueLabel}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div><small>{lifecycle.detail}</small>{bundleFoundation.isBundle && bundleFoundation.issues.length ? <small className="warningText">{bundleFoundation.issues[0]}</small> : null}{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</>}</td>
                   <td className="valueCell listingPriceCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td className="listingLocationCell">{listing.storageLocation || <span className="mutedValue">—</span>}</td>
                   <td className="tableActionsCell"><div className="rowActions simplifiedRowActions">
@@ -2411,7 +2418,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                     </div></details>
                   </div></td>
                 </tr>
-              ))}</tbody>
+              );})}</tbody>
             </table>
           </div>
         )}
@@ -2628,7 +2635,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             {(saleEditing.salePlatform || saleEditing.platform) === 'Other' ? <label className="span2">Sale Channel<input value={saleEditing.saleChannelDetail || ''} onChange={(event) => patchSale({ saleChannelDetail: event.target.value })} placeholder="Local shop, yard sale, convention..."/></label> : null}
             <label>Sold Date<input type="date" value={saleEditing.soldDate || ''} onChange={(event) => patchSale({ soldDate: event.target.value })}/></label>
             <label>Sale Price<input required type="number" min="0" step="0.01" value={saleEditing.soldPrice ?? ''} onChange={(event) => patchSale({ soldPrice: optionalNumber(event.target.value) })}/></label>
-            <label>What You Paid<input type="number" min="0" step="0.01" value={saleEditing.purchasePrice ?? ''} onChange={(event) => patchSale({ purchasePrice: optionalNumber(event.target.value) })}/></label>
+            <label>{(saleEditing.bundleCount || 0) > 1 ? 'Total Bundle Cost' : 'What You Paid'}<input type="number" min="0" step="0.01" value={saleEditing.purchasePrice ?? ''} onChange={(event) => patchSale({ purchasePrice: optionalNumber(event.target.value) })}/>{(saleEditing.bundleCount || 0) > 1 ? <small>Used for this sale profit. Member costs remain editable from Inventory.</small> : null}</label>
             <label>Shipping Charged<input type="number" min="0" step="0.01" value={saleEditing.shippingCharged ?? ''} onChange={(event) => patchSale({ shippingCharged: optionalNumber(event.target.value) })}/></label>
             <label>Actual Shipping Cost<input type="number" min="0" step="0.01" value={saleEditing.shippingCost ?? ''} onChange={(event) => patchSale({ shippingCost: optionalNumber(event.target.value) })}/></label>
             <label>Marketplace Fees<input type="number" min="0" step="0.01" value={saleEditing.fees ?? ''} onChange={(event) => patchSale({ fees: optionalNumber(event.target.value) })}/></label>
@@ -2650,6 +2657,16 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           {editing.platform === 'eBay' && editing.status === 'Active' && editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with FlipTracker API:</strong> eBay's app and Seller Hub cannot revise this listing. Make changes here and use Save &amp; Update eBay. Use End Listing or Record Sale for status changes.</p> : null}
           {editing.platform === 'eBay' && editing.status === 'Active' && editing.externalListingId && !editing.ebayOfferId ? <p className="ebaySafetyNote"><strong>Created with eBay app / Seller Hub:</strong> FlipTracker reads the live item first and preserves its eBay-managed values before updating the fields reviewed here.</p> : null}
           <div className="formGrid listingFactoryForm">
+            {editingBundleFoundation?.isBundle ? <section className="span2 bundleFoundationPanel">
+              <div><p className="eyebrow">Bundle foundation</p><h3>{editingBundleFoundation.count}-item lot</h3><small>{editingBundleFoundation.titleSummary}</small></div>
+              <div className="bundleFoundationMetrics">
+                <span><b>{money(editingBundleFoundation.costTotal)}</b><small>Total cost</small></span>
+                <span className={editingBundleFoundation.photoCount ? '' : 'attention'}><b>{editingBundleFoundation.photoCount}</b><small>Photos</small></span>
+                <span className={editingBundleFoundation.price ? '' : 'attention'}><b>{editingBundleFoundation.price ? money(editingBundleFoundation.price) : 'Unset'}</b><small>Price</small></span>
+                <span className={editingBundleFoundation.missingCostCount ? 'attention' : ''}><b>{editingBundleFoundation.missingCostCount}</b><small>Missing costs</small></span>
+              </div>
+              {editingBundleFoundation.issues.length ? <p>{editingBundleFoundation.issues.join(' · ')}</p> : <p>Bundle basics look ready. Confirm photos, price, and description before staging.</p>}
+            </section> : null}
             <div className="span2 listingReadinessPanelWrap"><ListingReadinessPanel issues={editingReadinessIssues} quality={editingQuality} onNavigate={(step) => setEditorStep(compactEditorStep(step))}/></div>
             {editorStep === 'details' ? <>
             <label>Platform<select value={editing.platform} onChange={(event) => patchEditing({ platform: event.target.value })}>{PLATFORMS.map((value) => <option key={value}>{value}</option>)}</select></label>

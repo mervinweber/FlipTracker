@@ -287,6 +287,13 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .badge.active, .badge.relisted { border-color:rgba(47,111,237,.65); color:#bfdbfe; background:rgba(47,111,237,.12); }
 .badge.pending { border-color:rgba(245,158,11,.55); color:#fde68a; background:rgba(245,158,11,.1); }
 .badge.expired, .badge.cancelled { border-color:rgba(153,27,27,.7); color:#fecaca; background:rgba(153,27,27,.16); }
+.lifecycleBadge.queue { border-color:rgba(148,163,184,.45); color:#cbd5e1; background:rgba(148,163,184,.08); }
+.lifecycleBadge.ready { border-color:rgba(34,197,94,.55); color:#bbf7d0; background:rgba(34,197,94,.1); }
+.lifecycleBadge.staged { border-color:rgba(20,184,166,.6); color:#99f6e4; background:rgba(20,184,166,.1); }
+.lifecycleBadge.active { border-color:rgba(59,130,246,.65); color:#bfdbfe; background:rgba(59,130,246,.12); }
+.lifecycleBadge.shipping { border-color:rgba(245,158,11,.65); color:#fde68a; background:rgba(245,158,11,.1); }
+.lifecycleBadge.sold, .lifecycleBadge.archived { border-color:rgba(34,197,94,.55); color:#bbf7d0; background:rgba(34,197,94,.1); }
+.lifecycleBadge.closed { border-color:rgba(100,116,139,.65); color:#cbd5e1; background:rgba(100,116,139,.12); }
 .ebaySetupPanel { margin-bottom:18px; }
 .ebayConnectionHeaderActions { display:flex; align-items:center; gap:8px; }
 .setupCollapseButton svg { transition:transform .18s ease; }
@@ -510,6 +517,16 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .listingEditorSteps button { min-height:48px; justify-content:center; border:0; border-radius:0; background:var(--surface-3); color:var(--muted); }
 .listingEditorSteps button span { display:grid; width:22px; height:22px; place-items:center; border:1px solid currentColor; border-radius:50%; font-size:11px; }
 .listingEditorSteps button.active { background:#10234a; color:#bfdbfe; box-shadow:inset 0 -3px 0 var(--primary); }
+.bundleFoundationPanel { display:grid; grid-template-columns:minmax(0, 1fr) minmax(360px, .95fr); gap:12px 16px; align-items:center; padding:14px; border:1px solid rgba(245,158,11,.38); border-radius:8px; background:rgba(245,158,11,.06); }
+.bundleFoundationPanel h3 { margin:0; font-size:18px; }
+.bundleFoundationPanel small { display:block; margin-top:3px; color:var(--muted); line-height:1.35; overflow-wrap:anywhere; }
+.bundleFoundationPanel > p { grid-column:1 / -1; margin:0; color:#fde68a; font-size:12px; font-weight:800; line-height:1.35; }
+.bundleFoundationMetrics { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:7px; background:var(--border); }
+.bundleFoundationMetrics span { min-width:0; padding:10px; background:var(--surface-3); }
+.bundleFoundationMetrics span.attention { background:rgba(245,158,11,.12); }
+.bundleFoundationMetrics b, .bundleFoundationMetrics small { display:block; }
+.bundleFoundationMetrics b { font-size:17px; overflow:hidden; color:var(--text); text-overflow:ellipsis; white-space:nowrap; }
+.bundleFoundationMetrics small { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
 .listingReadinessBar { display:flex; flex-wrap:wrap; gap:7px; padding:12px 22px; border-bottom:1px solid var(--border); background:#09111f; }
 .listingReadinessBar span { padding:5px 8px; border:1px solid var(--border); border-radius:6px; font-size:11px; font-weight:800; }
 .listingReadinessBar .ready { border-color:rgba(34,197,94,.45); color:#bbf7d0; background:rgba(34,197,94,.08); }
@@ -757,6 +774,8 @@ td small { display:block; color:var(--muted); margin-top:3px; }
   .listingReadinessBar span { flex:0 0 auto; }
   .listingFactoryForm { grid-template-columns:1fr; padding:14px 16px; }
   .listingFactoryForm .span2 { grid-column:auto; }
+  .bundleFoundationPanel { grid-template-columns:1fr; }
+  .bundleFoundationMetrics { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .listingFactoryFooter { padding:12px 16px; }
   .listingFactoryFooter .actions { flex-wrap:wrap; }
   .listingActivity { margin:0 12px 12px; }
