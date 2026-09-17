@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Archive, ArchiveRestore, BadgeDollarSign, Barcode, BookOpen, Boxes, CalendarDays, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, LockKeyhole, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BadgeDollarSign, Barcode, BookOpen, Boxes, CalendarDays, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, LockKeyhole, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, ShoppingBag, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
@@ -522,6 +522,7 @@ export default function App() {
   const addValueCheck = useMutation(api.research.addValueCheck);
   const createListing = useMutation(api.listings.create);
   const createBundleListing = useMutation(api.listings.createBundle);
+  const bulkCreateCrossListingsFromAssets = useMutation(api.crossListings.bulkCreateFromAssets);
   const generatePhotoUploadUrl = useMutation(api.photos.generateUploadUrl);
   const attachPhoto = useMutation(api.photos.attach);
   const writeOffItem = useMutation(api.accounting.writeOffItem);
@@ -1035,6 +1036,23 @@ export default function App() {
     }
   }
 
+  async function crossListSelectedAssets() {
+    const ids = [...selectedAssetIds];
+    if (!ids.length || bulkDeleteBusy || archiveBusy) return;
+    setBulkDeleteBusy(true);
+    setBulkDeleteMessage('');
+    try {
+      const result = await bulkCreateCrossListingsFromAssets({ assetIds: ids, platforms: ['Mercari', 'Depop'] });
+      setSelectedAssetIds(new Set());
+      setBulkDeleteMessage(`Created ${result.created} Mercari/Depop cross-list row${result.created === 1 ? '' : 's'}.`);
+      changeView('Cross');
+    } catch (error) {
+      setBulkDeleteMessage(error instanceof Error ? error.message : 'Could not create cross-list rows.');
+    } finally {
+      setBulkDeleteBusy(false);
+    }
+  }
+
   function openBulkCostEditor() {
     setBulkCostMode('splitTotal');
     setBulkCostAmount('');
@@ -1375,6 +1393,7 @@ export default function App() {
       <nav className="viewTabs" aria-label="Primary views">
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
+        <button className={activeView === 'Cross' ? 'active' : 'secondary'} onClick={() => changeView('Cross')}><ShoppingBag size={17}/> Cross-List</button>
         <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
         <button className={activeView === 'Cards' ? 'active' : 'secondary'} onClick={() => changeView('Cards')}><GalleryVerticalEnd size={17}/> Card Scanner</button>
         <button className={activeView === 'Photos' ? 'active' : 'secondary'} onClick={() => changeView('Photos')}><Camera size={17}/> Photos</button>
@@ -1421,7 +1440,7 @@ export default function App() {
       </details>
 
       <section className="panel inventoryPanel">
-        <div className="panelHeader"><div><h2>{archiveFilter === 'Archived' ? 'Archived Inventory' : 'Inventory'}</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy || archiveBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{archiveFilter !== 'Archived' && rows.some(item => ['Sold','Written Off','Purged'].includes(item.status || '')) && !selectedAssetIds.size ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets(rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).map(item => item._id))}><Archive size={16}/>{`Archive completed (${rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).length})`}</button> : null}{selectedAssetIds.size >= 2 && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Inventory','Hold'].includes(item.status || 'Inventory')) ? <button disabled={bundleBusy} onClick={openBundleEditor}><Boxes size={16}/>{`Create eBay Bundle (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkEditBusy || archiveBusy} onClick={openBulkDetailsEditor}><Tags size={16}/>{`Bulk Edit Details (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkDeleteBusy || archiveBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter === 'Archived' ? <button className="secondary" disabled={archiveBusy} onClick={() => restoreSelectedAssets()}><ArchiveRestore size={16}/>{archiveBusy ? 'Restoring...' : `Restore (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Sold','Written Off','Purged'].includes(item.status || '')) ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets()}><Archive size={16}/>{archiveBusy ? 'Archiving...' : `Archive (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="danger" disabled={bulkDeleteBusy || archiveBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
+        <div className="panelHeader"><div><h2>{archiveFilter === 'Archived' ? 'Archived Inventory' : 'Inventory'}</h2><p>{isLoading ? 'Loading Convex data...' : `${rows.length} item${rows.length === 1 ? '' : 's'} in the current view`}</p></div><div className="actions inventoryBulkActions"><button className="secondary" disabled={!rows.length || bulkDeleteBusy || archiveBusy} onClick={toggleVisibleSelection}><ListChecks size={16}/>{rows.length > 0 && rows.slice(0, 100).every((item) => selectedAssetIds.has(item._id)) ? 'Clear Selection' : 'Select View'}</button>{archiveFilter !== 'Archived' && rows.some(item => ['Sold','Written Off','Purged'].includes(item.status || '')) && !selectedAssetIds.size ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets(rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).map(item => item._id))}><Archive size={16}/>{`Archive completed (${rows.filter(item => ['Sold','Written Off','Purged'].includes(item.status || '')).length})`}</button> : null}{selectedAssetIds.size >= 2 && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Inventory','Hold'].includes(item.status || 'Inventory')) ? <button disabled={bundleBusy} onClick={openBundleEditor}><Boxes size={16}/>{`Create eBay Bundle (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkDeleteBusy || archiveBusy} onClick={crossListSelectedAssets}><ShoppingBag size={16}/>{bulkDeleteBusy ? 'Creating...' : `Cross-List (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkEditBusy || archiveBusy} onClick={openBulkDetailsEditor}><Tags size={16}/>{`Bulk Edit Details (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="secondary" disabled={bulkDeleteBusy || archiveBusy} onClick={openBulkCostEditor}><BadgeDollarSign size={16}/>{`Bulk Edit Cost (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter === 'Archived' ? <button className="secondary" disabled={archiveBusy} onClick={() => restoreSelectedAssets()}><ArchiveRestore size={16}/>{archiveBusy ? 'Restoring...' : `Restore (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' && rows.filter(item => selectedAssetIds.has(item._id)).every(item => ['Sold','Written Off','Purged'].includes(item.status || '')) ? <button className="secondary" disabled={archiveBusy} onClick={() => archiveSelectedAssets()}><Archive size={16}/>{archiveBusy ? 'Archiving...' : `Archive (${selectedAssetIds.size})`}</button> : null}{selectedAssetIds.size && archiveFilter !== 'Archived' ? <button className="danger" disabled={bulkDeleteBusy || archiveBusy} onClick={deleteSelectedAssets}><Trash2 size={16}/>{bulkDeleteBusy ? 'Deleting...' : `Delete Selected (${selectedAssetIds.size})`}</button> : null}<button className="secondary" onClick={() => { setCreateDraftAfterSave(false); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}><Plus size={16}/> Add Other Item</button></div></div>
         {bulkDeleteMessage ? <p className={`bulkDeleteNotice ${['Deleted','Selected','Updated','Archived','Restored'].some(prefix => bulkDeleteMessage.startsWith(prefix)) ? 'successNotice' : 'errorNotice'}`}>{bulkDeleteMessage}</p> : null}
         {isLoading ? <p>Loading Convex data...</p> : rows.length === 0 ? <div className="empty"><h2>{archiveFilter === 'Archived' ? 'No archived items' : dashboard?.assetCount ? 'No items match these filters' : 'No inventory yet'}</h2><p>{archiveFilter === 'Archived' ? 'Completed items you archive will remain available here with their sales and accounting history.' : dashboard?.assetCount ? 'Change the status, added-date, or archive filter to widen the view.' : 'Import your spreadsheet, add your first item, or scan media.'}</p></div> : (
           <div className="tableWrap">

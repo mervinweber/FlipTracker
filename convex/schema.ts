@@ -219,6 +219,14 @@ export default defineSchema({
   crossListings: defineTable({
     ownerId: v.optional(v.string()),
     assetId: v.id("assets"),
+    sourceType: v.optional(v.string()),
+    sourceListingId: v.optional(v.id("marketplaceListings")),
+    sourcePlatform: v.optional(v.string()),
+    sourceStatus: v.optional(v.string()),
+    sourceSnapshotJson: v.optional(v.string()),
+    handoffStatus: v.optional(v.string()),
+    handoffNotes: v.optional(v.string()),
+    lastPreparedAt: v.optional(v.number()),
     linkedAccountId: v.optional(v.id("linkedAccounts")),
     platform: v.string(),
     status: v.string(),
@@ -243,6 +251,7 @@ export default defineSchema({
   })
     .index("by_ownerId", ["ownerId"])
     .index("by_assetId", ["assetId"])
+    .index("by_sourceListingId", ["sourceListingId"])
     .index("by_platform", ["platform"])
     .index("by_status", ["status"])
     .index("by_platform_and_status", ["platform", "status"]),

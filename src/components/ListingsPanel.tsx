@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Boxes, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Boxes, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -471,6 +471,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const removeListing = useMutation(api.listings.remove);
   const importSalesTracker = useMutation(api.listings.importSalesTracker);
   const applyQueuePricing = useMutation(api.listings.applyQueuePricing);
+  const bulkCreateCrossListingsFromListings = useMutation(api.crossListings.bulkCreateFromMarketplaceListings);
   const beginEbayOauth = useAction(api.ebay.beginOauth);
   const loadEbaySetup = useAction(api.ebay.loadSetup);
   const getSellerListingSummary = useAction(api.ebay.getSellerListingSummary);
@@ -1808,6 +1809,28 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSelectedIds(allSelected ? new Set() : new Set(queueIds));
   }
 
+  async function crossListSelectedListings() {
+    const listingIds = selectedListings
+      .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending', 'Active'].includes(listing.status))
+      .map((listing) => listing._id);
+    if (!listingIds.length) {
+      setEbayError('Select at least one eBay listing to cross-list.');
+      return;
+    }
+    setQueueBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const result = await bulkCreateCrossListingsFromListings({ listingIds, platforms: ['Mercari', 'Depop'] });
+      setSelectedIds(new Set());
+      setEbayNotice(`Created ${result.created} Mercari/Depop cross-list row${result.created === 1 ? '' : 's'}. Open the Cross-List tab to review and hand off.`);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not create cross-list rows.');
+    } finally {
+      setQueueBusy(false);
+    }
+  }
+
   async function openPricingReview() {
     const baseRows = selectedListings
       .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) !== 'eBay Draft Created')
@@ -2252,7 +2275,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <span className="queueCommandStatus">{selectedIds.size ? `${selectedIds.size} selected · ${selectedBlockedCount ? `${selectedBlockedCount} need fixes` : 'validation passed'}` : `${batchCompletion.ready} ready · ${batchCompletion.exceptions} need fixes`}</span>
           <div className="actions queueActions">
             {!selectedIds.size ? !sellerSession ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={startSellerSession}><Play size={16}/> Start Session</button> : !sellerSession.activeSince ? <button className="fastReviewButton" disabled={!queueListings.length || queueBusy} onClick={toggleSellerSessionPause}><Play size={16}/> Resume Session</button> : <button className="fastReviewButton" disabled={!queueListings.length || queueBusy || smartPrepareBusy} onClick={() => void openSmartPrepare()}><WandSparkles size={16}/> {smartPrepareBusy ? 'Preparing...' : 'Prepare Next'}</button> : firstSelectedBlocked ? <button disabled={queueBusy} onClick={() => openListingEditor(firstSelectedBlocked, (readinessByListingId.get(firstSelectedBlocked._id) || []).find((issue) => issue.blocking)?.step || 'details', true)}><ListChecks size={16}/> Fix {selectedBlockedCount}</button> : selectedReadyForEbay.length ? <button className="ebaySendButton" disabled={queueBusy || !sellerDefaultsReady} onClick={sendSelectedToEbay}><Send size={16}/> {queueBusy ? 'Working...' : `Stage ${selectedReadyForEbay.length}`}</button> : selectedStagedForEbay.length ? <button className="ebayPublishButton" disabled={queueBusy || !sellerDefaultsReady} onClick={publishSelectedStaged}><Rocket size={16}/> {queueBusy ? 'Working...' : `Publish ${selectedStagedForEbay.length}`}</button> : <button onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Review Selection</button>}
-            <details className="listingUtilityMenu queueMoreMenu"><summary aria-label="More queue actions" title="More queue actions"><MoreHorizontal size={18}/></summary><div><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear selection' : 'Select all in view'}</button><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Quality report</button>{selectedIds.size ? <button className="secondary" disabled={queueBusy} onClick={openPricingReview}><DollarSign size={16}/> Find fair value</button> : null}</div></details>
+            <details className="listingUtilityMenu queueMoreMenu"><summary aria-label="More queue actions" title="More queue actions"><MoreHorizontal size={18}/></summary><div><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={toggleQueueView}><CheckCircle2 size={16}/> {queueListings.length > 0 && queueListings.every((listing) => selectedIds.has(listing._id)) ? 'Clear selection' : 'Select all in view'}</button><button className="secondary" disabled={!queueListings.length || queueBusy} onClick={() => setBulkValidationOpen(true)}><ListChecks size={16}/> Quality report</button>{selectedIds.size ? <button className="secondary" disabled={queueBusy} onClick={openPricingReview}><DollarSign size={16}/> Find fair value</button> : null}{selectedIds.size ? <button className="secondary" disabled={queueBusy} onClick={crossListSelectedListings}><ShoppingBag size={16}/> Cross-list selected</button> : null}</div></details>
           </div>
         </div>
         {sellerSession ? <div className={`sellerSessionBar ${sellerSession.activeSince ? 'active' : 'paused'}`}>
