@@ -2,6 +2,7 @@ export type CrossListPlatform = 'Mercari' | 'Depop';
 export type CrossListFamily = 'book' | 'media' | 'videoGame' | 'card' | 'clothing' | 'general';
 
 export type CrossListSource = {
+  platform?: string;
   title?: string;
   description?: string;
   type?: string;
@@ -45,6 +46,16 @@ export const CROSS_LIST_CATEGORY_OPTIONS: Record<CrossListPlatform, string[]> = 
     'Everything Else',
   ],
 };
+
+export function publicCrossListPhotoUrls(photoUrls?: string[]) {
+  return (photoUrls || []).filter((url) => /^https:\/\//i.test(url));
+}
+
+export function crossListTitleLimit(platform?: string) {
+  if (platform === 'Mercari') return 80;
+  if (platform === 'Depop') return 80;
+  return 80;
+}
 
 export function crossListFamily(type?: string, mediaFormat?: string): CrossListFamily {
   const value = `${type || ''} ${mediaFormat || ''}`.toLowerCase();
@@ -95,7 +106,8 @@ export function crossListStatusFor(source: CrossListSource) {
   if (!source.title?.trim()) missing.push('title');
   if (!source.price || source.price <= 0) missing.push('price');
   if (!source.description?.trim()) missing.push('description');
-  if (!source.photoUrls?.length) missing.push('photo');
+  if (!publicCrossListPhotoUrls(source.photoUrls).length) missing.push('public photo');
+  if ((source.title?.trim().length || 0) > crossListTitleLimit(source.platform)) missing.push('shorter title');
   return { status: missing.length ? 'Needs Review' : 'Ready', missing };
 }
 
@@ -145,7 +157,7 @@ export function buildDepopCsv(rows: CrossListSource[]) {
   const version = [`Template version: 6`, ...Array(headers.length - 1).fill('')];
   const instruction = Array(headers.length).fill('');
   const body = rows.map((row) => {
-    const photos = (row.photoUrls || []).filter((url) => /^https:\/\//i.test(url)).slice(0, 8);
+    const photos = publicCrossListPhotoUrls(row.photoUrls).slice(0, 8);
     while (photos.length < 8) photos.push('');
     return [
       buildCrossListDescription(row),

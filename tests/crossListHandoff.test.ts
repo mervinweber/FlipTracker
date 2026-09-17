@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildDepopCsv, crossListFamily, defaultCrossListCategory, normalizeCrossListCondition } from '../src/utils/crossListHandoff.ts';
+import { buildDepopCsv, crossListFamily, crossListStatusFor, defaultCrossListCategory, normalizeCrossListCondition, publicCrossListPhotoUrls } from '../src/utils/crossListHandoff.ts';
 
 test('cross-list category defaults focus Mercari and Depop by item family', () => {
   assert.equal(crossListFamily('Book', 'Graphic Novel'), 'book');
@@ -34,4 +34,27 @@ test('Depop CSV includes public photos, identifiers, and SKU', () => {
   assert.match(csv, /https:\/\/example.com\/front\.jpg/);
   assert.doesNotMatch(csv, /data:image/);
   assert.match(csv, /FT-123/);
+});
+
+test('cross-list readiness requires public photos and marketplace-sized titles', () => {
+  assert.deepEqual(publicCrossListPhotoUrls(['data:image/jpeg;base64,nope', 'https://example.com/ok.jpg']), ['https://example.com/ok.jpg']);
+  const missingPhoto = crossListStatusFor({
+    platform: 'Mercari',
+    title: 'Ready title',
+    description: 'Clean copy',
+    price: 12,
+    photoUrls: ['data:image/jpeg;base64,nope'],
+  });
+  assert.equal(missingPhoto.status, 'Needs Review');
+  assert.ok(missingPhoto.missing.includes('public photo'));
+
+  const longTitle = crossListStatusFor({
+    platform: 'Depop',
+    title: 'A'.repeat(90),
+    description: 'Clean copy',
+    price: 12,
+    photoUrls: ['https://example.com/ok.jpg'],
+  });
+  assert.equal(longTitle.status, 'Needs Review');
+  assert.ok(longTitle.missing.includes('shorter title'));
 });

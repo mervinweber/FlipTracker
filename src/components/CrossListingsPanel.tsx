@@ -12,6 +12,8 @@ import {
   defaultCrossListCategory,
   downloadText,
   normalizeCrossListCondition,
+  publicCrossListPhotoUrls,
+  crossListTitleLimit,
 } from '../utils/crossListHandoff';
 
 type CrossListing = {
@@ -96,6 +98,9 @@ type EditDraft = {
 type SoldDraft = {
   id: Id<'crossListings'>;
   title: string;
+  sourceType?: string;
+  sourcePlatform?: string;
+  sourceStatus?: string;
   soldPrice: string;
   fees: string;
   shippingPrice: string;
@@ -116,6 +121,16 @@ function sourceLabel(row: CrossListing) {
 
 function badgeClass(value?: string) {
   return `badge ${String(value || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
+function rowNeeds(row: CrossListing) {
+  const needs: string[] = [];
+  if (!row.title?.trim()) needs.push('title');
+  if (row.title && row.title.length > crossListTitleLimit(row.platform)) needs.push('shorter title');
+  if (!row.price || row.price <= 0) needs.push('price');
+  if (!row.description?.trim()) needs.push('description');
+  if (!publicCrossListPhotoUrls(row.photoUrls).length) needs.push('public photo');
+  return needs;
 }
 
 function sellUrl(platform: string) {
@@ -259,6 +274,9 @@ export default function CrossListingsPanel() {
     setSoldDraft({
       id: row._id,
       title: row.title,
+      sourceType: row.sourceType,
+      sourcePlatform: row.sourcePlatform,
+      sourceStatus: row.sourceStatus,
       soldPrice: row.soldPrice?.toFixed(2) || row.price?.toFixed(2) || '',
       fees: row.fees?.toFixed(2) || '',
       shippingPrice: row.shippingPrice?.toFixed(2) || '',
@@ -375,7 +393,7 @@ export default function CrossListingsPanel() {
                     <td><span className="consoleTag">{row.platform}</span></td>
                     <td className="listingIdentityCell"><strong>{row.title}</strong><small>{row.assetTitle}{row.assetBarcode ? ` · ${row.assetBarcode}` : ''}{row.photoCount ? ` · ${row.photoCount} photo${row.photoCount === 1 ? '' : 's'}` : ' · photos needed'}</small></td>
                     <td><span className="statusPill">{sourceLabel(row)}</span><small>{row.sourceExternalListingId ? `eBay ${row.sourceExternalListingId}` : row.sourceStatus || row.assetStatus || ''}</small></td>
-                    <td><span className={badgeClass(row.status)}>{row.status}</span>{row.status === 'Needs Review' ? <small className="warningText">Check price, copy, and photos</small> : null}</td>
+                    <td><span className={badgeClass(row.status)}>{row.status}</span>{row.status === 'Needs Review' ? <small className="warningText">{row.handoffNotes || `Needs ${rowNeeds(row).join(', ') || 'review'}`}</small> : null}</td>
                     <td>{row.soldPrice !== undefined ? money(row.soldPrice) : money(row.price)}{row.shippingPrice !== undefined ? <small>Ship {money(row.shippingPrice)}</small> : null}</td>
                     <td><strong>{row.platformCategory || defaultCrossListCategory(row.platform, row.assetType || row.category)}</strong><small>{row.handoffStatus || 'Not prepared'}{row.lastPreparedAt ? ` · ${new Date(row.lastPreparedAt).toLocaleDateString()}` : ''}</small></td>
                     <td className="tableActionsCell"><div className="rowActions">
@@ -446,7 +464,11 @@ export default function CrossListingsPanel() {
               <label>Shipping<input type="number" inputMode="decimal" value={soldDraft.shippingPrice} onChange={(event) => setSoldDraft({ ...soldDraft, shippingPrice: event.target.value })}/></label>
               <label className="span2">Notes<textarea value={soldDraft.notes} onChange={(event) => setSoldDraft({ ...soldDraft, notes: event.target.value })}/></label>
             </div>
-            <p className="setupNotice warningNotice">This also closes the linked inventory record. If the source eBay listing is active, FlipTracker flags it so you can end it on eBay.</p>
+            <p className="setupNotice warningNotice">
+              {soldDraft.sourceType === 'ebayBundle' ? 'This closes every item in the bundle and splits the sale amount across the member records. ' : ''}
+              This also closes the linked inventory record.
+              {soldDraft.sourcePlatform === 'eBay' && soldDraft.sourceStatus === 'Active' ? ' The source eBay listing is still live until you end it on eBay, so FlipTracker will flag it after saving.' : ''}
+            </p>
             <div className="actions right"><button className="secondary" onClick={() => setSoldDraft(null)}>Cancel</button><button disabled={busy} onClick={saveSold}><BadgeDollarSign size={16}/>{busy ? 'Saving...' : 'Mark Sold'}</button></div>
           </section>
         </div>

@@ -52,10 +52,33 @@ function normalizeCondition(condition?: string, asset?: Pick<Doc<"assets">, "typ
   return "Good";
 }
 
-function statusFor(fields: { title?: string; description?: string; price?: number; photoCount?: number }) {
-  return fields.title?.trim() && fields.description?.trim() && fields.price && fields.price > 0 && fields.photoCount
+function publicPhotoCount(photoUrls: string[] = []) {
+  return photoUrls.filter((url) => /^https:\/\//i.test(url)).length;
+}
+
+function titleLimit(platform: string) {
+  if (platform === "Mercari") return 80;
+  if (platform === "Depop") return 80;
+  return 80;
+}
+
+function statusFor(fields: { platform: string; title?: string; description?: string; price?: number; photoUrls?: string[] }) {
+  return fields.title?.trim()
+    && fields.title.trim().length <= titleLimit(fields.platform)
+    && fields.description?.trim()
+    && fields.price
+    && fields.price > 0
+    && publicPhotoCount(fields.photoUrls)
     ? "Ready"
     : "Needs Review";
+}
+
+function splitAmount(amount: number | undefined, count: number) {
+  if (amount === undefined || count <= 0) return [];
+  const cents = Math.round(amount * 100);
+  const base = Math.floor(cents / count);
+  const remainder = cents - base * count;
+  return Array.from({ length: count }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
 }
 
 function priceFromAsset(asset: Doc<"assets">) {
@@ -91,6 +114,42 @@ async function listingMembers(ctx: any, listing: Doc<"marketplaceListings">) {
   return (await Promise.all(links.sort((a: any, b: any) => a.position - b.position).map((link: any) => ctx.db.get(link.assetId)))).filter(Boolean);
 }
 
+async function findOpenDuplicate(
+  ctx: any,
+  ownerId: string | undefined,
+  fields: { platform: string; assetId: Id<"assets">; sourceListingId?: Id<"marketplaceListings">; sourceType?: string },
+) {
+  const rows = fields.sourceListingId
+    ? await ctx.db.query("crossListings").withIndex("by_sourceListingId", (q: any) => q.eq("sourceListingId", fields.sourceListingId)).collect()
+    : await ctx.db.query("crossListings").withIndex("by_assetId", (q: any) => q.eq("assetId", fields.assetId)).collect();
+  return rows.find((row: Doc<"crossListings">) => row.ownerId === ownerId
+    && row.platform === fields.platform
+    && row.sourceListingId === fields.sourceListingId
+    && row.sourceType === fields.sourceType
+    && !["Sold", "Ended"].includes(row.status));
+}
+
+async function upsertCrossListing(ctx: any, ownerId: string | undefined, row: any, now: number) {
+  const existing = await findOpenDuplicate(ctx, ownerId, row);
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      ...row,
+      status: existing.status === "Listed" ? existing.status : row.status,
+      listedAt: existing.listedAt,
+      soldAt: existing.soldAt,
+      soldPrice: existing.soldPrice,
+      fees: existing.fees,
+      listingUrl: existing.listingUrl,
+      externalListingId: existing.externalListingId,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    });
+    return { id: existing._id, created: false };
+  }
+  const id = await ctx.db.insert("crossListings", { ownerId, ...row, createdAt: now, updatedAt: now });
+  return { id, created: true };
+}
+
 function snapshotFromAssets(assets: Doc<"assets">[], listing?: Doc<"marketplaceListings">) {
   return JSON.stringify({
     sourceListingId: listing?._id,
@@ -119,7 +178,7 @@ async function rowForAsset(ctx: any, asset: Doc<"assets">, platform: string, ove
     sourceType: "inventory",
     sourceSnapshotJson: snapshotFromAssets([asset]),
     platform,
-    status: overrides.status ?? statusFor({ title: asset.ebayTitle || asset.title, description, price, photoCount: photoUrls.length }),
+    status: overrides.status ?? statusFor({ platform, title: asset.ebayTitle || asset.title, description, price, photoUrls }),
     title: (overrides.title || asset.ebayTitle || asset.title).slice(0, 120),
     description,
     sku: overrides.sku || asset.upc || asset.barcode,
@@ -149,7 +208,7 @@ async function rowForListing(ctx: any, listing: Doc<"marketplaceListings">, plat
     sourceStatus: listing.status,
     sourceSnapshotJson: snapshotFromAssets(members, listing),
     platform,
-    status: overrides.status ?? statusFor({ title: listing.title, description, price, photoCount: photoUrls.length }),
+    status: overrides.status ?? statusFor({ platform, title: listing.title, description, price, photoUrls }),
     title: (overrides.title || listing.title).slice(0, 120),
     description,
     sku: overrides.sku || listing.sku,
@@ -268,12 +327,8 @@ export const create = mutation({
     assertOwner(asset, ownerId, "Inventory item");
     if (args.linkedAccountId) assertOwner(await ctx.db.get(args.linkedAccountId), ownerId, "Linked account");
     if (args.sourceListingId) assertOwner(await ctx.db.get(args.sourceListingId), ownerId, "Source listing");
-    return await ctx.db.insert("crossListings", {
-      ownerId,
-      ...args,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const result = await upsertCrossListing(ctx, ownerId, args, now);
+    return result.id;
   },
 });
 
@@ -286,7 +341,8 @@ export const createFromAsset = mutation({
     if (!platforms.includes(args.platform)) throw new Error("Choose Mercari or Depop.");
     const now = Date.now();
     const row = await rowForAsset(ctx, asset!, args.platform);
-    return await ctx.db.insert("crossListings", { ownerId, ...row, createdAt: now, updatedAt: now });
+    const result = await upsertCrossListing(ctx, ownerId, row, now);
+    return result.id;
   },
 });
 
@@ -300,16 +356,18 @@ export const bulkCreateFromAssets = mutation({
     const ownerId = await currentOwnerId(ctx);
     const now = Date.now();
     let created = 0;
+    let updated = 0;
     for (const assetId of args.assetIds) {
       const asset = await ctx.db.get(assetId);
       assertOwner(asset, ownerId, "Inventory item");
       for (const platform of targetPlatforms) {
         const row = await rowForAsset(ctx, asset!, platform);
-        await ctx.db.insert("crossListings", { ownerId, ...row, createdAt: now, updatedAt: now });
-        created += 1;
+        const result = await upsertCrossListing(ctx, ownerId, row, now);
+        if (result.created) created += 1;
+        else updated += 1;
       }
     }
-    return { created };
+    return { created, updated };
   },
 });
 
@@ -322,7 +380,8 @@ export const createFromMarketplaceListing = mutation({
     if (!platforms.includes(args.platform)) throw new Error("Choose Mercari or Depop.");
     const now = Date.now();
     const row = await rowForListing(ctx, listing!, args.platform);
-    return await ctx.db.insert("crossListings", { ownerId, ...row, createdAt: now, updatedAt: now });
+    const result = await upsertCrossListing(ctx, ownerId, row, now);
+    return result.id;
   },
 });
 
@@ -336,16 +395,18 @@ export const bulkCreateFromMarketplaceListings = mutation({
     const ownerId = await currentOwnerId(ctx);
     const now = Date.now();
     let created = 0;
+    let updated = 0;
     for (const listingId of args.listingIds) {
       const listing = await ctx.db.get(listingId);
       assertOwner(listing, ownerId, "Source listing");
       for (const platform of targetPlatforms) {
         const row = await rowForListing(ctx, listing!, platform);
-        await ctx.db.insert("crossListings", { ownerId, ...row, createdAt: now, updatedAt: now });
-        created += 1;
+        const result = await upsertCrossListing(ctx, ownerId, row, now);
+        if (result.created) created += 1;
+        else updated += 1;
       }
     }
-    return { created };
+    return { created, updated };
   },
 });
 
@@ -394,7 +455,29 @@ export const prepareHandoff = mutation({
     for (const id of args.ids) {
       const row = await ctx.db.get(id);
       assertOwner(row, ownerId, "Cross listing");
-      await ctx.db.patch(id, { handoffStatus: "Prepared", lastPreparedAt: now, updatedAt: now });
+      let assetIds = [row.assetId];
+      if (row.sourceListingId) {
+        const listing = await ctx.db.get(row.sourceListingId);
+        if (listing) assetIds = (await listingMembers(ctx, listing)).map((asset: Doc<"assets">) => asset._id);
+      }
+      const photoUrls = await assetPhotoUrls(ctx, assetIds);
+      const missing = [
+        !row.title?.trim() ? "title" : "",
+        row.title && row.title.length > titleLimit(row.platform) ? "shorter title" : "",
+        !row.description?.trim() ? "description" : "",
+        !row.price || row.price <= 0 ? "price" : "",
+        !publicPhotoCount(photoUrls) ? "public photo" : "",
+      ].filter(Boolean);
+      if (missing.length) {
+        await ctx.db.patch(id, {
+          status: "Needs Review",
+          handoffStatus: "Needs Review",
+          handoffNotes: `Missing ${missing.join(", ")} before ${row.platform} handoff.`,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.patch(id, { status: "Ready", handoffStatus: "Prepared", handoffNotes: undefined, lastPreparedAt: now, updatedAt: now });
+      }
     }
     return { prepared: args.ids.length };
   },
@@ -438,25 +521,83 @@ export const markSold = mutation({
     });
 
     if (args.closeSource ?? true) {
-      await ctx.db.patch(existing.assetId, {
-        status: "Sold",
-        soldPrice: args.soldPrice,
-        fees: args.fees,
-        shipping: args.shippingPrice,
-        updatedAt: now,
-      });
+      let listing: Doc<"marketplaceListings"> | null = null;
+      let members: Doc<"assets">[] = [];
       if (existing.sourceListingId) {
-        const listing = await ctx.db.get(existing.sourceListingId);
+        listing = await ctx.db.get(existing.sourceListingId);
         assertOwner(listing, ownerId, "Source listing");
+        members = listing ? await listingMembers(ctx, listing) : [];
+      }
+      if (!members.length) {
+        const asset = await ctx.db.get(existing.assetId);
+        assertOwner(asset, ownerId, "Inventory item");
+        if (asset) members = [asset];
+      }
+      const soldPriceAllocations = splitAmount(args.soldPrice, members.length);
+      const feeAllocations = splitAmount(args.fees, members.length);
+      const shippingAllocations = splitAmount(args.shippingPrice, members.length);
+      for (let index = 0; index < members.length; index += 1) {
+        await ctx.db.patch(members[index]._id, {
+          status: "Sold",
+          soldPrice: soldPriceAllocations[index],
+          ...(args.fees !== undefined ? { fees: feeAllocations[index] } : {}),
+          ...(args.shippingPrice !== undefined ? { shipping: shippingAllocations[index] } : {}),
+          valueSource: "Actual Sale",
+          needsValueCheck: false,
+          updatedAt: now,
+        });
+      }
+      if (listing && existing.sourceListingId) {
+        const saleRecord = {
+          assetId: listing.assetId,
+          listingId: listing._id,
+          platform: existing.platform,
+          reference: existing.externalListingId,
+          saleChannelDetail: args.saleChannelDetail || existing.platform,
+          soldDate: new Date(soldAt).toISOString().slice(0, 10),
+          soldPrice: args.soldPrice,
+          purchasePrice: members.reduce((sum, asset) => sum + (asset.purchasePrice || 0), 0),
+          shippingCharged: args.shippingPrice,
+          fees: args.fees,
+          shipping: args.shippingPrice,
+          notes: args.notes ?? existing.notes,
+          updatedAt: now,
+        };
         await ctx.db.patch(existing.sourceListingId, {
           salePlatform: existing.platform,
           saleChannelDetail: args.saleChannelDetail || existing.platform,
           soldPrice: args.soldPrice,
-          soldDate: new Date(soldAt).toISOString().slice(0, 10),
-          status: listing?.status === "Active" ? "Active" : "Sold",
-          ebayLastError: listing?.platform === "eBay" && listing.status === "Active" ? "Cross-list sold elsewhere. End the live eBay listing to avoid double-selling." : listing?.ebayLastError,
+          soldDate: saleRecord.soldDate,
+          fees: args.fees,
+          shippingCost: args.shippingPrice,
+          status: "Sold",
+          ebayLastError: listing.platform === "eBay" && listing.status === "Active" ? "Cross-list sold elsewhere. End the live eBay listing to avoid double-selling." : listing.ebayLastError,
           updatedAt: now,
         });
+        const linkedSale = await ctx.db.query("sales").withIndex("by_listingId", (q: any) => q.eq("listingId", listing._id)).unique();
+        if (linkedSale) await ctx.db.patch(linkedSale._id, saleRecord);
+        else await ctx.db.insert("sales", { ownerId, ...saleRecord, createdAt: now });
+      } else if (members[0]) {
+        const saleRecord = {
+          assetId: members[0]._id,
+          platform: existing.platform,
+          reference: existing.externalListingId,
+          saleChannelDetail: args.saleChannelDetail || existing.platform,
+          soldDate: new Date(soldAt).toISOString().slice(0, 10),
+          soldPrice: args.soldPrice,
+          purchasePrice: members[0].purchasePrice,
+          shippingCharged: args.shippingPrice,
+          fees: args.fees,
+          shipping: args.shippingPrice,
+          notes: args.notes ?? existing.notes,
+          updatedAt: now,
+        };
+        const legacySales = await ctx.db.query("sales").withIndex("by_asset", (q: any) => q.eq("assetId", members[0]._id)).collect();
+        const legacyMatch = legacySales.find((sale: Doc<"sales">) => !sale.listingId
+          && sale.soldDate === saleRecord.soldDate
+          && (sale.platform ?? existing.platform) === existing.platform);
+        if (legacyMatch) await ctx.db.patch(legacyMatch._id, saleRecord);
+        else await ctx.db.insert("sales", { ownerId, ...saleRecord, createdAt: now });
       }
     }
     return args.id;
