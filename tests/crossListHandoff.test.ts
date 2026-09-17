@@ -7,7 +7,7 @@ test('cross-list category defaults focus Mercari and Depop by item family', () =
   assert.equal(crossListFamily('DVD', 'DVD'), 'media');
   assert.equal(crossListFamily('Pokemon Card'), 'card');
   assert.equal(defaultCrossListCategory('Mercari', 'Book', 'Paperback'), 'Books');
-  assert.equal(defaultCrossListCategory('Mercari', 'DVD', 'DVD'), 'Electronics > Movies & TV');
+  assert.equal(defaultCrossListCategory('Mercari', 'DVD', 'DVD'), 'Electronics > Movies & TV > DVDs');
   assert.equal(defaultCrossListCategory('Depop', 'Video Game', 'PS4'), 'Video Games');
 });
 

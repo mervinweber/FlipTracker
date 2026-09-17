@@ -24,9 +24,17 @@ export const CROSS_LIST_STATUSES = ['Ready', 'Needs Review', 'Listed', 'Sold', '
 export const CROSS_LIST_CATEGORY_OPTIONS: Record<CrossListPlatform, string[]> = {
   Mercari: [
     'Books',
+    'Books > Comic Books',
+    'Books > Manga',
     'Electronics > Movies & TV',
+    'Electronics > Movies & TV > DVDs',
+    'Electronics > Movies & TV > Blu-ray',
     'Electronics > Video Games',
+    'Electronics > Video Games > Games',
     'Collectibles > Trading Cards',
+    'Collectibles > Trading Cards > Pokemon',
+    'Collectibles > Trading Cards > Yu-Gi-Oh!',
+    'Collectibles > Trading Cards > Sports',
     'Women > Clothing',
     'Men > Clothing',
     'Kids > Clothing',
@@ -36,9 +44,14 @@ export const CROSS_LIST_CATEGORY_OPTIONS: Record<CrossListPlatform, string[]> = 
   ],
   Depop: [
     'Books & Media',
+    'Books & Media > Books',
+    'Books & Media > Comics & Graphic Novels',
     'Film / DVDs',
+    'Film / DVDs > DVD',
+    'Film / DVDs > Blu-ray',
     'Video Games',
     'Collectibles',
+    'Collectibles > Trading Cards',
     'Womenswear',
     'Menswear',
     'Kidswear',
@@ -69,18 +82,39 @@ export function crossListFamily(type?: string, mediaFormat?: string): CrossListF
 
 export function defaultCrossListCategory(platform: string, type?: string, mediaFormat?: string) {
   const family = crossListFamily(type, mediaFormat);
+  const value = `${type || ''} ${mediaFormat || ''}`.toLowerCase();
   if (platform === 'Mercari') {
-    if (family === 'book') return 'Books';
-    if (family === 'media') return 'Electronics > Movies & TV';
+    if (family === 'book') {
+      if (value.includes('comic') || value.includes('graphic novel')) return 'Books > Comic Books';
+      if (value.includes('manga')) return 'Books > Manga';
+      return 'Books';
+    }
+    if (family === 'media') {
+      if (value.includes('blu')) return 'Electronics > Movies & TV > Blu-ray';
+      if (value.includes('dvd')) return 'Electronics > Movies & TV > DVDs';
+      return 'Electronics > Movies & TV';
+    }
     if (family === 'videoGame') return 'Electronics > Video Games';
-    if (family === 'card') return 'Collectibles > Trading Cards';
+    if (family === 'card') {
+      if (value.includes('pokemon')) return 'Collectibles > Trading Cards > Pokemon';
+      if (value.includes('yu-gi')) return 'Collectibles > Trading Cards > Yu-Gi-Oh!';
+      if (value.includes('sports')) return 'Collectibles > Trading Cards > Sports';
+      return 'Collectibles > Trading Cards';
+    }
     if (family === 'clothing') return 'Men > Clothing';
     return 'Other';
   }
-  if (family === 'book') return 'Books & Media';
-  if (family === 'media') return 'Film / DVDs';
+  if (family === 'book') {
+    if (value.includes('comic') || value.includes('graphic novel') || value.includes('manga')) return 'Books & Media > Comics & Graphic Novels';
+    return 'Books & Media > Books';
+  }
+  if (family === 'media') {
+    if (value.includes('blu')) return 'Film / DVDs > Blu-ray';
+    if (value.includes('dvd')) return 'Film / DVDs > DVD';
+    return 'Film / DVDs';
+  }
   if (family === 'videoGame') return 'Video Games';
-  if (family === 'card') return 'Collectibles';
+  if (family === 'card') return 'Collectibles > Trading Cards';
   if (family === 'clothing') return 'Menswear';
   return 'Everything Else';
 }
@@ -118,6 +152,19 @@ export function buildCrossListDescription(source: CrossListSource) {
     source.notes?.trim(),
   ].filter(Boolean);
   return parts.join('\n\n').slice(0, 1000);
+}
+
+export function buildCrossListClipboardPack(source: CrossListSource) {
+  return [
+    `Title: ${source.title || ''}`,
+    `Price: ${source.price !== undefined ? `$${source.price.toFixed(2)}` : ''}`,
+    `Category: ${source.platformCategory || defaultCrossListCategory(source.platform || 'Mercari', source.type, source.mediaFormat)}`,
+    `Condition: ${normalizeCrossListCondition(source.condition, source.type, source.mediaFormat)}`,
+    `SKU: ${source.sku || ''}`,
+    source.barcode ? `Identifier: ${source.barcode}` : '',
+    '',
+    buildCrossListDescription(source),
+  ].filter((line, index, lines) => line || lines[index - 1]).join('\n');
 }
 
 function csvEscape(value: string | number | undefined) {

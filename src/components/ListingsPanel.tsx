@@ -1823,7 +1823,27 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     try {
       const result = await bulkCreateCrossListingsFromListings({ listingIds, platforms: ['Mercari', 'Depop'] });
       setSelectedIds(new Set());
-      setEbayNotice(`Created ${result.created} Mercari/Depop cross-list row${result.created === 1 ? '' : 's'}. Open the Cross-List tab to review and hand off.`);
+      const updated = 'updated' in result ? result.updated : 0;
+      setEbayNotice(`Cross-list queue updated: ${result.created} created${updated ? `, ${updated} refreshed` : ''}. Open the Cross-List tab to review and hand off.`);
+    } catch (error) {
+      setEbayError(error instanceof Error ? error.message : 'Could not create cross-list rows.');
+    } finally {
+      setQueueBusy(false);
+    }
+  }
+
+  async function crossListOneListing(listing: Listing) {
+    if (listing.platform !== 'eBay' || !['Draft', 'Pending', 'Active'].includes(listing.status)) {
+      setEbayError('Only eBay Draft, Pending, or Active listings can be sent to the cross-list queue.');
+      return;
+    }
+    setQueueBusy(true);
+    setEbayError('');
+    setEbayNotice('');
+    try {
+      const result = await bulkCreateCrossListingsFromListings({ listingIds: [listing._id], platforms: ['Mercari', 'Depop'] });
+      const updated = 'updated' in result ? result.updated : 0;
+      setEbayNotice(`Cross-list rows ready for "${listing.title}": ${result.created} created${updated ? `, ${updated} refreshed` : ''}. Open the Cross-List tab to hand off.`);
     } catch (error) {
       setEbayError(error instanceof Error ? error.message : 'Could not create cross-list rows.');
     } finally {
@@ -2433,6 +2453,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                     {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="rowPrimaryAction ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => publishToEbay(listing)}><Rocket size={15}/> Publish</button> : listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="rowPrimaryAction ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => sendToEbay(listing)}><CloudUpload size={15}/> Stage</button> : listing.status === 'Active' && listing.platform === 'eBay' && listing.externalListingId ? <button className="rowPrimaryAction ebayRepriceButton" disabled={repriceBusy} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={15}/> Price</button> : listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '') ? <button className="rowPrimaryAction fulfillmentButton" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/> Ship</button> : listing.status === 'Sold' ? <button className="rowPrimaryAction saleCloseButton" onClick={() => openSaleEditor(listing)}><DollarSign size={15}/> Sale</button> : <button className="rowPrimaryAction fastReviewRowButton" disabled={smartPrepareBusy} onClick={() => void openSmartPrepare(listing)}><WandSparkles size={15}/> Prepare</button>}
                     <details className="rowActionMenu"><summary aria-label={`More actions for ${listing.title}`} title="More actions"><MoreHorizontal size={17}/></summary><div>
                       <button className="secondary" onClick={() => openListingEditor(listing)}><Pencil size={15}/> Edit record</button>
+                      {listing.platform === 'eBay' && ['Draft', 'Pending', 'Active'].includes(listing.status) ? <button className="secondary" disabled={queueBusy} onClick={() => crossListOneListing(listing)}><ShoppingBag size={15}/> Cross-list</button> : null}
                       {listing.status !== 'Sold' ? <button className="secondary" onClick={() => requestSaleEditor(listing)}><DollarSign size={15}/> Record sale</button> : null}
                       {listing.status === 'Sold' ? <button className="secondary" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/> Fulfillment</button> : null}
                       {listing.platform === 'eBay' && listing.status === 'Active' && listing.externalListingId ? <button className="secondary" disabled={endListingBusy || !adminKey} onClick={() => { setEndListingError(''); setEndListingPrompt(listing); }}><CircleStop size={15}/> End listing</button> : null}

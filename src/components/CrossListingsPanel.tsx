@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import {
   buildCrossListDescription,
+  buildCrossListClipboardPack,
   buildDepopCsv,
   CROSS_LIST_CATEGORY_OPTIONS,
   CROSS_LIST_PLATFORMS,
@@ -83,6 +84,8 @@ type SourceListingOption = {
 
 type EditDraft = {
   id: Id<'crossListings'>;
+  platform: string;
+  assetType?: string;
   title: string;
   description: string;
   platformCategory: string;
@@ -106,6 +109,14 @@ type SoldDraft = {
   shippingPrice: string;
   soldAt: string;
   saleChannelDetail: string;
+  notes: string;
+};
+
+type ListedDraft = {
+  id: Id<'crossListings'>;
+  title: string;
+  listingUrl: string;
+  externalListingId: string;
   notes: string;
 };
 
@@ -166,6 +177,7 @@ export default function CrossListingsPanel() {
   const [sourcePlatform, setSourcePlatform] = useState('Mercari');
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [soldDraft, setSoldDraft] = useState<SoldDraft | null>(null);
+  const [listedDraft, setListedDraft] = useState<ListedDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -183,6 +195,19 @@ export default function CrossListingsPanel() {
 
   const selectedRows = useMemo(() => filtered.filter((row) => selectedIds.has(row._id)), [filtered, selectedIds]);
   const depopReady = selectedRows.filter((row) => row.platform === 'Depop');
+  const dashboard = useMemo(() => {
+    const base = rows || [];
+    const needsPhotos = base.filter((row) => row.status === 'Needs Review' && rowNeeds(row).includes('public photo')).length;
+    return {
+      total: base.length,
+      ready: base.filter((row) => row.status === 'Ready').length,
+      needsReview: base.filter((row) => row.status === 'Needs Review').length,
+      needsPhotos,
+      needsPrice: base.filter((row) => row.status === 'Needs Review' && rowNeeds(row).includes('price')).length,
+      listed: base.filter((row) => row.status === 'Listed').length,
+      sold: base.filter((row) => row.status === 'Sold').length,
+    };
+  }, [rows]);
 
   function toggleSelected(id: Id<'crossListings'>) {
     setSelectedIds((current) => {
@@ -229,6 +254,8 @@ export default function CrossListingsPanel() {
   function openEdit(row: CrossListing) {
     setEditDraft({
       id: row._id,
+      platform: row.platform,
+      assetType: row.assetType || row.category,
       title: row.title,
       description: row.description || '',
       platformCategory: row.platformCategory || defaultCrossListCategory(row.platform, row.assetType),
@@ -313,8 +340,38 @@ export default function CrossListingsPanel() {
     }
   }
 
-  async function markListed(row: CrossListing) {
-    await updateCrossListing({ id: row._id, status: 'Listed', listedAt: Date.now(), handoffStatus: 'Listed' });
+  function openListed(row: CrossListing) {
+    setListedDraft({
+      id: row._id,
+      title: row.title,
+      listingUrl: row.listingUrl || '',
+      externalListingId: row.externalListingId || '',
+      notes: row.notes || '',
+    });
+    setError('');
+  }
+
+  async function saveListed() {
+    if (!listedDraft) return;
+    setBusy(true);
+    setError('');
+    try {
+      await updateCrossListing({
+        id: listedDraft.id,
+        status: 'Listed',
+        listedAt: Date.now(),
+        handoffStatus: 'Listed',
+        listingUrl: listedDraft.listingUrl.trim() || undefined,
+        externalListingId: listedDraft.externalListingId.trim() || undefined,
+        notes: listedDraft.notes.trim() || undefined,
+      });
+      setListedDraft(null);
+      setMessage('Marketplace listing logged.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to log marketplace listing.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function prepareSelected() {
@@ -339,6 +396,21 @@ export default function CrossListingsPanel() {
     })));
     downloadText(`fliptracker-depop-${new Date().toISOString().slice(0, 10)}.csv`, csv);
     setMessage(`Exported ${depopReady.length} Depop row${depopReady.length === 1 ? '' : 's'}.`);
+  }
+
+  function copyPack(row: CrossListing) {
+    return copyText(buildCrossListClipboardPack({
+      platform: row.platform,
+      title: row.title,
+      description: row.description,
+      type: row.assetType || row.category,
+      condition: row.condition,
+      price: row.price,
+      sku: row.sku,
+      barcode: row.assetBarcode,
+      platformCategory: row.platformCategory,
+      notes: row.notes,
+    }), `${row.platform} handoff pack`, setMessage);
   }
 
   async function deleteRow(row: CrossListing) {
@@ -366,6 +438,16 @@ export default function CrossListingsPanel() {
         <select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option>All</option>{CROSS_LIST_PLATFORMS.map((platform) => <option key={platform}>{platform}</option>)}</select>
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All</option>{CROSS_LIST_STATUSES.map((status) => <option key={status}>{status}</option>)}</select>
         <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option>All</option><option>Inventory</option><option>eBay Listing</option><option>eBay Bundle</option></select>
+      </section>
+
+      <section className="crossListDashboard" aria-label="Cross-list status dashboard">
+        <button onClick={() => setStatusFilter('All')}><span>Total</span><strong>{dashboard.total}</strong></button>
+        <button className="ready" onClick={() => setStatusFilter('Ready')}><span>Ready</span><strong>{dashboard.ready}</strong></button>
+        <button className="attention" onClick={() => setStatusFilter('Needs Review')}><span>Needs Review</span><strong>{dashboard.needsReview}</strong></button>
+        <button className={dashboard.needsPhotos ? 'attention' : ''} onClick={() => setStatusFilter('Needs Review')}><span>Needs Photos</span><strong>{dashboard.needsPhotos}</strong></button>
+        <button className={dashboard.needsPrice ? 'attention' : ''} onClick={() => setStatusFilter('Needs Review')}><span>Needs Price</span><strong>{dashboard.needsPrice}</strong></button>
+        <button onClick={() => setStatusFilter('Listed')}><span>Listed</span><strong>{dashboard.listed}</strong></button>
+        <button onClick={() => setStatusFilter('Sold')}><span>Sold</span><strong>{dashboard.sold}</strong></button>
       </section>
 
       <section className="queueCommandBar crossListCommandBar">
@@ -398,11 +480,14 @@ export default function CrossListingsPanel() {
                     <td><strong>{row.platformCategory || defaultCrossListCategory(row.platform, row.assetType || row.category)}</strong><small>{row.handoffStatus || 'Not prepared'}{row.lastPreparedAt ? ` · ${new Date(row.lastPreparedAt).toLocaleDateString()}` : ''}</small></td>
                     <td className="tableActionsCell"><div className="rowActions">
                       <button onClick={() => openEdit(row)}><Save size={14}/> Review</button>
+                      <button className="secondary" onClick={() => copyPack(row)}><Copy size={14}/> Copy Pack</button>
                       <button className="secondary" onClick={() => copyText(row.title, 'Title', setMessage)}><Copy size={14}/> Title</button>
                       <button className="secondary" onClick={() => copyText(buildCrossListDescription({ description: row.description, barcode: row.assetBarcode, notes: row.notes }), 'Description', setMessage)}><Copy size={14}/> Desc</button>
+                      <button className="secondary" onClick={() => copyText(row.price !== undefined ? row.price.toFixed(2) : '', 'Price', setMessage)}><Copy size={14}/> Price</button>
+                      <button className="secondary" onClick={() => copyText(row.sku || row.assetBarcode || '', 'SKU', setMessage)}><Copy size={14}/> SKU</button>
                       {sellUrl(row.platform) ? <a className="button secondary" href={sellUrl(row.platform)} target="_blank" rel="noreferrer"><ExternalLink size={14}/> Sell</a> : null}
                       {row.listingUrl ? <a className="button secondary" href={row.listingUrl} target="_blank" rel="noreferrer"><ExternalLink size={14}/> Live</a> : null}
-                      {row.status !== 'Listed' ? <button className="secondary" onClick={() => markListed(row)}><LinkIcon size={14}/> Listed</button> : null}
+                      {row.status !== 'Listed' ? <button className="secondary" onClick={() => openListed(row)}><LinkIcon size={14}/> Listed</button> : null}
                       {row.status !== 'Sold' ? <button className="secondary" onClick={() => openSold(row)}><BadgeDollarSign size={14}/> Sold</button> : null}
                       <button className="danger iconButton" aria-label={`Delete ${row.title}`} onClick={() => deleteRow(row)}><Trash2 size={14}/></button>
                     </div></td>
@@ -436,9 +521,14 @@ export default function CrossListingsPanel() {
           <section className="modal crossListingsModal">
             <header className="modalHeader"><div><h2>Review Cross-List Row</h2><p>Adjust the marketplace-facing details before handoff.</p></div><button className="iconButton secondary" onClick={() => setEditDraft(null)} aria-label="Close editor"><X size={18}/></button></header>
             <div className="formGrid">
+              <div className="crossListPreview span2">
+                <div><span>Title</span><strong>{editDraft.title || 'Untitled'}</strong><small>{editDraft.title.length}/{crossListTitleLimit(editDraft.platform)} characters</small></div>
+                <div><span>Price</span><strong>{editDraft.price ? money(Number(editDraft.price)) : 'No price'}</strong><small>{editDraft.platformCategory || defaultCrossListCategory(editDraft.platform, editDraft.assetType)}</small></div>
+                <p>{buildCrossListDescription({ description: editDraft.description, notes: editDraft.notes }).slice(0, 260) || 'No description yet.'}</p>
+              </div>
               <label className="span2">Title<input value={editDraft.title} onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })}/></label>
               <label className="span2">Description<textarea value={editDraft.description} onChange={(event) => setEditDraft({ ...editDraft, description: event.target.value })}/></label>
-              <label>Category<select value={editDraft.platformCategory} onChange={(event) => setEditDraft({ ...editDraft, platformCategory: event.target.value })}><option value="">Choose category</option>{[...CROSS_LIST_CATEGORY_OPTIONS.Mercari, ...CROSS_LIST_CATEGORY_OPTIONS.Depop].filter((value, index, all) => all.indexOf(value) === index).map((category) => <option key={category}>{category}</option>)}</select></label>
+              <label>Category<select value={editDraft.platformCategory} onChange={(event) => setEditDraft({ ...editDraft, platformCategory: event.target.value })}><option value="">Choose category</option>{(CROSS_LIST_CATEGORY_OPTIONS[editDraft.platform as 'Mercari' | 'Depop'] || []).map((category) => <option key={category}>{category}</option>)}</select></label>
               <label>Condition<input value={editDraft.condition} onChange={(event) => setEditDraft({ ...editDraft, condition: event.target.value })}/></label>
               <label>Price<input type="number" inputMode="decimal" value={editDraft.price} onChange={(event) => setEditDraft({ ...editDraft, price: event.target.value })}/></label>
               <label>Shipping<input type="number" inputMode="decimal" value={editDraft.shippingPrice} onChange={(event) => setEditDraft({ ...editDraft, shippingPrice: event.target.value })}/></label>
@@ -448,6 +538,20 @@ export default function CrossListingsPanel() {
               <label className="span2">Notes<textarea value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })}/></label>
             </div>
             <div className="actions right"><button className="secondary" onClick={() => setEditDraft(null)}>Cancel</button><button disabled={busy} onClick={saveEdit}><Save size={16}/>{busy ? 'Saving...' : 'Save Row'}</button></div>
+          </section>
+        </div>
+      ) : null}
+
+      {listedDraft ? (
+        <div className="modalBackdrop">
+          <section className="modal crossListingsModal soldListingModal">
+            <header className="modalHeader"><div><h2>Log Marketplace Listing</h2><p>{listedDraft.title}</p></div><button className="iconButton secondary" onClick={() => setListedDraft(null)} aria-label="Close listed editor"><X size={18}/></button></header>
+            <div className="formGrid">
+              <label className="span2">Listing URL<input value={listedDraft.listingUrl} onChange={(event) => setListedDraft({ ...listedDraft, listingUrl: event.target.value })} placeholder="Paste the Mercari or Depop listing link"/></label>
+              <label>External ID<input value={listedDraft.externalListingId} onChange={(event) => setListedDraft({ ...listedDraft, externalListingId: event.target.value })} placeholder="Optional marketplace ID"/></label>
+              <label className="span2">Notes<textarea value={listedDraft.notes} onChange={(event) => setListedDraft({ ...listedDraft, notes: event.target.value })} placeholder="Any handoff notes, buyer-facing changes, or marketplace-specific details"/></label>
+            </div>
+            <div className="actions right"><button className="secondary" onClick={() => setListedDraft(null)}>Cancel</button><button disabled={busy} onClick={saveListed}><LinkIcon size={16}/>{busy ? 'Saving...' : 'Mark Listed'}</button></div>
           </section>
         </div>
       ) : null}

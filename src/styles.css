@@ -155,6 +155,14 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .crossListingsPage { display:grid; gap:18px; }
 .crossListingsHeader { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
 .crossListingsControls { display:grid; grid-template-columns:minmax(220px, 1fr) 160px 160px minmax(220px, 1fr); gap:12px; margin-bottom:0; }
+.crossListDashboard { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
+.crossListDashboard button { display:block; min-height:64px; padding:10px 12px; text-align:left; border:0; border-radius:0; background:var(--surface); }
+.crossListDashboard button:hover { background:var(--surface-2); }
+.crossListDashboard span, .crossListDashboard strong { display:block; }
+.crossListDashboard span { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
+.crossListDashboard strong { margin-top:3px; font-size:23px; }
+.crossListDashboard .ready strong { color:#86efac; }
+.crossListDashboard .attention strong { color:#fbbf24; }
 .panelHint { display:flex; align-items:center; gap:8px; min-height:42px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-3); color:var(--muted); font-size:13px; font-weight:700; }
 .panelHint svg { flex:0 0 auto; color:#7dd3fc; }
 .linkedAccountsPanel { display:grid; gap:16px; }
@@ -171,19 +179,28 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .linkedAccountCard p { margin:0; line-height:1.45; }
 .linkedAccountActions { display:flex; flex-wrap:wrap; gap:8px; }
 .linkedAccountsNote { margin:0; color:var(--muted); font-size:12px; line-height:1.45; }
-.crossListingsTable { min-width:1120px; table-layout:fixed; }
-.crossListingsTable th:nth-child(1) { width:11%; }
-.crossListingsTable th:nth-child(2) { width:28%; }
-.crossListingsTable th:nth-child(3) { width:9%; }
-.crossListingsTable th:nth-child(4) { width:9%; }
-.crossListingsTable th:nth-child(5) { width:10%; }
-.crossListingsTable th:nth-child(6) { width:20%; }
-.crossListingsTable th:nth-child(7) { width:13%; }
-.crossListingsTable td:nth-child(2) strong,
-.crossListingsTable td:nth-child(2) small { display:block; min-width:0; overflow-wrap:anywhere; word-break:break-word; }
-.crossListingsTable td:nth-child(2) small { line-height:1.2; }
-.crossListingsTable td:nth-child(3) small { display:block; margin-top:4px; color:var(--muted); line-height:1.25; }
+.crossListingsTable { min-width:1240px; table-layout:fixed; }
+.crossListingsTable th:nth-child(1) { width:7%; }
+.crossListingsTable th:nth-child(2) { width:9%; }
+.crossListingsTable th:nth-child(3) { width:25%; }
+.crossListingsTable th:nth-child(4) { width:10%; }
+.crossListingsTable th:nth-child(5) { width:11%; }
+.crossListingsTable th:nth-child(6) { width:9%; }
+.crossListingsTable th:nth-child(7) { width:14%; }
+.crossListingsTable th:nth-child(8) { width:15%; }
+.crossListingsTable td:nth-child(3) strong,
+.crossListingsTable td:nth-child(3) small { display:block; min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+.crossListingsTable td:nth-child(3) small { line-height:1.2; }
+.crossListingsTable td:nth-child(4) small,
+.crossListingsTable td:nth-child(5) small,
+.crossListingsTable td:nth-child(7) small { display:block; margin-top:4px; color:var(--muted); line-height:1.25; overflow-wrap:anywhere; }
 .crossListingsModal { width:min(980px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); }
+.crossListPreview { display:grid; gap:10px; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
+.crossListPreview div { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:4px 12px; align-items:start; }
+.crossListPreview span { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
+.crossListPreview strong { min-width:0; overflow-wrap:anywhere; }
+.crossListPreview small { color:var(--muted); font-size:12px; }
+.crossListPreview p { margin:0; color:var(--muted); font-size:13px; line-height:1.4; overflow-wrap:anywhere; }
 .linkedAccountNotice { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border:1px solid rgba(20,184,166,.45); border-radius:8px; background:rgba(20,184,166,.08); color:#d1fae5; }
 .linkedAccountNotice strong, .linkedAccountNotice small { display:block; }
 .linkedAccountNotice small { margin-top:4px; color:var(--muted); line-height:1.35; }
