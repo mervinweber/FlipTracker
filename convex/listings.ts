@@ -18,6 +18,15 @@ function bundleFamily(asset: { type?: string; mediaFormat?: string; cardGame?: s
   return `other:${(asset.type || asset.mediaFormat || "general").toLowerCase()}`;
 }
 
+function splitAmount(amount: number | undefined, count: number) {
+  if (amount === undefined) return [];
+  const safeCount = Math.max(1, count);
+  const cents = Math.round(amount * 100);
+  const base = Math.floor(cents / safeCount);
+  const remainder = cents - base * safeCount;
+  return Array.from({ length: safeCount }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
+}
+
 const listingFields = {
   platform: v.string(),
   salePlatform: v.optional(v.string()),
@@ -497,6 +506,9 @@ export const update = mutation({
       const soldDate = patch.soldDate ?? new Date(now).toISOString().slice(0, 10);
       const fees = patch.fees ?? existing.fees;
       const shipping = patch.shippingCost ?? existing.shippingCost;
+      const soldPriceAllocations = splitAmount(soldPrice, memberIds.length);
+      const feeAllocations = splitAmount(fees, memberIds.length);
+      const shippingAllocations = splitAmount(shipping, memberIds.length);
       const salePlatform = patch.salePlatform ?? existing.salePlatform ?? existing.platform;
       const saleRecord = {
         assetId: existing.assetId,
@@ -516,7 +528,10 @@ export const update = mutation({
       };
       for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], {
         status: "Sold",
-        ...(index === 0 ? { soldPrice, fees, shipping, valueSource: "Actual Sale" } : {}),
+        soldPrice: soldPriceAllocations[index],
+        ...(fees !== undefined ? { fees: feeAllocations[index] } : {}),
+        ...(shipping !== undefined ? { shipping: shippingAllocations[index] } : {}),
+        valueSource: "Actual Sale",
         needsValueCheck: false,
         ...(purchasePrice !== undefined && memberIds.length === 1 ? { purchasePrice } : {}),
         updatedAt: now,

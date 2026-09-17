@@ -334,6 +334,15 @@ function moneyRound(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function splitAmount(amount: number | undefined, count: number) {
+  if (amount === undefined) return [];
+  const safeCount = Math.max(1, count);
+  const cents = Math.round(amount * 100);
+  const base = Math.floor(cents / safeCount);
+  const remainder = cents - base * safeCount;
+  return Array.from({ length: safeCount }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
+}
+
 function suggestedListingPrice(value: number) {
   if (value <= 1) return moneyRound(value);
   return moneyRound(Math.max(0.99, Math.floor(value) + 0.99));
@@ -1081,6 +1090,8 @@ export const reconcileSoldOrderLine = internalMutation({
     const bundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).collect();
     const memberIds = bundleLinks.length ? bundleLinks.sort((a, b) => a.position - b.position).map((link) => link.assetId) : [listing.assetId];
     const memberAssets = (await Promise.all(memberIds.map((assetId) => ctx.db.get(assetId)))).filter((row) => row !== null);
+    const soldPriceAllocations = splitAmount(args.soldPrice, memberIds.length);
+    const feeAllocations = splitAmount(args.fees, memberIds.length);
     const nextFulfillmentStatus = fulfillmentStatus === "Shipped" ? "Shipped" : listing.fulfillmentStatus || fulfillmentStatus;
     const alreadyCurrent = listing.status === "Sold"
       && listing.ebayOrderId === args.orderId
@@ -1096,7 +1107,14 @@ export const reconcileSoldOrderLine = internalMutation({
         fulfillmentStatus: nextFulfillmentStatus,
         updatedAt: now,
       });
-      for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], { status: "Sold", ...(index === 0 ? { soldPrice: args.soldPrice, fees: args.fees, valueSource: "Actual Sale" } : {}), needsValueCheck: false, updatedAt: now });
+      for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], {
+        status: "Sold",
+        soldPrice: soldPriceAllocations[index],
+        ...(args.fees !== undefined ? { fees: feeAllocations[index] } : {}),
+        valueSource: "Actual Sale",
+        needsValueCheck: false,
+        updatedAt: now,
+      });
       return { matched: true, updated: false, imported: false };
     }
 
@@ -1117,7 +1135,14 @@ export const reconcileSoldOrderLine = internalMutation({
       ebayLastError: undefined,
       updatedAt: now,
     });
-    for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], { status: "Sold", ...(index === 0 ? { soldPrice: args.soldPrice, fees: args.fees, valueSource: "Actual Sale" } : {}), needsValueCheck: false, updatedAt: now });
+    for (let index = 0; index < memberIds.length; index += 1) await ctx.db.patch(memberIds[index], {
+      status: "Sold",
+      soldPrice: soldPriceAllocations[index],
+      ...(args.fees !== undefined ? { fees: feeAllocations[index] } : {}),
+      valueSource: "Actual Sale",
+      needsValueCheck: false,
+      updatedAt: now,
+    });
     const existingSale = await ctx.db.query("sales").withIndex("by_listingId", (q) => q.eq("listingId", listing._id)).unique();
     const saleRecord = {
       assetId: listing.assetId,
