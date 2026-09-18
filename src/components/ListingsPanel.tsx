@@ -168,7 +168,7 @@ type ActivePricingResult = {
 };
 
 type RepriceMode = 'percentage' | 'exact' | 'profit';
-type ListingWorkspaceView = 'Queue' | 'Active' | 'Shipping' | 'Sold' | 'Attention';
+type ListingWorkspaceView = 'Today' | 'Queue' | 'Active' | 'Shipping' | 'Sold' | 'Attention';
 type ListingEditorStep = 'details' | 'shipping' | 'price';
 
 const LISTING_EDITOR_STEPS: Array<{ id: ListingEditorStep; label: string }> = [
@@ -564,7 +564,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setEditing((current) => current ? { ...current, hasActualPhoto: true, actualPhotoCount: (current.actualPhotoCount || 0) + 1 } : current);
   }, []);
   const [query, setQuery] = useState('');
-  const [workspaceView, setWorkspaceView] = useState<ListingWorkspaceView>('Queue');
+  const [workspaceView, setWorkspaceView] = useState<ListingWorkspaceView>('Today');
   const [status, setStatus] = useState('All');
   const [platform, setPlatform] = useState('All');
   const [queueType, setQueueType] = useState('All');
@@ -766,6 +766,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     ...operationsListings.map(({ listing }) => listing._id),
   ]), [exceptionListings, operationsListings]);
   const filtered = useMemo(() => filteredByControls.filter((listing) => {
+    if (workspaceView === 'Today') return false;
     if (workspaceView === 'Queue') return ['Draft', 'Pending'].includes(listing.status);
     if (workspaceView === 'Active') return listing.status === 'Active';
     if (workspaceView === 'Shipping') return listing.status === 'Sold'
@@ -775,18 +776,19 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     return attentionIds.has(listing._id);
   }), [attentionIds, filteredByControls, fulfillmentFilter, workspaceView]);
   const shippingListings = useMemo(() => (listings || []).filter((listing) => listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '')), [listings]);
-  const workspaceCounts = useMemo(() => ({
-    Queue: (listings || []).filter((listing) => ['Draft', 'Pending'].includes(listing.status)).length,
-    Active: (listings || []).filter((listing) => listing.status === 'Active').length,
-    Shipping: shippingListings.length,
-    Sold: (listings || []).filter((listing) => listing.status === 'Sold').length,
-    Attention: attentionIds.size,
-  }), [attentionIds, listings, shippingListings.length]);
   const todayOperations = useMemo(() => buildTodayOperations(listings || [], (listing) => ({
     blockingIssues: (readinessByListingId.get(listing._id) || []).filter((issue) => issue.blocking && !['shippingPolicy', 'paymentPolicy', 'returnPolicy', 'inventoryLocation'].includes(issue.field)).length,
     queueStage: queueStatus(listing),
     operationsIssue: listingOperationsIssue(listing) || undefined,
   })), [listings, readinessByListingId]);
+  const workspaceCounts = useMemo(() => ({
+    Today: todayOperations.length,
+    Queue: (listings || []).filter((listing) => ['Draft', 'Pending'].includes(listing.status)).length,
+    Active: (listings || []).filter((listing) => listing.status === 'Active').length,
+    Shipping: shippingListings.length,
+    Sold: (listings || []).filter((listing) => listing.status === 'Sold').length,
+    Attention: attentionIds.size,
+  }), [attentionIds, listings, shippingListings.length, todayOperations.length]);
   const todayCounts = useMemo(() => ({
     fulfillment: todayOperations.filter((operation) => operation.kind === 'fulfillment').length,
     exception: todayOperations.filter((operation) => operation.kind === 'exception').length,
@@ -1809,6 +1811,14 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSelectedIds(allSelected ? new Set() : new Set(queueIds));
   }
 
+  function openWorkspace(view: ListingWorkspaceView, options: { queueStage?: string; fulfillmentStage?: string } = {}) {
+    setWorkspaceView(view);
+    setStatus('All');
+    setQueueType(options.queueStage || 'All');
+    setFulfillmentFilter(options.fulfillmentStage || 'All');
+    setSelectedIds(new Set());
+  }
+
   async function crossListSelectedListings() {
     const listingIds = selectedListings
       .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending', 'Active'].includes(listing.status))
@@ -2254,7 +2264,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       </section>
 
       <nav className="listingWorkspaceTabs" aria-label="Listing lifecycle views">
-        {(['Queue', 'Active', 'Shipping', 'Sold', 'Attention'] as ListingWorkspaceView[]).map((view) => <button key={view} className={workspaceView === view ? 'active' : 'secondary'} onClick={() => { setWorkspaceView(view); setStatus('All'); setQueueType('All'); setFulfillmentFilter('All'); setSelectedIds(new Set()); }}><span>{view === 'Attention' ? 'Needs Attention' : view === 'Active' ? 'Tracked active' : view}</span><b>{workspaceCounts[view]}</b></button>)}
+        {(['Today', 'Queue', 'Active', 'Shipping', 'Sold', 'Attention'] as ListingWorkspaceView[]).map((view) => <button key={view} className={workspaceView === view ? 'active' : 'secondary'} onClick={() => openWorkspace(view)}><span>{view === 'Attention' ? 'Needs Attention' : view === 'Active' ? 'Tracked active' : view}</span><b>{workspaceCounts[view]}</b></button>)}
       </nav>
 
       {workspaceView === 'Shipping' ? <section className="panel shippingWorkspacePanel">
@@ -2263,11 +2273,19 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <p className="shippingApiNote"><ShieldCheck size={15}/> eBay’s public Fulfillment API accepts carrier and tracking. Outbound label purchase remains in eBay Labels, then FlipTracker submits and records the shipment.</p>
       </section> : null}
 
-      {workspaceView === 'Attention' && todayOperations.length ? <section className={`panel todayOperationsPanel ${todayOperations.length ? 'hasWork' : ''}`}>
+      {(workspaceView === 'Today' || workspaceView === 'Attention') ? <section className={`panel todayOperationsPanel ${todayOperations.length ? 'hasWork' : ''}`}>
         <div className="todayOperationsHeader">
           <div><p className="eyebrow">Today</p><h2>{todayOperations.length ? `${todayOperations.length} action${todayOperations.length === 1 ? '' : 's'} move the business forward` : 'Today queue is clear'}</h2><p>Finish sold orders first, then clear listing blockers, publish ready work, and review aging inventory.</p></div>
-          <button className="secondary" onClick={() => setWorkspaceView('Queue')}><ListTodo size={16}/> Open Queue</button>
+          <button className="secondary" onClick={() => openWorkspace('Queue')}><ListTodo size={16}/> Open Queue</button>
         </div>
+        {workspaceView === 'Today' ? <div className="todayCommandGrid" aria-label="Today command dashboard">
+          <button className={todayCounts.fulfillment ? 'attention' : ''} onClick={() => openWorkspace('Shipping')}><PackageCheck size={18}/><span>Ship Orders</span><strong>{todayCounts.fulfillment}</strong><small>Pick, pack, labels, tracking</small></button>
+          <button className={todayCounts.exception ? 'attention' : ''} onClick={() => openWorkspace('Attention')}><AlertTriangle size={18}/><span>Fix Blockers</span><strong>{todayCounts.exception}</strong><small>Missing listing details</small></button>
+          <button className={todayCounts.ready ? 'ready' : ''} onClick={() => openWorkspace('Queue', { queueStage: 'Ready for eBay' })}><Rocket size={18}/><span>Stage / Publish</span><strong>{todayCounts.ready}</strong><small>Ready listing work</small></button>
+          <button onClick={() => openWorkspace('Active')}><Clock3 size={18}/><span>Review Prices</span><strong>{todayCounts.stale}</strong><small>Stale active listings</small></button>
+          <button onClick={() => openWorkspace('Attention')}><RefreshCw size={18}/><span>Reconcile</span><strong>{todayCounts.reconcile}</strong><small>Sync and cleanup</small></button>
+          <button onClick={onAddOtherItem}><Plus size={18}/><span>Add Item</span><strong>{batchCompletion.total}</strong><small>Drafts in queue</small></button>
+        </div> : null}
         <div className="todayOperationMetrics" aria-label="Today's seller work">
           <div className={todayCounts.fulfillment ? 'attention' : ''}><span>Ship</span><strong>{todayCounts.fulfillment}</strong></div>
           <div className={todayCounts.exception ? 'attention' : ''}><span>Fix</span><strong>{todayCounts.exception}</strong></div>
@@ -2419,7 +2437,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
 
       {workspaceView === 'Attention' && !workspaceCounts.Attention ? <section className="panel attentionClearPanel"><CheckCircle2 size={22}/><div><h2>Nothing needs attention</h2><p>There are no listing blockers, imported-sale reviews, or eBay synchronization problems waiting.</p></div></section> : null}
 
-      <section className="panel listingControls">
+      {workspaceView !== 'Today' ? <section className="panel listingControls">
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search listings..." value={query} onChange={(event) => setQuery(event.target.value)}/></div>
         <select value={platform} onChange={(event) => setPlatform(event.target.value)}>{['All', ...PLATFORMS].map((value) => <option key={value}>{value}</option>)}</select>
         <select aria-label="Sort listings" value={sortBy} onChange={(event) => setSortBy(event.target.value as ListingSort)}>{(['Newest', 'Queue', 'Status', 'Price High', 'Price Low'] as ListingSort[]).map((value) => <option key={value} value={value}>{`Sort: ${value}`}</option>)}</select>
@@ -2430,9 +2448,9 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           {workspaceView === 'Active' ? <button className="secondary bulkMarkdownButton" disabled={!flipTrackerManagedActiveListings.length || bulkMarkdownBusy} onClick={() => openActiveListingManager()}><Clock3 size={16}/> Review Prices</button> : null}
           <details className="listingUtilityMenu"><summary aria-label="More listing tools" title="More listing tools"><MoreHorizontal size={18}/></summary><div><label className="button secondary"><Upload size={16}/> Import Old JSON<input type="file" accept="application/json,.json" hidden onChange={importOldJson}/></label><button className="secondary" onClick={exportCsv}><Download size={16}/> Export This View</button></div></details>
         </div>
-      </section>
+      </section> : null}
 
-      <section className="panel inventoryPanel">
+      {workspaceView !== 'Today' ? <section className="panel inventoryPanel">
         <div className="panelHeader"><div><h2>{workspaceView === 'Attention' ? 'Needs Attention' : workspaceView === 'Shipping' ? 'Orders Awaiting Shipment' : `${workspaceView} Listings`}</h2><p>{listings === undefined ? 'Loading Convex data...' : `${filtered.length} ${workspaceView === 'Shipping' ? 'order' : 'listing'}${filtered.length === 1 ? '' : 's'} in this view`}</p></div>{workspaceView !== 'Shipping' ? <button className="secondary" onClick={onAddOtherItem}><Plus size={16}/> Add Item</button> : null}</div>
         {listings === undefined ? <p className="panelMessage">Loading listings...</p> : filtered.length === 0 ? <div className="empty"><h2>{workspaceView === 'Shipping' ? 'No orders awaiting shipment' : 'No listings found'}</h2><p>{workspaceView === 'Shipping' ? 'Sync eBay Sales to import paid orders. Packed and awaiting-shipment orders will appear here.' : 'Create a draft from an item in Inventory, then track it through sale.'}</p></div> : (
           <div className="tableWrap">
@@ -2466,7 +2484,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
             </table>
           </div>
         )}
-      </section>
+      </section> : null}
 
       {bulkValidationOpen ? <div className="modalBackdrop"><section className="modal bulkValidationModal" role="dialog" aria-modal="true" aria-labelledby="bulk-validation-title">
         <header className="modalHeader"><div><p className="eyebrow">Batch quality review</p><h2 id="bulk-validation-title">{bulkValidationRows.length} listing{bulkValidationRows.length === 1 ? '' : 's'} validated</h2><p>{selectedListings.length ? 'Current Queue selection' : 'Current Queue view'}</p></div><button className="iconButton secondary" aria-label="Close batch validation" onClick={() => setBulkValidationOpen(false)}><X size={18}/></button></header>

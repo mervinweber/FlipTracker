@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from 'convex/react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import { Archive, ArchiveRestore, BadgeDollarSign, Barcode, BookOpen, Boxes, CalendarDays, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, LockKeyhole, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, ShoppingBag, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BadgeDollarSign, Barcode, BookOpen, Boxes, CalendarDays, Camera, Download, FolderPlus, GalleryVerticalEnd, Gauge, ImagePlus, Keyboard, LayoutList, ListChecks, LockKeyhole, MoreHorizontal, PackageSearch, Plus, RefreshCw, RotateCw, Save, Search, ShoppingBag, Sparkles, Star, Tags, Trash2, Upload, X } from 'lucide-react';
 import { InventoryItem, ListingRecommendation } from './types/inventory';
 import ListingPhotoManager from './components/ListingPhotoManager';
 import EbayCategoryFinder from './components/EbayCategoryFinder';
@@ -1394,11 +1394,16 @@ export default function App() {
         <button className={activeView === 'Inventory' ? 'active' : 'secondary'} onClick={() => changeView('Inventory')}><PackageSearch size={17}/> Inventory</button>
         <button className={activeView === 'Listings' ? 'active' : 'secondary'} onClick={() => changeView('Listings')}><LayoutList size={17}/> Listings</button>
         <button className={activeView === 'Cross' ? 'active' : 'secondary'} onClick={() => changeView('Cross')}><ShoppingBag size={17}/> Cross-List</button>
-        <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
-        <button className={activeView === 'Cards' ? 'active' : 'secondary'} onClick={() => changeView('Cards')}><GalleryVerticalEnd size={17}/> Card Scanner</button>
-        <button className={activeView === 'Photos' ? 'active' : 'secondary'} onClick={() => changeView('Photos')}><Camera size={17}/> Photos</button>
         <button className={activeView === 'Sourcing' ? 'active' : 'secondary'} onClick={() => changeView('Sourcing')}><Gauge size={17}/> Sourcing</button>
-        <button className={activeView === 'Guide' ? 'active' : 'secondary'} onClick={() => changeView('Guide')}><BookOpen size={17}/> Quick Guide</button>
+        <details className={`appToolsMenu ${['Bulk', 'Cards', 'Photos', 'Guide'].includes(activeView) ? 'active' : ''}`}>
+          <summary aria-label="Open tools menu" title="Tools"><MoreHorizontal size={17}/> Tools</summary>
+          <div>
+            <button className={activeView === 'Bulk' ? 'active' : 'secondary'} onClick={() => changeView('Bulk')}><Keyboard size={17}/> Bulk Intake</button>
+            <button className={activeView === 'Cards' ? 'active' : 'secondary'} onClick={() => changeView('Cards')}><GalleryVerticalEnd size={17}/> Card Scanner</button>
+            <button className={activeView === 'Photos' ? 'active' : 'secondary'} onClick={() => changeView('Photos')}><Camera size={17}/> Photos</button>
+            <button className={activeView === 'Guide' ? 'active' : 'secondary'} onClick={() => changeView('Guide')}><BookOpen size={17}/> Quick Guide</button>
+          </div>
+        </details>
       </nav>
 
       {activeView === 'Inventory' ? <><section className="cards">

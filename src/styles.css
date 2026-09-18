@@ -152,6 +152,12 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .viewTabs { display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:10px; }
 .viewTabs button { border:1px solid transparent; }
 .viewTabs button.active { background:var(--primary-strong); border-color:#60a5fa; }
+.appToolsMenu { position:relative; }
+.appToolsMenu summary { display:flex; align-items:center; gap:7px; min-height:40px; padding:9px 12px; border:1px solid transparent; border-radius:8px; color:var(--muted); background:var(--surface-2); font-size:14px; font-weight:800; cursor:pointer; list-style:none; }
+.appToolsMenu summary::-webkit-details-marker { display:none; }
+.appToolsMenu.active summary, .appToolsMenu[open] summary { color:var(--text); border-color:#60a5fa; background:var(--primary-strong); }
+.appToolsMenu > div { position:absolute; z-index:20; top:calc(100% + 6px); right:0; display:grid; min-width:210px; gap:6px; padding:8px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 18px 40px rgba(0,0,0,.28); }
+.appToolsMenu > div button { justify-content:flex-start; width:100%; }
 .crossListingsPage { display:grid; gap:18px; }
 .crossListingsHeader { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
 .crossListingsControls { display:grid; grid-template-columns:minmax(220px, 1fr) 160px 160px minmax(220px, 1fr); gap:12px; margin-bottom:0; }
@@ -374,6 +380,15 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .todayOperationsHeader { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
 .todayOperationsHeader h2 { margin:0; }
 .todayOperationsHeader p:not(.eyebrow) { margin:5px 0 0; font-size:13px; line-height:1.4; }
+.todayCommandGrid { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
+.todayCommandGrid button { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:4px 9px; align-items:center; min-height:88px; padding:12px; text-align:left; border:0; border-radius:0; color:var(--text); background:var(--surface); }
+.todayCommandGrid button:hover { background:var(--surface-2); }
+.todayCommandGrid svg { color:#93c5fd; }
+.todayCommandGrid span { min-width:0; font-size:12px; font-weight:900; text-transform:uppercase; }
+.todayCommandGrid strong { font-size:23px; line-height:1; }
+.todayCommandGrid small { grid-column:2 / -1; color:var(--muted); font-size:12px; line-height:1.25; }
+.todayCommandGrid button.attention strong { color:#fbbf24; }
+.todayCommandGrid button.ready strong { color:#86efac; }
 .todayOperationMetrics { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:7px; background:var(--border); }
 .todayOperationMetrics > div { min-height:62px; padding:10px 12px; background:var(--surface-3); }
 .todayOperationMetrics span, .todayOperationMetrics strong { display:block; }
@@ -722,6 +737,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .bulkMarkdownProgress { margin-top:10px; border:1px solid var(--border); border-radius:6px; }
 @media (max-width:1050px) { .sandboxSetupGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:900px) { .hero { flex-direction:column; } .actions { justify-content:flex-start; } .cards, .collectionGrid { grid-template-columns:1fr 1fr; } .controls { grid-template-columns:1fr; } .panel { overflow:auto; } }
+@media (max-width:900px) { .todayCommandGrid { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
 @media (max-width:900px) { .inventoryControls .searchWrap { grid-column:auto; } }
 @media (max-width:700px) { .accountingPanel > summary { align-items:flex-start; } .accountingMetrics { grid-template-columns:1fr 1fr; } .accountingActions { align-items:stretch; flex-direction:column; } .accountingActions button { justify-content:center; } }
 @media (max-width:900px) { .activeMaintenancePanel { grid-template-columns:1fr; } }
@@ -1037,7 +1053,8 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 @media (max-width:1050px) { .listingCards, .listingControls { grid-template-columns:1fr 1fr; } .listingControls .searchWrap, .listingTools { grid-column:1 / -1; } }
 @media (max-width:1050px) { .ebaySettingsGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:1050px) { .pricingReviewRow { grid-template-columns:minmax(220px, 1fr) minmax(180px, .8fr); } }
-@media (max-width:560px) { .viewTabs { display:flex; overflow-x:auto; scroll-snap-type:x proximity; } .viewTabs button { flex:0 0 auto; scroll-snap-align:start; } .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } .vintedMetrics { grid-template-columns:repeat(2, minmax(0, 1fr)); } .vintedFilters { grid-template-columns:1fr; } .vintedFilters .searchWrap { grid-column:auto; } .vintedListingRow { grid-template-columns:52px minmax(0, 1fr); gap:10px; padding:10px 12px; } .vintedThumb { width:48px; height:62px; } .vintedPrice { grid-column:2; grid-row:auto; justify-self:start; text-align:left; } .vintedRowActions { grid-column:1 / -1; } .vintedRowActions .button:not(.iconButton), .vintedRowActions > button:not(.iconButton) { flex:1 1 auto; justify-content:center; } }
+@media (max-width:560px) { .viewTabs { display:flex; overflow-x:auto; scroll-snap-type:x proximity; } .viewTabs button, .viewTabs .appToolsMenu { flex:0 0 auto; scroll-snap-align:start; } .appToolsMenu > div { left:0; right:auto; } .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } .vintedMetrics { grid-template-columns:repeat(2, minmax(0, 1fr)); } .vintedFilters { grid-template-columns:1fr; } .vintedFilters .searchWrap { grid-column:auto; } .vintedListingRow { grid-template-columns:52px minmax(0, 1fr); gap:10px; padding:10px 12px; } .vintedThumb { width:48px; height:62px; } .vintedPrice { grid-column:2; grid-row:auto; justify-self:start; text-align:left; } .vintedRowActions { grid-column:1 / -1; } .vintedRowActions .button:not(.iconButton), .vintedRowActions > button:not(.iconButton) { flex:1 1 auto; justify-content:center; } }
+@media (max-width:560px) { .todayCommandGrid { grid-template-columns:1fr 1fr; } .todayCommandGrid button { min-height:82px; } }
 @media (max-width:560px) { .bulkCostModes { grid-template-columns:1fr; } }
 @media (max-width:700px) { .ebayUnlockRow, .ebaySettingsGrid { grid-template-columns:1fr; } .ebaySetupActions { grid-column:auto; } .forgetDeviceButton { margin-left:0; } }
 @media (max-width:700px) { .ebayPayloadPreviewSections { grid-template-columns:1fr; } .ebayPayloadPreviewSections > section { grid-column:1; } }
