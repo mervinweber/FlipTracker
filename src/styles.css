@@ -932,6 +932,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 
 @media (max-width:640px) {
   .bundleSummary { grid-template-columns:1fr; }
+  .platformChoiceGrid, .platformStrategyNotes { grid-template-columns:1fr; }
 }
 .needsCheck td { background: rgba(245, 158, 11, 0.08); }
 @media (max-width:820px) {
@@ -967,6 +968,22 @@ textarea { min-height:92px; resize:vertical; }
 .checkRow input { width:18px; height:18px; flex:0 0 auto; accent-color:#2563eb; }
 .checkRow span { display:flex; flex-direction:column; gap:2px; }
 .checkRow small { color:var(--muted); font-weight:600; line-height:1.35; }
+.platformStrategyModal { max-width:680px; }
+.platformStrategySummary { display:grid; gap:10px; margin-bottom:14px; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
+.platformStrategySummary p { margin:0; color:#cbd5e1; font-size:13px; line-height:1.45; }
+.platformChoiceGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+.platformChoice { min-width:0; flex-direction:row; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--border-strong); border-radius:8px; background:#020617; cursor:pointer; }
+.platformChoice input { width:18px; height:18px; margin-top:2px; flex:0 0 auto; accent-color:#2563eb; }
+.platformChoice span { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.platformChoice strong { color:#e2e8f0; }
+.platformChoice small { color:var(--muted); font-size:12px; line-height:1.35; }
+.platformChoice.selected { border-color:#3b82f6; background:rgba(37,99,235,.13); }
+.platformChoice.recommended small { color:#93c5fd; }
+.platformChoice.muted { opacity:.78; }
+.platformStrategyNotes { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+.platformStrategyNotes > div { padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
+.platformStrategyNotes strong, .platformStrategyNotes small { display:block; }
+.platformStrategyNotes small { margin-top:3px; color:var(--muted); font-size:12px; line-height:1.4; }
 .reviewToggle { margin-top:12px; }
 .researchActions { margin-top:12px; justify-content:flex-start; }
 .aiCopyToolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px; border:1px solid var(--border-strong); border-radius:var(--radius); background:#020617; }

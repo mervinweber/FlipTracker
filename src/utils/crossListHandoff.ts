@@ -1,4 +1,4 @@
-export type CrossListPlatform = 'Mercari' | 'Depop';
+export type CrossListPlatform = 'Mercari' | 'Depop' | 'Vinted';
 export type CrossListFamily = 'book' | 'media' | 'videoGame' | 'card' | 'clothing' | 'general';
 
 export type CrossListSource = {
@@ -18,7 +18,7 @@ export type CrossListSource = {
   notes?: string;
 };
 
-export const CROSS_LIST_PLATFORMS: CrossListPlatform[] = ['Mercari', 'Depop'];
+export const CROSS_LIST_PLATFORMS: CrossListPlatform[] = ['Mercari', 'Depop', 'Vinted'];
 export const CROSS_LIST_STATUSES = ['Ready', 'Needs Review', 'Listed', 'Sold', 'Ended'] as const;
 
 export const CROSS_LIST_CATEGORY_OPTIONS: Record<CrossListPlatform, string[]> = {
@@ -57,6 +57,16 @@ export const CROSS_LIST_CATEGORY_OPTIONS: Record<CrossListPlatform, string[]> = 
     'Kidswear',
     'Home',
     'Everything Else',
+  ],
+  Vinted: [
+    'Entertainment > Books',
+    'Entertainment > Movies & TV',
+    'Entertainment > Video Games',
+    'Entertainment > Collectibles',
+    'Clothing',
+    'Accessories',
+    'Home',
+    'Other',
   ],
 };
 
@@ -102,6 +112,14 @@ export function defaultCrossListCategory(platform: string, type?: string, mediaF
       return 'Collectibles > Trading Cards';
     }
     if (family === 'clothing') return 'Men > Clothing';
+    return 'Other';
+  }
+  if (platform === 'Vinted') {
+    if (family === 'book') return 'Entertainment > Books';
+    if (family === 'media') return 'Entertainment > Movies & TV';
+    if (family === 'videoGame') return 'Entertainment > Video Games';
+    if (family === 'card') return 'Entertainment > Collectibles';
+    if (family === 'clothing') return 'Clothing';
     return 'Other';
   }
   if (family === 'book') {

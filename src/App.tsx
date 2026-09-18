@@ -11,6 +11,7 @@ import { resizeForListing, rotatePhotoClockwise } from './utils/listingPhotos';
 import { EBAY_CATEGORY_CHOICES, categoryChoiceForKey, resolveEbayCategory, resolveShippingProfile, type EbayCategoryKey } from './config/ebayListingDefaults';
 import { bundleDescription, bundleSuggestedPrice, bundleTitle, validateBundleItems } from './utils/listingBundles';
 import { priorityFromValue, recommendationFromAsset } from './utils/inventoryRecommendations';
+import { LISTING_PLATFORMS, defaultPlatformsFor, platformStrategyFor, type ListingPlatform } from './utils/platformStrategy';
 
 const ListingsPanel = lazy(() => import('./components/ListingsPanel'));
 const CrossListingsPanel = lazy(() => import('./components/CrossListingsPanel'));
@@ -147,6 +148,11 @@ type BulkEditDraft = {
   completeness: string;
   storageLocation: string;
   disclosure: string;
+};
+
+type ListingPlatformDraft = {
+  asset: Asset;
+  platforms: ListingPlatform[];
 };
 
 type LookupResult = {
@@ -477,6 +483,9 @@ export default function App() {
   const [bulkEditDraft, setBulkEditDraft] = useState<BulkEditDraft>({ condition: '', completeness: '', storageLocation: '', disclosure: '' });
   const [bulkEditBusy, setBulkEditBusy] = useState(false);
   const [bulkEditError, setBulkEditError] = useState('');
+  const [listingPlatformDraft, setListingPlatformDraft] = useState<ListingPlatformDraft | null>(null);
+  const [listingPlatformBusy, setListingPlatformBusy] = useState(false);
+  const [listingPlatformError, setListingPlatformError] = useState('');
   const [bundleOpen, setBundleOpen] = useState(false);
   const [bundleDraft, setBundleDraft] = useState<BundleDraft>({ title: '', description: '', price: '', condition: 'Good', shippingPlan: 'Calculated shipping' });
   const [bundleError, setBundleError] = useState('');
@@ -543,9 +552,9 @@ export default function App() {
   const collectionRows: Collection[] = collections || [];
 
   useEffect(() => {
-    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || writeOffAsset !== null || scannerOpen || bulkCostOpen || bulkEditOpen || bundleOpen);
+    document.body.classList.toggle('modalOpen', editing !== null || editingCollection !== null || researchAsset !== null || writeOffAsset !== null || scannerOpen || bulkCostOpen || bulkEditOpen || listingPlatformDraft !== null || bundleOpen);
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkCostOpen, bulkEditOpen, bundleOpen, editing, editingCollection, researchAsset, scannerOpen, writeOffAsset]);
+  }, [bulkCostOpen, bulkEditOpen, bundleOpen, editing, editingCollection, listingPlatformDraft, researchAsset, scannerOpen, writeOffAsset]);
 
   useEffect(() => {
     const visibleIds = new Set(rows.map((item) => item._id));
@@ -1053,6 +1062,22 @@ export default function App() {
     }
   }
 
+  function openListingPlatformPicker(asset: Asset) {
+    setListingPlatformError('');
+    setListingPlatformDraft({ asset, platforms: defaultPlatformsFor(asset) });
+  }
+
+  function toggleListingPlatform(platform: ListingPlatform) {
+    setListingPlatformDraft((current) => {
+      if (!current) return current;
+      const hasPlatform = current.platforms.includes(platform);
+      const platforms = hasPlatform
+        ? current.platforms.filter((value) => value !== platform)
+        : [...current.platforms, platform];
+      return { ...current, platforms };
+    });
+  }
+
   function openBulkCostEditor() {
     setBulkCostMode('splitTotal');
     setBulkCostAmount('');
@@ -1243,7 +1268,7 @@ export default function App() {
     }
   }
 
-  async function createListingDraft(asset: Asset) {
+  async function createEbayListingDraft(asset: Asset) {
     const price = asset.ebayPrice ?? effectiveHigh(asset) ?? undefined;
     await createListing({
       assetId: asset._id,
@@ -1270,6 +1295,36 @@ export default function App() {
       notes: asset.ebayShipping ? `Shipping plan: ${asset.ebayShipping}` : undefined,
       ...listingDeliveryDefaults(asset),
     });
+  }
+
+  async function createSelectedPlatformListings() {
+    if (!listingPlatformDraft || listingPlatformBusy) return;
+    if (!listingPlatformDraft.platforms.length) {
+      setListingPlatformError('Choose at least one marketplace.');
+      return;
+    }
+    const { asset, platforms } = listingPlatformDraft;
+    setListingPlatformBusy(true);
+    setListingPlatformError('');
+    try {
+      const crossListPlatforms = platforms.filter((platform) => platform !== 'eBay');
+      if (platforms.includes('eBay')) await createEbayListingDraft(asset);
+      if (crossListPlatforms.length) await bulkCreateCrossListingsFromAssets({ assetIds: [asset._id], platforms: crossListPlatforms });
+      setListingPlatformDraft(null);
+      setBulkDeleteMessage([
+        platforms.includes('eBay') ? 'Created eBay draft' : '',
+        crossListPlatforms.length ? `prepared ${crossListPlatforms.join(', ')} handoff row${crossListPlatforms.length === 1 ? '' : 's'}` : '',
+      ].filter(Boolean).join(' and ') + ` for ${asset.title}.`);
+      changeView(platforms.includes('eBay') ? 'Listings' : 'Cross');
+    } catch (error) {
+      setListingPlatformError(error instanceof Error ? error.message : 'Could not create the selected listing rows.');
+    } finally {
+      setListingPlatformBusy(false);
+    }
+  }
+
+  async function createListingDraft(asset: Asset) {
+    await createEbayListingDraft(asset);
     changeView('Listings');
   }
 
@@ -1463,7 +1518,7 @@ export default function App() {
                     <td className="inventorySourceCell"><span className={badgeClass(item.status === 'Sold' ? 'Actual Sale' : item.status === 'Written Off' ? 'Write Off' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated')}>{item.status === 'Sold' ? 'Actual Sale' : item.status === 'Written Off' ? 'Write Off' : item.needsValueCheck ? 'Needs Check' : item.valueSource || 'Estimated'}</span></td>
                     <td className="inventoryPlanCell"><span className={badgeClass(String(['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : displayedRecommendation(item)))}>{['Sold', 'Written Off'].includes(item.status || '') ? 'Completed' : displayedRecommendation(item)}</span></td>
                     <td className="inventoryStatusCell"><span className={badgeClass(item.status || 'Inventory')}>{item.status || 'Inventory'}</span></td>
-                    <td className="tableActionsCell inventoryActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button>{item.archivedAt ? <button className="secondary" onClick={() => restoreSelectedAssets([item._id])}><ArchiveRestore size={14}/> Restore</button> : ['Sold', 'Written Off', 'Purged'].includes(item.status || '') ? <button className="secondary" onClick={() => archiveSelectedAssets([item._id])}><Archive size={14}/> Archive</button> : !['Bundle'].includes(item.status || '') ? <><button title="Create an eBay draft in FlipTracker" onClick={() => createListingDraft(item)}><LayoutList size={14}/> Draft</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="secondary" title="Remove this unsold item from inventory and deduct its cost from profit" onClick={() => openWriteOff(item)}><Archive size={14}/> Write Off</button></> : null}{!item.archivedAt && !['Sold', 'Written Off', 'Bundle'].includes(item.status || '') ? <button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button> : null}</div></td>
+                    <td className="tableActionsCell inventoryActionsCell"><div className="rowActions"><button onClick={() => { setCreateDraftAfterSave(false); setMetadataNotice(''); clearPendingPhotos(); setEditing(item); }}>Edit</button>{item.archivedAt ? <button className="secondary" onClick={() => restoreSelectedAssets([item._id])}><ArchiveRestore size={14}/> Restore</button> : ['Sold', 'Written Off', 'Purged'].includes(item.status || '') ? <button className="secondary" onClick={() => archiveSelectedAssets([item._id])}><Archive size={14}/> Archive</button> : !['Bundle'].includes(item.status || '') ? <><button title="Choose where this item will be listed" onClick={() => openListingPlatformPicker(item)}><LayoutList size={14}/> List</button><button title="Open eBay completed and sold listings" onClick={() => openQuickSoldComps(item)}>Sold Comps</button>{shouldShowTerapeak(item) ? <button className="secondary" title="Open eBay Product Research for items valued at $50 or more" onClick={() => openTerapeakResearch(item)}>Terapeak</button> : null}<button className="secondary" onClick={() => openResearchLog(item)}>Log Value</button><button className="secondary" title="Remove this unsold item from inventory and deduct its cost from profit" onClick={() => openWriteOff(item)}><Archive size={14}/> Write Off</button></> : null}{!item.archivedAt && !['Sold', 'Written Off', 'Bundle'].includes(item.status || '') ? <button className="danger iconButton" aria-label={`Delete ${item.title}`} onClick={() => deleteAsset(item._id)}><Trash2 size={14}/></button> : null}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1471,6 +1526,42 @@ export default function App() {
           </div>
         )}
       </section></> : <Suspense fallback={<section className="panel"><p className="panelMessage">Loading workspace...</p></section>}>{activeView === 'Listings' ? <ListingsPanel onAddOtherItem={() => { setCreateDraftAfterSave(true); clearPendingPhotos(); setEditing(blankGeneralAsset()); }}/> : activeView === 'Cross' ? <CrossListingsPanel/> : activeView === 'Accounts' ? <LinkedAccountsPanel/> : activeView === 'Bulk' ? <BulkIntakePanel/> : activeView === 'Cards' ? <CardScannerPanel/> : activeView === 'Photos' ? <PhotoQueuePanel/> : activeView === 'Sourcing' ? <SourcingPanel/> : <QuickGuide/>}</Suspense>}
+
+      {listingPlatformDraft ? (() => {
+        const strategy = platformStrategyFor(listingPlatformDraft.asset);
+        const selected = new Set(listingPlatformDraft.platforms);
+        return (
+          <div className="modalBackdrop"><section className="modal platformStrategyModal">
+            <header className="modalHeader">
+              <div><p className="eyebrow">Listing destinations</p><h2>Where will this be listed?</h2><p>{listingPlatformDraft.asset.title}</p></div>
+              <button className="iconButton secondary" disabled={listingPlatformBusy} aria-label="Close platform picker" onClick={() => setListingPlatformDraft(null)}><X size={18}/></button>
+            </header>
+            <div className="platformStrategySummary">
+              <span className="statusPill">{strategy.label}</span>
+              <p>{strategy.note}</p>
+            </div>
+            <div className="platformChoiceGrid">
+              {LISTING_PLATFORMS.map((platform) => {
+                const isPrimary = strategy.primary.includes(platform);
+                const isOptional = strategy.optional.includes(platform);
+                const isSkipped = strategy.skip.includes(platform);
+                return (
+                  <label key={platform} className={`platformChoice ${selected.has(platform) ? 'selected' : ''} ${isPrimary ? 'recommended' : isSkipped ? 'muted' : ''}`}>
+                    <input type="checkbox" checked={selected.has(platform)} onChange={() => toggleListingPlatform(platform)}/>
+                    <span><strong>{platform}</strong><small>{isPrimary ? 'Recommended for this item' : isOptional ? 'Optional handoff' : isSkipped ? 'Usually skip' : 'Available'}</small></span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="platformStrategyNotes">
+              <div><strong>eBay</strong><small>Creates a FlipTracker eBay draft you can price, photograph, stage, and publish.</small></div>
+              <div><strong>Vinted / Mercari / Depop</strong><small>Creates marketplace handoff rows for copy, photos, URL tracking, and sold-elsewhere logging.</small></div>
+            </div>
+            {listingPlatformError ? <p className="setupNotice errorNotice">{listingPlatformError}</p> : null}
+            <div className="actions right"><button className="secondary" disabled={listingPlatformBusy} onClick={() => setListingPlatformDraft(null)}>Cancel</button><button disabled={listingPlatformBusy || !listingPlatformDraft.platforms.length} onClick={createSelectedPlatformListings}><ShoppingBag size={16}/>{listingPlatformBusy ? 'Creating...' : 'Create Selected Listings'}</button></div>
+          </section></div>
+        );
+      })() : null}
 
       {bundleOpen ? (
         <div className="modalBackdrop"><section className="modal bundleModal">

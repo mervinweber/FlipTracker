@@ -147,6 +147,7 @@ function rowNeeds(row: CrossListing) {
 function sellUrl(platform: string) {
   if (platform === 'Mercari') return 'https://www.mercari.com/sell/';
   if (platform === 'Depop') return 'https://www.depop.com/sellinghub/bulklisting/';
+  if (platform === 'Vinted') return 'https://www.vinted.com/items/new';
   return '';
 }
 
@@ -422,9 +423,9 @@ export default function CrossListingsPanel() {
     <section className="crossListingsPage">
       <header className="panel crossListingsHeader">
         <div>
-          <p className="eyebrow">Mercari / Depop handoff</p>
+          <p className="eyebrow">Marketplace handoff</p>
           <h2>Cross-List Queue</h2>
-          <p>Create marketplace-ready rows from inventory or eBay listings, then copy, export, or open the selling page.</p>
+          <p>Create marketplace-ready rows from inventory or eBay listings, then copy, export, open the selling page, or log the live URL.</p>
         </div>
         <div className="actions">
           <button className="secondary" onClick={() => setSourceMode('asset')}><PackageSearch size={16}/> From Inventory</button>
@@ -502,7 +503,7 @@ export default function CrossListingsPanel() {
       {sourceMode ? (
         <div className="modalBackdrop">
           <section className="modal crossListingsModal">
-            <header className="modalHeader"><div><h2>{sourceMode === 'asset' ? 'Create from Inventory' : 'Create from eBay Listing'}</h2><p>Creates one prepared Mercari or Depop row. eBay bundles stay bundled.</p></div><button className="iconButton secondary" onClick={() => setSourceMode(null)} aria-label="Close source picker"><X size={18}/></button></header>
+            <header className="modalHeader"><div><h2>{sourceMode === 'asset' ? 'Create from Inventory' : 'Create from eBay Listing'}</h2><p>Creates one prepared marketplace row. eBay bundles stay bundled.</p></div><button className="iconButton secondary" onClick={() => setSourceMode(null)} aria-label="Close source picker"><X size={18}/></button></header>
             <div className="formGrid">
               <label>Marketplace<select value={sourcePlatform} onChange={(event) => setSourcePlatform(event.target.value)}>{CROSS_LIST_PLATFORMS.map((platform) => <option key={platform}>{platform}</option>)}</select></label>
               {sourceMode === 'asset' ? (
@@ -528,7 +529,7 @@ export default function CrossListingsPanel() {
               </div>
               <label className="span2">Title<input value={editDraft.title} onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })}/></label>
               <label className="span2">Description<textarea value={editDraft.description} onChange={(event) => setEditDraft({ ...editDraft, description: event.target.value })}/></label>
-              <label>Category<select value={editDraft.platformCategory} onChange={(event) => setEditDraft({ ...editDraft, platformCategory: event.target.value })}><option value="">Choose category</option>{(CROSS_LIST_CATEGORY_OPTIONS[editDraft.platform as 'Mercari' | 'Depop'] || []).map((category) => <option key={category}>{category}</option>)}</select></label>
+              <label>Category<select value={editDraft.platformCategory} onChange={(event) => setEditDraft({ ...editDraft, platformCategory: event.target.value })}><option value="">Choose category</option>{(CROSS_LIST_CATEGORY_OPTIONS[editDraft.platform as keyof typeof CROSS_LIST_CATEGORY_OPTIONS] || []).map((category) => <option key={category}>{category}</option>)}</select></label>
               <label>Condition<input value={editDraft.condition} onChange={(event) => setEditDraft({ ...editDraft, condition: event.target.value })}/></label>
               <label>Price<input type="number" inputMode="decimal" value={editDraft.price} onChange={(event) => setEditDraft({ ...editDraft, price: event.target.value })}/></label>
               <label>Shipping<input type="number" inputMode="decimal" value={editDraft.shippingPrice} onChange={(event) => setEditDraft({ ...editDraft, shippingPrice: event.target.value })}/></label>
@@ -547,7 +548,7 @@ export default function CrossListingsPanel() {
           <section className="modal crossListingsModal soldListingModal">
             <header className="modalHeader"><div><h2>Log Marketplace Listing</h2><p>{listedDraft.title}</p></div><button className="iconButton secondary" onClick={() => setListedDraft(null)} aria-label="Close listed editor"><X size={18}/></button></header>
             <div className="formGrid">
-              <label className="span2">Listing URL<input value={listedDraft.listingUrl} onChange={(event) => setListedDraft({ ...listedDraft, listingUrl: event.target.value })} placeholder="Paste the Mercari or Depop listing link"/></label>
+              <label className="span2">Listing URL<input value={listedDraft.listingUrl} onChange={(event) => setListedDraft({ ...listedDraft, listingUrl: event.target.value })} placeholder="Paste the marketplace listing link"/></label>
               <label>External ID<input value={listedDraft.externalListingId} onChange={(event) => setListedDraft({ ...listedDraft, externalListingId: event.target.value })} placeholder="Optional marketplace ID"/></label>
               <label className="span2">Notes<textarea value={listedDraft.notes} onChange={(event) => setListedDraft({ ...listedDraft, notes: event.target.value })} placeholder="Any handoff notes, buyer-facing changes, or marketplace-specific details"/></label>
             </div>

@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { assertOwner, currentOwnerId } from "./ownership";
 import type { Doc, Id } from "./_generated/dataModel";
 
-const platforms = ["Mercari", "Depop"];
+const platforms = ["Mercari", "Depop", "Vinted"];
 const statuses = ["Ready", "Listed", "Sold", "Ended", "Needs Review"];
 
 function applyOwner<T extends { ownerId?: string }>(rows: T[], ownerId?: string) {
@@ -28,6 +28,14 @@ function defaultCategory(platform: string, asset?: Pick<Doc<"assets">, "type" | 
     if (assetFamily === "videoGame") return "Electronics > Video Games";
     if (assetFamily === "card") return "Collectibles > Trading Cards";
     if (assetFamily === "clothing") return "Men > Clothing";
+    return "Other";
+  }
+  if (platform === "Vinted") {
+    if (assetFamily === "book") return "Entertainment > Books";
+    if (assetFamily === "media") return "Entertainment > Movies & TV";
+    if (assetFamily === "videoGame") return "Entertainment > Video Games";
+    if (assetFamily === "card") return "Entertainment > Collectibles";
+    if (assetFamily === "clothing") return "Clothing";
     return "Other";
   }
   if (assetFamily === "book") return "Books & Media";
@@ -338,7 +346,7 @@ export const createFromAsset = mutation({
     const ownerId = await currentOwnerId(ctx);
     const asset = await ctx.db.get(args.assetId);
     assertOwner(asset, ownerId, "Inventory item");
-    if (!platforms.includes(args.platform)) throw new Error("Choose Mercari or Depop.");
+    if (!platforms.includes(args.platform)) throw new Error("Choose Mercari, Depop, or Vinted.");
     const now = Date.now();
     const row = await rowForAsset(ctx, asset!, args.platform);
     const result = await upsertCrossListing(ctx, ownerId, row, now);
@@ -352,7 +360,7 @@ export const bulkCreateFromAssets = mutation({
     if (!args.assetIds.length) throw new Error("Select at least one inventory item.");
     if (args.assetIds.length > 100) throw new Error("Create up to 100 cross-list rows at a time.");
     const targetPlatforms = args.platforms.filter((platform) => platforms.includes(platform));
-    if (!targetPlatforms.length) throw new Error("Choose Mercari or Depop.");
+    if (!targetPlatforms.length) throw new Error("Choose Mercari, Depop, or Vinted.");
     const ownerId = await currentOwnerId(ctx);
     const now = Date.now();
     let created = 0;
@@ -377,7 +385,7 @@ export const createFromMarketplaceListing = mutation({
     const ownerId = await currentOwnerId(ctx);
     const listing = await ctx.db.get(args.listingId);
     assertOwner(listing, ownerId, "Source listing");
-    if (!platforms.includes(args.platform)) throw new Error("Choose Mercari or Depop.");
+    if (!platforms.includes(args.platform)) throw new Error("Choose Mercari, Depop, or Vinted.");
     const now = Date.now();
     const row = await rowForListing(ctx, listing!, args.platform);
     const result = await upsertCrossListing(ctx, ownerId, row, now);
@@ -391,7 +399,7 @@ export const bulkCreateFromMarketplaceListings = mutation({
     if (!args.listingIds.length) throw new Error("Select at least one listing.");
     if (args.listingIds.length > 100) throw new Error("Create up to 100 cross-list rows at a time.");
     const targetPlatforms = args.platforms.filter((platform) => platforms.includes(platform));
-    if (!targetPlatforms.length) throw new Error("Choose Mercari or Depop.");
+    if (!targetPlatforms.length) throw new Error("Choose Mercari, Depop, or Vinted.");
     const ownerId = await currentOwnerId(ctx);
     const now = Date.now();
     let created = 0;
