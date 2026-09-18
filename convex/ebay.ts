@@ -904,7 +904,7 @@ export const markDraftError = internalMutation({
 });
 
 export const markOfferWithdrawn = internalMutation({
-  args: { listingId: v.id("marketplaceListings") },
+  args: { listingId: v.id("marketplaceListings"), archiveInventory: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const listing = await ctx.db.get(args.listingId);
     if (!listing) throw new Error("Listing not found.");
@@ -924,7 +924,9 @@ export const markOfferWithdrawn = internalMutation({
       const otherBundleLinks = await ctx.db.query("listingBundleItems").withIndex("by_assetId", (q) => q.eq("assetId", assetId)).collect();
       const otherBundles = await Promise.all(otherBundleLinks.filter((link) => link.listingId !== listing._id).map((link) => ctx.db.get(link.listingId)));
       if (!relatedListings.some((related) => related._id !== listing._id && related.status === "Active") && !otherBundles.some((related) => related?.status === "Active")) {
-        await ctx.db.patch(assetId, { status: "Inventory", updatedAt: now });
+        await ctx.db.patch(assetId, args.archiveInventory
+          ? { status: "Purged", archivedAt: now, archiveReason: "Ended eBay listing", updatedAt: now }
+          : { status: "Inventory", updatedAt: now });
       }
     }
   },
@@ -1708,7 +1710,7 @@ export const submitShippingFulfillment = action({
 });
 
 export const endPublishedListing = action({
-  args: { adminKey: v.string(), listingId: v.id("marketplaceListings") },
+  args: { adminKey: v.string(), listingId: v.id("marketplaceListings"), archiveInventory: v.optional(v.boolean()) },
   handler: async (ctx, args): Promise<{ ended: true; externalListingId: string }> => {
     requireAdminKey(args.adminKey);
     const bundle = await ctx.runQuery(internal.ebay.getDraftBundle, { listingId: args.listingId, ownerId: await currentOwnerId(ctx) });
@@ -1747,7 +1749,7 @@ export const endPublishedListing = action({
   <EndingReason>NotAvailable</EndingReason>
 </EndFixedPriceItemRequest>`);
       }
-      await ctx.runMutation(internal.ebay.markOfferWithdrawn, { listingId: listing._id });
+      await ctx.runMutation(internal.ebay.markOfferWithdrawn, { listingId: listing._id, archiveInventory: args.archiveInventory });
       return { ended: true, externalListingId: listing.externalListingId };
     } catch (error) {
       const message = `eBay end-listing failed: ${error instanceof Error ? error.message : "Unknown eBay error."}`;

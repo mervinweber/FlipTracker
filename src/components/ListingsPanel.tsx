@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Boxes, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Eye, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, Archive, BadgeDollarSign, Boxes, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Eye, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -1436,16 +1436,16 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     openSaleEditor(listing);
   }
 
-  async function finishEbayListing(recordSale: boolean) {
+  async function finishEbayListing(recordSale: boolean, archiveInventory = false) {
     if (!endListingPrompt || !adminKey) return;
     const listing = endListingPrompt;
     setEndListingBusy(true);
     setEndListingError('');
     setEbayError('');
     try {
-      await endEbayListing({ adminKey, listingId: listing._id });
+      await endEbayListing({ adminKey, listingId: listing._id, archiveInventory });
       setEndListingPrompt(null);
-      setEbayNotice(`Ended ${listing.title} on eBay.${recordSale ? ' Add the sale details below.' : ''}`);
+      setEbayNotice(`Ended ${listing.title} on eBay.${recordSale ? ' Add the sale details below.' : archiveInventory ? ' Inventory item archived.' : ' Inventory item returned to working inventory.'}`);
       void refreshSellerListingCount();
       if (recordSale) {
         openSaleEditor({
@@ -2748,10 +2748,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <header className="modalHeader"><div><h2>End eBay Listing</h2><span className="statusPill">{endListingPrompt.title}</span></div><button className="iconButton secondary" disabled={endListingBusy} aria-label="Close end listing confirmation" onClick={() => setEndListingPrompt(null)}><X size={18}/></button></header>
           <div className="endListingQuestion">
             <CircleStop size={24}/>
-            <div><h3>Did this item sell somewhere else?</h3><p>FlipTracker will first end the live eBay listing. Choose whether to return the item to inventory or continue into the sale form.</p></div>
+            <div><h3>What should happen after eBay ends?</h3><p>Return it to working inventory if you plan to relist later, archive it if you are done with the item, or record a sale if it sold elsewhere.</p></div>
           </div>
           {endListingError ? <p className="formError">{endListingError}</p> : null}
-          <div className="actions right"><button className="secondary" disabled={endListingBusy} onClick={() => setEndListingPrompt(null)}>Cancel</button><button className="secondary" disabled={endListingBusy} onClick={() => finishEbayListing(false)}>{endListingBusy ? 'Ending...' : 'No, End Only'}</button><button disabled={endListingBusy} onClick={() => finishEbayListing(true)}><DollarSign size={16}/> {endListingBusy ? 'Ending...' : 'Yes, Record Sale'}</button></div>
+          <div className="actions right"><button className="secondary" disabled={endListingBusy} onClick={() => setEndListingPrompt(null)}>Cancel</button><button className="secondary" disabled={endListingBusy} onClick={() => finishEbayListing(false, false)}>{endListingBusy ? 'Ending...' : 'Return to Inventory'}</button><button className="secondary" disabled={endListingBusy} onClick={() => finishEbayListing(false, true)}><Archive size={16}/> {endListingBusy ? 'Ending...' : 'End & Archive'}</button><button disabled={endListingBusy} onClick={() => finishEbayListing(true)}><DollarSign size={16}/> {endListingBusy ? 'Ending...' : 'Record Sale'}</button></div>
         </section></div>
       ) : null}
 
