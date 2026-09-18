@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, BadgeDollarSign, Boxes, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Boxes, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Eye, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import ListingPhotoManager from './ListingPhotoManager';
@@ -170,6 +170,13 @@ type ActivePricingResult = {
 type RepriceMode = 'percentage' | 'exact' | 'profit';
 type ListingWorkspaceView = 'Today' | 'Queue' | 'Active' | 'Shipping' | 'Sold' | 'Attention';
 type ListingEditorStep = 'details' | 'shipping' | 'price';
+type ListingDetailTab = 'summary' | 'photos' | 'pricing' | 'listing' | 'sale' | 'history';
+
+type CrossListSummary = {
+  _id: Id<'crossListings'>;
+  status: string;
+  handoffStatus?: string;
+};
 
 const LISTING_EDITOR_STEPS: Array<{ id: ListingEditorStep; label: string }> = [
   { id: 'details', label: 'Item & category' },
@@ -467,6 +474,7 @@ function PriceHistory({ listingId }: { listingId: Id<'marketplaceListings'> }) {
 
 export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () => void }) {
   const listings = useQuery(api.listings.list) as Listing[] | undefined;
+  const crossListings = useQuery(api.crossListings.list) as CrossListSummary[] | undefined;
   const updateListing = useMutation(api.listings.update);
   const removeListing = useMutation(api.listings.remove);
   const importSalesTracker = useMutation(api.listings.importSalesTracker);
@@ -555,6 +563,8 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [bulkMarkdownProgress, setBulkMarkdownProgress] = useState('');
   const [bulkMarkdownError, setBulkMarkdownError] = useState('');
   const [bulkValidationOpen, setBulkValidationOpen] = useState(false);
+  const [detailListing, setDetailListing] = useState<Listing | null>(null);
+  const [detailTab, setDetailTab] = useState<ListingDetailTab>('summary');
   const [listingSaveBusy, setListingSaveBusy] = useState(false);
   const [listingSaveError, setListingSaveError] = useState('');
   const [editingPricingBusy, setEditingPricingBusy] = useState(false);
@@ -599,10 +609,10 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
-    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !bulkValidationOpen && !templatesOpen && !fulfillmentEditing && !ebayErrorListing && !sellerSessionSummary) return;
+    if (!editing && !fastReviewing && !saleEditing && !endListingPrompt && !repricing && !pricingRows && !bulkMarkdownOpen && !bulkValidationOpen && !detailListing && !templatesOpen && !fulfillmentEditing && !ebayErrorListing && !sellerSessionSummary) return;
     document.body.classList.add('modalOpen');
     return () => document.body.classList.remove('modalOpen');
-  }, [bulkMarkdownOpen, bulkValidationOpen, ebayErrorListing, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, sellerSessionSummary, templatesOpen]);
+  }, [bulkMarkdownOpen, bulkValidationOpen, detailListing, ebayErrorListing, editing, endListingPrompt, fastReviewing, fulfillmentEditing, pricingRows, repricing, saleEditing, sellerSessionSummary, templatesOpen]);
 
   useEffect(() => {
     if (!sellerSession) {
@@ -796,6 +806,11 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     stale: todayOperations.filter((operation) => operation.kind === 'stale').length,
     reconcile: todayOperations.filter((operation) => operation.kind === 'reconcile').length,
   }), [todayOperations]);
+  const crossListTodayCounts = useMemo(() => ({
+    ready: (crossListings || []).filter((row) => row.status === 'Ready' || row.handoffStatus === 'Prepared').length,
+    needsReview: (crossListings || []).filter((row) => row.status === 'Needs Review').length,
+    listed: (crossListings || []).filter((row) => row.status === 'Listed').length,
+  }), [crossListings]);
   const batchCompletion = useMemo(() => {
     const draftRows = (listings || []).filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status));
     return {
@@ -1819,6 +1834,30 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     setSelectedIds(new Set());
   }
 
+  function openListingDetail(listing: Listing, tab: ListingDetailTab = 'summary') {
+    setDetailListing(listing);
+    setDetailTab(tab);
+  }
+
+  function renderPrimaryListingAction(listing: Listing) {
+    if (listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId)) {
+      return <button className="rowPrimaryAction ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => publishToEbay(listing)}><Rocket size={15}/> Publish</button>;
+    }
+    if (listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay') {
+      return <button className="rowPrimaryAction ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => sendToEbay(listing)}><CloudUpload size={15}/> Stage</button>;
+    }
+    if (listing.status === 'Active' && listing.platform === 'eBay' && listing.externalListingId) {
+      return <button className="rowPrimaryAction ebayRepriceButton" disabled={repriceBusy} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={15}/> Price</button>;
+    }
+    if (listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '')) {
+      return <button className="rowPrimaryAction fulfillmentButton" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/> Ship</button>;
+    }
+    if (listing.status === 'Sold') {
+      return <button className="rowPrimaryAction saleCloseButton" onClick={() => openSaleEditor(listing)}><DollarSign size={15}/> Sale</button>;
+    }
+    return <button className="rowPrimaryAction fastReviewRowButton" disabled={smartPrepareBusy} onClick={() => void openSmartPrepare(listing)}><WandSparkles size={15}/> Prepare</button>;
+  }
+
   async function crossListSelectedListings() {
     const listingIds = selectedListings
       .filter((listing) => listing.platform === 'eBay' && ['Draft', 'Pending', 'Active'].includes(listing.status))
@@ -2284,6 +2323,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
           <button className={todayCounts.ready ? 'ready' : ''} onClick={() => openWorkspace('Queue', { queueStage: 'Ready for eBay' })}><Rocket size={18}/><span>Stage / Publish</span><strong>{todayCounts.ready}</strong><small>Ready listing work</small></button>
           <button onClick={() => openWorkspace('Active')}><Clock3 size={18}/><span>Review Prices</span><strong>{todayCounts.stale}</strong><small>Stale active listings</small></button>
           <button onClick={() => openWorkspace('Attention')}><RefreshCw size={18}/><span>Reconcile</span><strong>{todayCounts.reconcile}</strong><small>Sync and cleanup</small></button>
+          <button className={crossListTodayCounts.ready ? 'ready' : crossListTodayCounts.needsReview ? 'attention' : ''} onClick={() => { window.location.hash = '#cross'; }}><ShoppingBag size={18}/><span>Cross-List</span><strong>{crossListTodayCounts.ready}</strong><small>{crossListTodayCounts.needsReview ? `${crossListTodayCounts.needsReview} need review` : `${crossListTodayCounts.listed} listed`}</small></button>
           <button onClick={onAddOtherItem}><Plus size={18}/><span>Add Item</span><strong>{batchCompletion.total}</strong><small>Drafts in queue</small></button>
         </div> : null}
         <div className="todayOperationMetrics" aria-label="Today's seller work">
@@ -2463,13 +2503,14 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
                 return (
                 <tr key={listing._id}>
                   <td className="selectColumn">{workspaceView === 'Queue' && listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) ? <input type="checkbox" aria-label={`Select ${listing.title}`} checked={selectedIds.has(listing._id)} onChange={() => toggleSelected(listing._id)}/> : null}</td>
-                  <td className="listingIdentityCell"><div className="listingIdentityHeader"><span className="consoleTag">{listing.platform}</span><span className={`badge lifecycleBadge ${lifecycle.className}`}>{lifecycle.label}</span>{bundleFoundation.isBundle ? <span className="bundleCountBadge"><Boxes size={13}/>{bundleFoundation.count}-item lot</span> : null}</div><strong>{listing.title}</strong><small>{bundleFoundation.isBundle ? bundleFoundation.titleSummary : listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
+                  <td className="listingIdentityCell"><div className="listingIdentityHeader"><span className="consoleTag">{listing.platform}</span><span className={`badge lifecycleBadge ${lifecycle.className}`}>{lifecycle.label}</span>{bundleFoundation.isBundle ? <span className="bundleCountBadge"><Boxes size={13}/>{bundleFoundation.count}-item lot</span> : null}</div><button className="listingTitleButton" onClick={() => openListingDetail(listing)}><strong>{listing.title}</strong></button><small>{bundleFoundation.isBundle ? bundleFoundation.titleSummary : listing.assetTitle}{listing.sku ? ` · SKU ${listing.sku}` : ''}</small>{listing.platform === 'eBay' ? <small className="listingOrigin">Created with: {ebayListingOrigin(listing)}</small> : null}</td>
                   <td className="listingStateCell">{workspaceView === 'Shipping' ? <><div className="queueQualityLine"><span className="queueBadge ready-for-ebay">{listing.fulfillmentStatus || 'Awaiting Shipment'}</span></div><small>{listing.shippingService || recommendFulfillment(listing).service}</small>{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : <small className="warningText">Sync order before tracking</small>}</> : <><div className="queueQualityLine"><span className={`queueBadge ${queueLabel.toLowerCase().replace(/\s+/g, '-')}`}>{queueLabel}</span>{qualityByListingId.get(listing._id) ? <button className={`qualityScore ${qualityByListingId.get(listing._id)!.grade.toLowerCase().replace(/\s+/g, '-')}`} title={qualityByListingId.get(listing._id)!.checks.map((check) => `${check.label}: ${check.message}`).join('\n')} onClick={() => openListingEditor(listing, qualityByListingId.get(listing._id)!.checks.find((check) => check.status !== 'pass')?.key === 'photos' ? 'shipping' : 'details')}><Gauge size={13}/>{qualityByListingId.get(listing._id)!.score}</button> : null}</div><small>{lifecycle.detail}</small>{bundleFoundation.isBundle && bundleFoundation.issues.length ? <small className="warningText">{bundleFoundation.issues[0]}</small> : null}{listing.pricingSource ? <small>{listing.pricingSource}</small> : null}{listing.fulfillmentStatus ? <small className="fulfillmentStatus">{listing.fulfillmentStatus === 'Completed' ? 'Archived' : `Fulfillment: ${listing.fulfillmentStatus}`}</small> : null}{listing.ebayDraftStatus ? <small className="ebayDraftMeta">eBay: {listing.ebayDraftStatus}</small> : null}{listing.ebayOrderId ? <small>Order {listing.ebayOrderId}</small> : null}{listing.status !== 'Sold' && listing.ebayLastError ? <button className="ebayErrorTrigger" onClick={() => setEbayErrorListing(listing)}><AlertTriangle size={13}/> eBay issue</button> : null}</>}</td>
                   <td className="valueCell listingPriceCell">{money(listing.status === 'Sold' ? listing.soldPrice : listing.currentPrice ?? listing.listedPrice)}</td>
                   <td className="listingLocationCell">{listing.storageLocation || <span className="mutedValue">—</span>}</td>
                   <td className="tableActionsCell"><div className="rowActions simplifiedRowActions">
-                    {listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && Boolean(listing.ebayOfferId) ? <button className="rowPrimaryAction ebayPublishButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => publishToEbay(listing)}><Rocket size={15}/> Publish</button> : listing.platform === 'eBay' && ['Draft', 'Pending'].includes(listing.status) && queueStatus(listing) === 'Ready for eBay' ? <button className="rowPrimaryAction ebayUploadButton" disabled={offerBusy === listing._id || queueBusy || !sellerDefaultsReady} onClick={() => sendToEbay(listing)}><CloudUpload size={15}/> Stage</button> : listing.status === 'Active' && listing.platform === 'eBay' && listing.externalListingId ? <button className="rowPrimaryAction ebayRepriceButton" disabled={repriceBusy} onClick={() => openRepriceEditor(listing)}><BadgeDollarSign size={15}/> Price</button> : listing.status === 'Sold' && ['Awaiting Shipment', 'Packed'].includes(listing.fulfillmentStatus || '') ? <button className="rowPrimaryAction fulfillmentButton" onClick={() => openFulfillmentEditor(listing)}><PackageCheck size={15}/> Ship</button> : listing.status === 'Sold' ? <button className="rowPrimaryAction saleCloseButton" onClick={() => openSaleEditor(listing)}><DollarSign size={15}/> Sale</button> : <button className="rowPrimaryAction fastReviewRowButton" disabled={smartPrepareBusy} onClick={() => void openSmartPrepare(listing)}><WandSparkles size={15}/> Prepare</button>}
+                    {renderPrimaryListingAction(listing)}
                     <details className="rowActionMenu"><summary aria-label={`More actions for ${listing.title}`} title="More actions"><MoreHorizontal size={17}/></summary><div>
+                      <button className="secondary" onClick={() => openListingDetail(listing)}><Eye size={15}/> View details</button>
                       <button className="secondary" onClick={() => openListingEditor(listing)}><Pencil size={15}/> Edit record</button>
                       {listing.platform === 'eBay' && ['Draft', 'Pending', 'Active'].includes(listing.status) ? <button className="secondary" disabled={queueBusy} onClick={() => crossListOneListing(listing)}><ShoppingBag size={15}/> Cross-list</button> : null}
                       {listing.status !== 'Sold' ? <button className="secondary" onClick={() => requestSaleEditor(listing)}><DollarSign size={15}/> Record sale</button> : null}
@@ -2498,6 +2539,32 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         <div className="ebayErrorMessage"><AlertTriangle size={20}/><p>{ebayErrorListing.ebayLastError}</p></div>
         <div className="modalActions"><button className="secondary" onClick={() => setEbayErrorListing(null)}>Close</button><button onClick={() => { const listing = ebayErrorListing; setEbayErrorListing(null); openListingEditor(listing); }}><Pencil size={16}/> Review listing</button></div>
       </section></div> : null}
+
+      {detailListing ? <div className="modalBackdrop drawerBackdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetailListing(null); }}>
+        <aside className="listingDetailDrawer" role="dialog" aria-modal="true" aria-labelledby="listing-detail-title">
+          <header className="listingDetailHeader">
+            <div><p className="eyebrow">{detailListing.platform} record</p><h2 id="listing-detail-title">{detailListing.title}</h2><p>{[detailListing.status, detailListing.sku ? `SKU ${detailListing.sku}` : undefined, detailListing.externalListingId ? `eBay ${detailListing.externalListingId}` : undefined].filter(Boolean).join(' · ')}</p></div>
+            <button className="iconButton secondary" aria-label="Close listing details" onClick={() => setDetailListing(null)}><X size={18}/></button>
+          </header>
+          <nav className="listingDetailTabs" aria-label="Listing detail sections">
+            {(['summary', 'photos', 'pricing', 'listing', 'sale', 'history'] as ListingDetailTab[]).map((tab) => <button key={tab} className={detailTab === tab ? 'active' : 'secondary'} onClick={() => setDetailTab(tab)}>{tab}</button>)}
+          </nav>
+          <div className="listingDetailBody">
+            {detailTab === 'summary' ? <section className="listingDetailSection"><div className="detailMetricGrid"><div><span>Status</span><strong>{detailListing.status}</strong></div><div><span>Queue</span><strong>{queueStatus(detailListing)}</strong></div><div><span>Location</span><strong>{detailListing.storageLocation || 'Unassigned'}</strong></div><div><span>Quality</span><strong>{qualityByListingId.get(detailListing._id)?.score ?? '-'}</strong></div></div><p>{detailListing.description || detailListing.assetTitle || 'No description saved yet.'}</p></section> : null}
+            {detailTab === 'photos' ? <section className="listingDetailSection"><div className="detailMetricGrid"><div><span>Actual Photos</span><strong>{detailListing.actualPhotoCount || 0}</strong></div><div><span>Mode</span><strong>{detailListing.imageMode || 'Actual'}</strong></div><div><span>Catalog Image</span><strong>{detailListing.ebayImageUrl ? 'Yes' : 'No'}</strong></div></div>{detailListing.photoUrl || detailListing.ebayImageUrl ? <img className="listingDetailPhoto" src={detailListing.photoUrl || detailListing.ebayImageUrl} alt={detailListing.title}/> : <p>No listing photo is available in this view.</p>}</section> : null}
+            {detailTab === 'pricing' ? <section className="listingDetailSection"><div className="detailMetricGrid"><div><span>Listed</span><strong>{money(detailListing.listedPrice)}</strong></div><div><span>Current</span><strong>{money(detailListing.currentPrice)}</strong></div><div><span>Suggested</span><strong>{money(detailListing.suggestedPrice)}</strong></div><div><span>Cost</span><strong>{money(detailListing.purchasePrice)}</strong></div></div><p>{detailListing.pricingSource || detailListing.suggestionSource || 'No pricing source saved yet.'}</p></section> : null}
+            {detailTab === 'listing' ? <section className="listingDetailSection"><div className="detailMetricGrid"><div><span>Category</span><strong>{detailListing.category || detailListing.ebayCategoryId || '-'}</strong></div><div><span>Condition</span><strong>{detailListing.condition || '-'}</strong></div><div><span>Draft</span><strong>{detailListing.ebayDraftStatus || '-'}</strong></div><div><span>Origin</span><strong>{ebayListingOrigin(detailListing)}</strong></div></div>{detailListing.ebayLastError ? <p className="setupNotice errorNotice">{detailListing.ebayLastError}</p> : null}</section> : null}
+            {detailTab === 'sale' ? <section className="listingDetailSection"><div className="detailMetricGrid"><div><span>Sold For</span><strong>{money(detailListing.soldPrice)}</strong></div><div><span>Sold Date</span><strong>{detailListing.soldDate || '-'}</strong></div><div><span>Platform</span><strong>{detailListing.salePlatform || detailListing.platform}</strong></div><div><span>Fees</span><strong>{money(detailListing.fees)}</strong></div></div><p>{detailListing.buyer ? `Buyer: ${detailListing.buyer}` : 'No buyer information saved.'}</p></section> : null}
+            {detailTab === 'history' ? <section className="listingDetailSection"><ol className="listingTimeline"><li><strong>Inventory item</strong><span>{detailListing.assetTitle}</span></li>{detailListing.listedDate ? <li><strong>Listed</strong><span>{detailListing.listedDate}</span></li> : null}{detailListing.pricingUpdatedAt ? <li><strong>Pricing updated</strong><span>{new Date(detailListing.pricingUpdatedAt).toLocaleDateString()}</span></li> : null}{detailListing.soldDate ? <li><strong>Sold</strong><span>{detailListing.soldDate}</span></li> : null}{detailListing.trackingSubmittedAt ? <li><strong>Tracking submitted</strong><span>{new Date(detailListing.trackingSubmittedAt).toLocaleDateString()}</span></li> : null}<li><strong>Last updated</strong><span>{new Date(detailListing.updatedAt).toLocaleString()}</span></li></ol></section> : null}
+          </div>
+          <footer className="listingDetailFooter">
+            <button className="secondary" onClick={() => openListingEditor(detailListing)}><Pencil size={16}/> Edit</button>
+            {detailListing.status === 'Sold' ? <button className="secondary" onClick={() => openSaleEditor(detailListing)}><DollarSign size={16}/> Sale</button> : <button className="secondary" onClick={() => requestSaleEditor(detailListing)}><DollarSign size={16}/> Record Sale</button>}
+            {detailListing.listingUrl ? <a className="button secondary" href={detailListing.listingUrl} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Open</a> : null}
+            {renderPrimaryListingAction(detailListing)}
+          </footer>
+        </aside>
+      </div> : null}
 
       {templatesOpen ? <ListingTemplatesModal fulfillmentPolicies={ebaySetup?.policies.fulfillment || []} onClose={() => setTemplatesOpen(false)}/> : null}
 

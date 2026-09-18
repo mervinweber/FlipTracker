@@ -289,6 +289,31 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .selectionCount { align-self:center; color:#bfdbfe; font-size:12px; font-weight:900; }
 .simplifiedRowActions { flex-wrap:wrap; align-items:stretch; justify-content:flex-start; gap:8px; }
 .rowPrimaryAction { min-width:112px; flex:1 1 auto; justify-content:center; padding:8px 10px; }
+.listingTitleButton { display:block; width:100%; margin:0; padding:0; border:0; color:inherit; text-align:left; background:transparent; }
+.listingTitleButton:hover strong { color:#bfdbfe; text-decoration:underline; text-underline-offset:3px; }
+.drawerBackdrop { justify-content:flex-end; align-items:stretch; padding:0; }
+.listingDetailDrawer { display:grid; grid-template-rows:auto auto minmax(0, 1fr) auto; width:min(620px, 100vw); height:100dvh; border-left:1px solid var(--border); background:var(--surface); box-shadow:-18px 0 42px rgba(0,0,0,.34); }
+.listingDetailHeader { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; padding:18px; border-bottom:1px solid var(--border); }
+.listingDetailHeader h2 { margin:0; font-size:20px; line-height:1.2; overflow-wrap:anywhere; }
+.listingDetailHeader p:not(.eyebrow) { margin:5px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
+.listingDetailTabs { display:flex; gap:6px; overflow-x:auto; padding:10px 12px; border-bottom:1px solid var(--border); }
+.listingDetailTabs button { flex:0 0 auto; min-height:34px; padding:7px 10px; text-transform:capitalize; }
+.listingDetailTabs button.active { color:#eff6ff; border-color:#60a5fa; background:#17356f; }
+.listingDetailBody { min-height:0; overflow:auto; padding:16px 18px; }
+.listingDetailSection { display:grid; gap:14px; }
+.listingDetailSection p { margin:0; color:var(--muted); line-height:1.45; overflow-wrap:anywhere; }
+.detailMetricGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
+.detailMetricGrid > div { min-height:64px; padding:10px 12px; background:var(--surface-3); }
+.detailMetricGrid span, .detailMetricGrid strong { display:block; min-width:0; overflow-wrap:anywhere; }
+.detailMetricGrid span { color:var(--muted); font-size:10px; font-weight:900; text-transform:uppercase; }
+.detailMetricGrid strong { margin-top:3px; font-size:16px; }
+.listingDetailPhoto { width:min(260px, 100%); max-height:320px; object-fit:contain; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); }
+.listingTimeline { display:grid; gap:0; margin:0; padding:0; list-style:none; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.listingTimeline li { display:grid; grid-template-columns:150px minmax(0, 1fr); gap:12px; padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface-3); }
+.listingTimeline li:last-child { border-bottom:0; }
+.listingTimeline strong, .listingTimeline span { min-width:0; overflow-wrap:anywhere; }
+.listingTimeline span { color:var(--muted); }
+.listingDetailFooter { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; padding:12px 18px; border-top:1px solid var(--border); background:var(--surface-2); }
 .tableActionsCell { position:relative; min-width:150px; }
 .tableActionsCell .rowActionMenu { flex:0 0 auto; }
 .listingIdentityHeader { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px; }
@@ -380,7 +405,7 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .todayOperationsHeader { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
 .todayOperationsHeader h2 { margin:0; }
 .todayOperationsHeader p:not(.eyebrow) { margin:5px 0 0; font-size:13px; line-height:1.4; }
-.todayCommandGrid { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
+.todayCommandGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(135px, 1fr)); gap:1px; overflow:hidden; border:1px solid var(--border); border-radius:8px; background:var(--border); }
 .todayCommandGrid button { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:4px 9px; align-items:center; min-height:88px; padding:12px; text-align:left; border:0; border-radius:0; color:var(--text); background:var(--surface); }
 .todayCommandGrid button:hover { background:var(--surface-2); }
 .todayCommandGrid svg { color:#93c5fd; }
@@ -1055,6 +1080,7 @@ label small { color:var(--muted); font-weight:500; line-height:1.4; }
 @media (max-width:1050px) { .pricingReviewRow { grid-template-columns:minmax(220px, 1fr) minmax(180px, .8fr); } }
 @media (max-width:560px) { .viewTabs { display:flex; overflow-x:auto; scroll-snap-type:x proximity; } .viewTabs button, .viewTabs .appToolsMenu { flex:0 0 auto; scroll-snap-align:start; } .appToolsMenu > div { left:0; right:auto; } .listingCards, .listingControls { grid-template-columns:1fr; display:grid; } .listingControls .searchWrap { grid-column:auto; } .vintedMetrics { grid-template-columns:repeat(2, minmax(0, 1fr)); } .vintedFilters { grid-template-columns:1fr; } .vintedFilters .searchWrap { grid-column:auto; } .vintedListingRow { grid-template-columns:52px minmax(0, 1fr); gap:10px; padding:10px 12px; } .vintedThumb { width:48px; height:62px; } .vintedPrice { grid-column:2; grid-row:auto; justify-self:start; text-align:left; } .vintedRowActions { grid-column:1 / -1; } .vintedRowActions .button:not(.iconButton), .vintedRowActions > button:not(.iconButton) { flex:1 1 auto; justify-content:center; } }
 @media (max-width:560px) { .todayCommandGrid { grid-template-columns:1fr 1fr; } .todayCommandGrid button { min-height:82px; } }
+@media (max-width:560px) { .listingDetailDrawer { width:100vw; } .detailMetricGrid { grid-template-columns:1fr; } .listingTimeline li { grid-template-columns:1fr; gap:3px; } .listingDetailFooter { display:grid; grid-template-columns:1fr; } .listingDetailFooter > * { justify-content:center; width:100%; } }
 @media (max-width:560px) { .bulkCostModes { grid-template-columns:1fr; } }
 @media (max-width:700px) { .ebayUnlockRow, .ebaySettingsGrid { grid-template-columns:1fr; } .ebaySetupActions { grid-column:auto; } .forgetDeviceButton { margin-left:0; } }
 @media (max-width:700px) { .ebayPayloadPreviewSections { grid-template-columns:1fr; } .ebayPayloadPreviewSections > section { grid-column:1; } }
