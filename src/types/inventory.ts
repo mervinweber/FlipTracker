@@ -1,4 +1,4 @@
-export type ItemType = 'Video Game' | 'DVD' | 'Blu-ray' | 'CD' | 'Book' | 'Pokemon Card' | 'Sports Card' | 'Yu-Gi-Oh! Card' | 'Toy' | 'Other Media' | 'General Merchandise' | 'Misc';
+export type ItemType = 'Video Game' | 'DVD' | 'Blu-ray' | 'CD' | 'Book' | 'Pokemon Card' | 'Sports Card' | 'Yu-Gi-Oh! Card' | 'Trading Card' | 'Toy' | 'Other Media' | 'General Merchandise' | 'Misc';
 
 export type ListingRecommendation = 'Sell Individually' | 'Bundle' | 'Skip' | 'Review';
 
@@ -36,6 +36,7 @@ export type InventoryItem = {
   photoDataUrl?: string;
   metadataSource?: string;
   metadataConfidence?: string;
+  metadataCheckedAt?: number;
   collectionName?: string;
   acquiredDate?: string;
   listedDate?: string;
@@ -46,7 +47,7 @@ export type InventoryItem = {
   localHigh?: number;
   userLow?: number;
   userHigh?: number;
-  valueSource?: 'Estimated' | 'User Override';
+  valueSource?: 'Estimated' | 'User Override' | string;
   needsValueCheck?: boolean;
   priority?: string;
   strategy?: string;

@@ -56,6 +56,14 @@ type Asset = {
   cardSport?: string;
   cardSet?: string;
   cardNumber?: string;
+  cardProvider?: string;
+  cardProviderId?: string;
+  cardLanguage?: string;
+  cardRarity?: string;
+  cardFinish?: string;
+  cardEdition?: string;
+  cardIdentificationMethod?: string;
+  cardIdentificationConfidence?: number;
   cardPlayer?: string;
   cardTeam?: string;
   coverImageUrl?: string;
@@ -178,7 +186,7 @@ type PendingPhoto = {
   previewUrl: string;
 };
 
-const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Clothing', 'Other Media', 'Toy', 'General Merchandise', 'Misc'];
+const MEDIA_TYPES = ['Video Game', 'DVD', 'Blu-ray', 'CD', 'Book', 'Pokemon Card', 'Sports Card', 'Yu-Gi-Oh! Card', 'Trading Card', 'Clothing', 'Other Media', 'Toy', 'General Merchandise', 'Misc'];
 const CARD_PRODUCT_TYPES = ['Single Card', 'Card Lot', 'Complete Set', 'Sealed Pack', 'Sealed Box'];
 const CARD_GAMES = ['Pokemon TCG', 'Yu-Gi-Oh! TCG', 'Magic: The Gathering', 'One Piece Card Game', 'Disney Lorcana', 'Other CCG'];
 const CARD_SPORTS = ['Baseball', 'Basketball', 'Football', 'Ice Hockey', 'Soccer', 'Wrestling', 'Auto Racing', 'Golf', 'Boxing', 'Mixed Sports', 'Other'];
@@ -190,6 +198,7 @@ function isCardType(type?: string) {
 function defaultCardGame(type?: string) {
   if (type === 'Pokemon Card') return 'Pokemon TCG';
   if (type === 'Yu-Gi-Oh! Card') return 'Yu-Gi-Oh! TCG';
+  if (type === 'Trading Card') return 'Other CCG';
   return undefined;
 }
 const TYPE_FILTERS = ['All', 'Cards', ...MEDIA_TYPES];
@@ -276,6 +285,11 @@ function listingSpecifics(item: Partial<Asset>) {
     item.cardSport ? `Sport: ${item.cardSport}` : '',
     item.cardSet ? `Set: ${item.cardSet}` : '',
     item.cardNumber ? `Card Number: ${item.cardNumber}` : '',
+    item.cardRarity ? `Rarity: ${item.cardRarity}` : '',
+    item.cardFinish ? `Finish: ${item.cardFinish}` : '',
+    item.cardEdition ? `Edition: ${item.cardEdition}` : '',
+    item.cardLanguage ? `Language: ${item.cardLanguage}` : '',
+    item.cardProviderId ? `TCGplayer Product ID: ${item.cardProviderId}` : '',
     item.cardPlayer ? `Player/Athlete: ${item.cardPlayer}` : '',
     item.cardTeam ? `Team: ${item.cardTeam}` : '',
     item.upc || item.barcode ? `UPC: ${item.upc || item.barcode}` : '',
@@ -303,8 +317,8 @@ function recalcAsset(item: Partial<Asset>): Partial<Asset> {
   next.listingRecommendation = recommendationFromAsset(next);
   next.priority = next.priority || priorityFromValue(next);
   next.strategy = next.listingRecommendation === 'Sell Individually' ? 'Flip Now' : next.listingRecommendation || next.strategy || 'Review';
-  next.ebayTitle = generateEbayTitle(next);
-  next.ebayDescription = generateDescription(next);
+  next.ebayTitle = next.ebayTitle || generateEbayTitle(next);
+  next.ebayDescription = next.ebayDescription || generateDescription(next);
   next.ebayCategory = next.ebayCategory || ebayCategoryFor(next);
   next.ebayCategoryId = next.ebayCategoryId || resolveEbayCategory({ itemType: next.type, barcode: next.upc || next.barcode, barcodeType: next.barcodeType, cardSaleFormat: next.cardProductType }).categoryId;
   next.ebayCondition = ebayConditionFor(next);
@@ -1348,9 +1362,25 @@ export default function App() {
           studio: item.studio || undefined,
           author: item.author || undefined,
           rating: item.rating || undefined,
+          cardProductType: item.cardProductType || undefined,
+          cardGame: item.cardGame || undefined,
+          cardSport: item.cardSport || undefined,
+          cardSet: item.cardSet || undefined,
+          cardNumber: item.cardNumber || undefined,
+          cardProvider: item.cardProvider || undefined,
+          cardProviderId: item.cardProviderId || undefined,
+          cardLanguage: item.cardLanguage || undefined,
+          cardRarity: item.cardRarity || undefined,
+          cardFinish: item.cardFinish || undefined,
+          cardEdition: item.cardEdition || undefined,
+          cardIdentificationMethod: item.cardIdentificationMethod || undefined,
+          cardIdentificationConfidence: item.cardIdentificationConfidence,
+          cardPlayer: item.cardPlayer || undefined,
+          cardTeam: item.cardTeam || undefined,
           coverImageUrl: item.coverImageUrl || undefined,
           metadataSource: item.metadataSource || undefined,
           metadataConfidence: item.metadataConfidence || undefined,
+          metadataCheckedAt: item.metadataSource ? Date.now() : undefined,
           acquiredDate: item.acquiredDate || undefined,
           storageLocation: item.storageLocation || undefined,
           estimatedLow: item.estLow,

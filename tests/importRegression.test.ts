@@ -12,6 +12,7 @@ import {
   profit,
   type InventoryItem,
 } from '../src/types/inventory.ts';
+import { importInventoryRows, inventoryItemFromTcgplayerRow } from '../src/utils/excel.ts';
 
 function importedItem(overrides: Partial<InventoryItem> = {}): InventoryItem {
   return {
@@ -64,6 +65,58 @@ test('imported card sale formats resolve to the corresponding leaf category', ()
     resolveEbayCategory({ itemType: 'Sports Card', cardSaleFormat: 'lot' }).categoryId,
     '261329',
   );
+});
+
+test('TCGplayer CSV rows map to card inventory with market pricing', () => {
+  const item = inventoryItemFromTcgplayerRow({
+    'Product Line': 'Pokemon',
+    'Product Name': 'Pikachu',
+    'Set Name': 'Scarlet & Violet',
+    Number: '025/198',
+    Rarity: 'Rare',
+    Printing: 'Holofoil',
+    Condition: 'Near Mint',
+    Language: 'English',
+    'TCGplayer ID': '12345',
+    'Market Price': '$6.42',
+    'Purchase Price': '$0.50',
+  });
+
+  assert.equal(item.type, 'Pokemon Card');
+  assert.equal(item.title, 'Pikachu');
+  assert.equal(item.cardGame, 'Pokemon TCG');
+  assert.equal(item.cardSet, 'Scarlet & Violet');
+  assert.equal(item.cardNumber, '025/198');
+  assert.equal(item.cardRarity, 'Rare');
+  assert.equal(item.cardFinish, 'Holofoil');
+  assert.equal(item.cardProvider, 'TCGplayer CSV');
+  assert.equal(item.cardProviderId, '12345');
+  assert.equal(item.condition, 'Near Mint');
+  assert.equal(item.purchasePrice, 0.5);
+  assert.equal(item.ebayPrice, 6.42);
+  assert.equal(item.valueSource, 'TCGplayer Market');
+  assert.equal(item.needsValueCheck, false);
+  assert.equal(item.listingRecommendation, 'Sell Individually');
+  assert.match(item.ebayDescription || '', /TCGplayer market price: \$6\.42/);
+});
+
+test('TCGplayer CSV import expands quantity into individual records', () => {
+  const rows = importInventoryRows([{
+    'Product Line': 'Magic',
+    'Product Name': 'Lightning Bolt',
+    'Set Name': 'Foundations',
+    Number: '155',
+    Condition: 'LP',
+    Quantity: 3,
+    'Market Price': '1.25',
+  }]);
+
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].type, 'Trading Card');
+  assert.equal(rows[0].cardGame, 'Magic: The Gathering');
+  assert.equal(rows[0].condition, 'Lightly Played');
+  assert.equal(rows[0].listingRecommendation, 'Bundle');
+  assert.equal(rows[0].ebayPrice, 1.25);
 });
 
 test('imported value overrides and completed-sale costs retain their accounting meaning', () => {

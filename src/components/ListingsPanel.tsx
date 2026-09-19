@@ -433,6 +433,7 @@ function completenessOptionsFor(listing: Pick<Listing, 'assetType' | 'mediaForma
 function defaultCardGame(type?: string) {
   if (type === 'Pokemon Card') return 'Pokemon TCG';
   if (type === 'Yu-Gi-Oh! Card') return 'Yu-Gi-Oh! TCG';
+  if (type === 'Trading Card') return 'Other CCG';
   return undefined;
 }
 
