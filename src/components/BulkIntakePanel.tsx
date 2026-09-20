@@ -1,9 +1,10 @@
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Barcode, Camera, CheckCircle2, CircleDashed, ExternalLink, ImagePlus, Images, Keyboard, LayoutList, Pause, Play, Plus, RotateCcw, Save, Trash2, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, Barcode, Camera, CheckCircle2, CircleDashed, ExternalLink, ImagePlus, Images, Keyboard, LayoutList, Pause, Play, Plus, RotateCcw, Save, Trash2, Upload, WandSparkles, X } from 'lucide-react';
 import type { IScannerControls } from '@zxing/browser';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
+import type { InventoryItem } from '../types/inventory.ts';
 import { splitPhotoLotTotal } from '../utils/photoLot';
 import '../bulk-intake.css';
 
@@ -108,6 +109,77 @@ function listingFields(result: LookupResult, condition: string, completeness: st
   };
 }
 
+function importAssetPayload(item: InventoryItem) {
+  return {
+    type: item.type || 'Other Media',
+    console: item.console || undefined,
+    title: item.title,
+    edition: item.edition || undefined,
+    mediaFormat: item.mediaFormat || undefined,
+    upc: item.upc || item.barcode || undefined,
+    barcode: item.barcode || item.upc || undefined,
+    barcodeType: item.barcodeType || undefined,
+    releaseYear: item.releaseYear || undefined,
+    releaseDate: item.releaseDate || undefined,
+    studio: item.studio || undefined,
+    author: item.author || undefined,
+    rating: item.rating || undefined,
+    cardProductType: item.cardProductType || undefined,
+    cardGame: item.cardGame || undefined,
+    cardSport: item.cardSport || undefined,
+    cardSet: item.cardSet || undefined,
+    cardNumber: item.cardNumber || undefined,
+    cardProvider: item.cardProvider || undefined,
+    cardProviderId: item.cardProviderId || undefined,
+    cardLanguage: item.cardLanguage || undefined,
+    cardRarity: item.cardRarity || undefined,
+    cardFinish: item.cardFinish || undefined,
+    cardEdition: item.cardEdition || undefined,
+    cardIdentificationMethod: item.cardIdentificationMethod || undefined,
+    cardIdentificationConfidence: item.cardIdentificationConfidence,
+    cardPlayer: item.cardPlayer || undefined,
+    cardTeam: item.cardTeam || undefined,
+    coverImageUrl: item.coverImageUrl || undefined,
+    metadataSource: item.metadataSource || undefined,
+    metadataConfidence: item.metadataConfidence || undefined,
+    metadataCheckedAt: item.metadataSource ? Date.now() : undefined,
+    acquiredDate: item.acquiredDate || undefined,
+    storageLocation: item.storageLocation || undefined,
+    estimatedLow: item.estLow,
+    estimatedHigh: item.estHigh,
+    userLow: item.userLow,
+    userHigh: item.userHigh,
+    valueSource: item.valueSource || 'Estimated',
+    needsValueCheck: item.needsValueCheck,
+    localLow: item.localLow,
+    localHigh: item.localHigh,
+    priority: item.priority || undefined,
+    strategy: item.strategy || undefined,
+    listingRecommendation: item.listingRecommendation || undefined,
+    status: item.status || 'Inventory',
+    purchasePrice: item.purchasePrice,
+    soldPrice: item.soldPrice,
+    fees: item.fees,
+    shipping: item.shipping,
+    condition: item.condition || undefined,
+    completeness: item.completeness || undefined,
+    complete: item.complete,
+    manual: item.manual,
+    aiDescription: item.aiDescription || undefined,
+    itemDisclosures: item.itemDisclosures || undefined,
+    ebayTitle: item.ebayTitle || undefined,
+    ebayDescription: item.ebayDescription || undefined,
+    ebayCategory: item.ebayCategory || undefined,
+    ebayCategoryId: item.ebayCategoryId || undefined,
+    ebayCondition: item.ebayCondition || undefined,
+    ebayItemSpecifics: item.ebayItemSpecifics || undefined,
+    ebayPrice: item.ebayPrice,
+    ebayShipping: item.ebayShipping || undefined,
+    notes: item.notes || undefined,
+    confidence: item.confidence || undefined,
+  };
+}
+
 function statusIcon(status: QueueStatus) {
   if (status === 'Saved') return <CheckCircle2 size={17}/>;
   if (status === 'Review') return <AlertTriangle size={17}/>;
@@ -121,6 +193,7 @@ export default function BulkIntakePanel() {
   const identifyVideoGameLot = useAction(api.mediaLookup.identifyVideoGameLot);
   const createScannedItem = useMutation(api.intake.createScannedItem);
   const createPhotoLot = useMutation(api.intake.createPhotoLot);
+  const importMany = useMutation(api.assets.importMany);
   const createBatch = useMutation(api.intakeBatches.create);
   const updateBatch = useMutation(api.intakeBatches.update);
   const allocateBatchPurchaseTotal = useMutation(api.intakeBatches.allocatePurchaseTotal);
@@ -160,6 +233,9 @@ export default function BulkIntakePanel() {
   const [photoLotBusy, setPhotoLotBusy] = useState<'image' | 'identify' | 'save' | ''>('');
   const [photoLotError, setPhotoLotError] = useState('');
   const [photoLotNotice, setPhotoLotNotice] = useState('');
+  const [aiCsvBusy, setAiCsvBusy] = useState(false);
+  const [aiCsvError, setAiCsvError] = useState('');
+  const [aiCsvNotice, setAiCsvNotice] = useState('');
   const batchItems = useQuery(api.intakeBatches.getItems, { batchId: activeBatchId ? activeBatchId as Id<'intakeBatches'> : undefined }) ?? EMPTY_QUERY_RESULTS;
 
   useEffect(() => {
@@ -303,6 +379,28 @@ export default function BulkIntakePanel() {
       setBatchNotice(total !== undefined ? `Batch completed with $${total.toFixed(2)} allocated across its inventory items.` : 'Batch completed.');
     } catch (error) {
       setBatchError(error instanceof Error ? error.message : 'The batch could not be completed.');
+    }
+  }
+
+  async function importAiCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setAiCsvBusy(true);
+    setAiCsvError('');
+    setAiCsvNotice('');
+    try {
+      const { importInventoryFile } = await import('../utils/excel');
+      const imported = await importInventoryFile(file);
+      if (!imported.length) throw new Error('No inventory rows were found in that file.');
+      const result = await importMany({ assets: imported.map(importAssetPayload) });
+      const reviewCount = imported.filter((item) => item.needsValueCheck || item.listingRecommendation === 'Review' || item.priority?.toLowerCase().includes('review')).length;
+      const pricedCount = imported.filter((item) => item.ebayPrice !== undefined || item.estLow !== undefined || item.estHigh !== undefined).length;
+      setAiCsvNotice(`Imported ${result.imported} record${result.imported === 1 ? '' : 's'} from ${file.name}. ${pricedCount} had pricing data and ${reviewCount} need review.`);
+    } catch (error) {
+      setAiCsvError(error instanceof Error ? error.message : 'That file could not be imported.');
+    } finally {
+      setAiCsvBusy(false);
     }
   }
 
@@ -519,6 +617,26 @@ export default function BulkIntakePanel() {
         </div>
         {batchError ? <p className="warningText">{batchError}</p> : null}
         {batchNotice ? <p className="photoLotNotice">{batchNotice}</p> : null}
+      </section>
+
+      <section className="panel aiCsvImportPanel">
+        <div className="panelHeader">
+          <div><p className="eyebrow">AI / CSV intake</p><h2>Import Reviewed Rows</h2><p>Drop in rows from AI photo recognition, TCGplayer, or a spreadsheet and send them straight into normal inventory review.</p></div>
+          <span className="badge draft">CSV / XLSX</span>
+        </div>
+        <div className="aiCsvImportGrid">
+          <div className="aiCsvSchema">
+            <strong>Recommended columns</strong>
+            <code>type,title,author,year,format,condition,purchasePrice,estimatedLow,estimatedHigh,suggestedPrice,priority,notes</code>
+            <small>Rows with no price estimate are marked for value review. TCGplayer exports still import card details and quantities automatically.</small>
+          </div>
+          <div className="aiCsvActions">
+            <label className={`button ${aiCsvBusy ? 'disabled' : ''}`}><Upload size={16}/>{aiCsvBusy ? 'Importing...' : 'Import AI / CSV'}<input type="file" accept=".xlsx,.xls,.csv" hidden disabled={aiCsvBusy} onChange={importAiCsv}/></label>
+            <button className="secondary" onClick={() => { window.location.hash = '#inventory'; }}>Open Inventory Review</button>
+          </div>
+        </div>
+        {aiCsvError ? <p className="warningText">{aiCsvError}</p> : null}
+        {aiCsvNotice ? <p className="photoLotNotice">{aiCsvNotice}</p> : null}
       </section>
 
       <section className="panel photoLotPanel">

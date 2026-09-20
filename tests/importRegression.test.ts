@@ -16,7 +16,7 @@ import { importInventoryRows, inventoryItemFromTcgplayerRow } from '../src/utils
 
 function importedItem(overrides: Partial<InventoryItem> = {}): InventoryItem {
   return {
-    type: 'Book',
+    type: 'book',
     title: 'Imported book',
     createdAt: '2026-08-19T12:00:00.000Z',
     updatedAt: '2026-08-19T12:00:00.000Z',
@@ -117,6 +117,53 @@ test('TCGplayer CSV import expands quantity into individual records', () => {
   assert.equal(rows[0].condition, 'Lightly Played');
   assert.equal(rows[0].listingRecommendation, 'Bundle');
   assert.equal(rows[0].ebayPrice, 1.25);
+});
+
+test('AI/CSV intake rows map lightweight reseller columns into inventory records', () => {
+  const rows = importInventoryRows([{
+    type: 'Book',
+    title: 'Mother Goose',
+    author: 'Traditional',
+    year: '1944',
+    format: 'Hardcover',
+    condition: 'Good',
+    purchasePrice: '2.00',
+    estimatedLow: '15.00',
+    estimatedHigh: '25.00',
+    suggestedPrice: '19.99',
+    priority: 'Worth Listing',
+    notes: 'No dust jacket',
+  }]);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].type, 'Book');
+  assert.equal(rows[0].title, 'Mother Goose');
+  assert.equal(rows[0].author, 'Traditional');
+  assert.equal(rows[0].releaseYear, '1944');
+  assert.equal(rows[0].mediaFormat, 'Hardcover');
+  assert.equal(rows[0].condition, 'Good');
+  assert.equal(rows[0].purchasePrice, 2);
+  assert.equal(rows[0].estLow, 15);
+  assert.equal(rows[0].estHigh, 25);
+  assert.equal(rows[0].ebayPrice, 19.99);
+  assert.equal(rows[0].priority, 'Worth Listing');
+  assert.equal(rows[0].listingRecommendation, 'Sell Individually');
+  assert.equal(rows[0].valueSource, 'AI/CSV Estimate');
+  assert.equal(rows[0].needsValueCheck, false);
+  assert.match(rows[0].ebayDescription || '', /No dust jacket/);
+});
+
+test('AI/CSV intake rows without pricing are held for value review', () => {
+  const rows = importInventoryRows([{
+    type: 'Book',
+    title: 'Unpriced estate book',
+    condition: 'Acceptable',
+    priority: 'Review',
+  }]);
+
+  assert.equal(rows[0].needsValueCheck, true);
+  assert.equal(rows[0].listingRecommendation, 'Review');
+  assert.equal(rows[0].valueSource, 'Estimated');
 });
 
 test('imported value overrides and completed-sale costs retain their accounting meaning', () => {

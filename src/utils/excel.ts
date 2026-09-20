@@ -59,6 +59,23 @@ function normalizeCardGame(value: string) {
   return { type: 'Trading Card' as InventoryItem['type'], game: value || 'Other CCG' };
 }
 
+function normalizeItemType(value: string): InventoryItem['type'] {
+  const lower = value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (lower === 'book' || lower === 'books') return 'Book';
+  if (lower === 'dvd' || lower === 'dvds') return 'DVD';
+  if (lower === 'bluray' || lower === 'blurays' || lower === 'blu') return 'Blu-ray';
+  if (lower === 'cd' || lower === 'cds' || lower === 'music') return 'CD';
+  if (lower === 'videogame' || lower === 'game' || lower === 'games') return 'Video Game';
+  if (lower === 'pokemon' || lower === 'pokemoncard') return 'Pokemon Card';
+  if (lower === 'yugioh' || lower === 'yugiohcard') return 'Yu-Gi-Oh! Card';
+  if (lower === 'sportscard' || lower === 'sports') return 'Sports Card';
+  if (lower === 'tradingcard' || lower === 'tcg') return 'Trading Card';
+  if (lower === 'toy' || lower === 'toys') return 'Toy';
+  if (lower === 'clothing' || lower === 'generalmerchandise') return 'General Merchandise';
+  if (value.trim()) return value.trim() as InventoryItem['type'];
+  return 'Video Game';
+}
+
 function recommendationForCard(marketPrice?: number): InventoryItem['listingRecommendation'] {
   if (marketPrice === undefined) return 'Review';
   if (marketPrice >= 5) return 'Sell Individually';
@@ -79,6 +96,15 @@ function cardPriceBand(marketPrice?: number) {
   const low = Math.max(0.25, Math.round(marketPrice * 0.85 * 100) / 100);
   const high = Math.round(marketPrice * 1.15 * 100) / 100;
   return { estLow: low, estHigh: high };
+}
+
+function recommendationFromPriority(priority: string): InventoryItem['listingRecommendation'] | undefined {
+  const lower = priority.toLowerCase();
+  if (lower.includes('skip') || lower.includes('pass')) return 'Skip';
+  if (lower.includes('bundle') || lower.includes('lot')) return 'Bundle';
+  if (lower.includes('review') || lower.includes('check') || lower.includes('maybe')) return 'Review';
+  if (lower.includes('worth') || lower.includes('first') || lower.includes('list') || lower.includes('sell')) return 'Sell Individually';
+  return undefined;
 }
 
 function isTcgplayerRow(row: Record<string, unknown>) {
@@ -188,70 +214,94 @@ export function importInventoryRows(rows: Record<string, unknown>[]): InventoryI
       const item = inventoryItemFromTcgplayerRow(row);
       return Array.from({ length: quantity }, () => ({ ...item, createdAt: now(), updatedAt: now() }));
     }
+    const type = normalizeItemType(textValue(rowValue(row, ['Type', 'type', 'Item Type', 'Media Type'])));
+    const title = textValue(rowValue(row, ['Title', 'title', 'Game', 'Name', 'Product Name', 'Item Name']));
+    const mediaFormat = textValue(rowValue(row, ['Format', 'format', 'Media Format', 'Binding']));
+    const upc = textValue(rowValue(row, ['UPC', 'upc', 'ISBN', 'isbn', 'Barcode', 'barcode']));
+    const releaseYear = textValue(rowValue(row, ['Release Year', 'releaseYear', 'Year', 'year']));
+    const author = textValue(rowValue(row, ['Author', 'author', 'Creator', 'Artist']));
+    const estimatedLow = numberValue(rowValue(row, ['Estimated eBay Low', 'eBay Low', 'estLow', 'estimatedLow', 'Estimated Low', 'Low Estimate']));
+    const estimatedHigh = numberValue(rowValue(row, ['Estimated eBay High', 'eBay High', 'estHigh', 'estimatedHigh', 'Estimated High', 'High Estimate']));
+    const suggestedPrice = numberValue(rowValue(row, ['Suggested Price', 'suggestedPrice', 'eBay Price', 'Listing Price', 'List Price', 'Price']));
+    const priority = textValue(rowValue(row, ['Priority', 'priority']));
+    const explicitRecommendation = textValue(rowValue(row, ['Recommendation', 'recommendation']));
+    const listingRecommendation = (explicitRecommendation as InventoryItem['listingRecommendation']) || recommendationFromPriority(priority);
+    const explicitNeedsValueCheck = textValue(rowValue(row, ['Needs Value Check', 'needsValueCheck', 'Needs Review', 'Review']));
+    const hasImportedValue = estimatedLow !== undefined || estimatedHigh !== undefined || suggestedPrice !== undefined;
+    const notes = textValue(rowValue(row, ['Notes', 'notes', 'Comments', 'Comment']));
+    const itemDisclosures = textValue(rowValue(row, ['Item Disclosures', 'Disclosures', 'Description Notes', 'Condition Notes', 'description']));
+    const ebayTitle = textValue(rowValue(row, ['eBay Title', 'ebayTitle', 'Listing Title']));
+    const ebayDescription = textValue(rowValue(row, ['eBay Description', 'ebayDescription', 'Listing Description', 'Description'])) || [
+      title,
+      author ? `Author: ${author}` : '',
+      mediaFormat ? `Format: ${mediaFormat}` : '',
+      releaseYear ? `Year: ${releaseYear}` : '',
+      notes,
+    ].filter(Boolean).join('\n');
     return [{
-      type: (row.Type as InventoryItem['type']) || 'Video Game',
-      console: String(row.Console || ''),
-      title: String(row.Title || row.Game || '').trim(),
-      edition: String(row.Edition || ''),
-      mediaFormat: String(row.Format || row['Media Format'] || ''),
-      upc: String(row.UPC || row.Barcode || ''),
-      barcode: String(row.Barcode || row.UPC || ''),
-      barcodeType: String(row['Barcode Type'] || ''),
-      releaseYear: String(row['Release Year'] || ''),
-      releaseDate: String(row['Release Date'] || ''),
-      studio: String(row.Studio || row.Publisher || ''),
-      author: String(row.Author || row.Creator || ''),
-      rating: String(row.Rating || ''),
-      cardProductType: String(row['Card Product Type'] || row['Sale Format'] || ''),
-      cardGame: String(row['Card Game'] || ''),
-      cardSport: String(row.Sport || row['Card Sport'] || ''),
-      cardSet: String(row.Set || row['Card Set'] || ''),
-      cardNumber: String(row.Number || row['Card Number'] || row['Collector Number'] || ''),
-      cardProvider: String(row['Card Provider'] || ''),
-      cardProviderId: String(row['Card Provider ID'] || row['TCGplayer ID'] || ''),
-      cardLanguage: String(row.Language || row['Card Language'] || ''),
-      cardRarity: String(row.Rarity || ''),
-      cardFinish: String(row.Finish || row.Printing || ''),
-      cardEdition: String(row.Edition || row['Card Edition'] || ''),
-      coverImageUrl: String(row['Cover Image URL'] || ''),
-      metadataSource: String(row['Metadata Source'] || ''),
-      metadataConfidence: String(row['Metadata Confidence'] || ''),
-      collectionName: String(row.Collection || row['Collection Name'] || ''),
-      acquiredDate: String(row['Acquired Date'] || row['Purchase Date'] || ''),
-      listedDate: String(row['Listed Date'] || ''),
-      storageLocation: String(row['Storage Location'] || row.Bin || row.Location || ''),
-      estLow: numberValue(row['Estimated eBay Low'] || row['eBay Low'] || row.estLow),
-      estHigh: numberValue(row['Estimated eBay High'] || row['eBay High'] || row.estHigh),
-      userLow: numberValue(row['User Value Low']),
-      userHigh: numberValue(row['User Value High']),
-      valueSource: (row['Value Source'] as InventoryItem['valueSource']) || 'Estimated',
-      needsValueCheck: String(row['Needs Value Check'] || '').toUpperCase() === 'Y',
-      localLow: numberValue(row['Local Low']),
-      localHigh: numberValue(row['Local High']),
-      priority: String(row.Priority || ''),
-      strategy: String(row.Strategy || ''),
-      listingRecommendation: (row.Recommendation as InventoryItem['listingRecommendation']) || undefined,
-      status: String(row.Status || 'Inventory'),
-      purchasePrice: numberValue(row['Purchase Price']),
-      soldPrice: numberValue(row['Sold Price']),
-      fees: numberValue(row.Fees),
-      shipping: numberValue(row.Shipping),
-      condition: String(row.Condition || ''),
-      completeness: String(row.Completeness || ''),
-      complete: String(row.Complete || '').toUpperCase() === 'Y',
-      manual: String(row.Manual || '').toUpperCase() === 'Y',
-      aiDescription: String(row['AI Description'] || ''),
-      itemDisclosures: String(row['Item Disclosures'] || row.Disclosures || ''),
-      confidence: String(row.Confidence || ''),
-      ebayTitle: String(row['eBay Title'] || ''),
-      ebayDescription: String(row['eBay Description'] || ''),
-      ebayCategory: String(row['eBay Category'] || ''),
-      ebayCategoryId: String(row['eBay Category ID'] || row['Category ID'] || ''),
-      ebayCondition: String(row['eBay Condition'] || ''),
-      ebayItemSpecifics: String(row['eBay Item Specifics'] || ''),
-      ebayPrice: numberValue(row['eBay Price']),
-      ebayShipping: String(row['eBay Shipping'] || ''),
-      notes: String(row.Notes || ''),
+      type,
+      console: textValue(rowValue(row, ['Console', 'console', 'Platform', 'platform'])),
+      title,
+      edition: textValue(rowValue(row, ['Edition', 'edition'])),
+      mediaFormat,
+      upc,
+      barcode: upc,
+      barcodeType: textValue(rowValue(row, ['Barcode Type', 'barcodeType'])),
+      releaseYear,
+      releaseDate: textValue(rowValue(row, ['Release Date', 'releaseDate'])),
+      studio: textValue(rowValue(row, ['Studio', 'Publisher', 'publisher'])),
+      author,
+      rating: textValue(rowValue(row, ['Rating', 'rating'])),
+      cardProductType: textValue(rowValue(row, ['Card Product Type', 'Sale Format', 'saleFormat'])),
+      cardGame: textValue(rowValue(row, ['Card Game', 'cardGame'])),
+      cardSport: textValue(rowValue(row, ['Sport', 'Card Sport', 'cardSport'])),
+      cardSet: textValue(rowValue(row, ['Set', 'Card Set', 'cardSet'])),
+      cardNumber: textValue(rowValue(row, ['Number', 'Card Number', 'Collector Number', 'cardNumber'])),
+      cardProvider: textValue(rowValue(row, ['Card Provider', 'cardProvider'])),
+      cardProviderId: textValue(rowValue(row, ['Card Provider ID', 'TCGplayer ID', 'cardProviderId'])),
+      cardLanguage: textValue(rowValue(row, ['Language', 'Card Language', 'cardLanguage'])),
+      cardRarity: textValue(rowValue(row, ['Rarity', 'cardRarity'])),
+      cardFinish: textValue(rowValue(row, ['Finish', 'Printing', 'Foil', 'cardFinish'])),
+      cardEdition: textValue(rowValue(row, ['Card Edition', 'cardEdition'])) || textValue(rowValue(row, ['Edition', 'edition'])),
+      coverImageUrl: textValue(rowValue(row, ['Cover Image URL', 'coverImageUrl', 'Image URL'])),
+      metadataSource: textValue(rowValue(row, ['Metadata Source', 'metadataSource'])) || 'AI/CSV Import',
+      metadataConfidence: textValue(rowValue(row, ['Metadata Confidence', 'metadataConfidence', 'Confidence', 'confidence'])),
+      collectionName: textValue(rowValue(row, ['Collection', 'Collection Name', 'collectionName'])),
+      acquiredDate: textValue(rowValue(row, ['Acquired Date', 'Purchase Date', 'acquiredDate'])),
+      listedDate: textValue(rowValue(row, ['Listed Date', 'listedDate'])),
+      storageLocation: textValue(rowValue(row, ['Storage Location', 'Bin', 'Location', 'storageLocation'])),
+      estLow: estimatedLow,
+      estHigh: estimatedHigh,
+      userLow: numberValue(rowValue(row, ['User Value Low', 'userLow'])),
+      userHigh: numberValue(rowValue(row, ['User Value High', 'userHigh'])),
+      valueSource: (textValue(rowValue(row, ['Value Source', 'valueSource'])) as InventoryItem['valueSource']) || (hasImportedValue ? 'AI/CSV Estimate' : 'Estimated'),
+      needsValueCheck: explicitNeedsValueCheck ? /^(y|yes|true|1)$/i.test(explicitNeedsValueCheck) : !hasImportedValue,
+      localLow: numberValue(rowValue(row, ['Local Low', 'localLow'])),
+      localHigh: numberValue(rowValue(row, ['Local High', 'localHigh'])),
+      priority,
+      strategy: textValue(rowValue(row, ['Strategy', 'strategy'])) || priority,
+      listingRecommendation,
+      status: textValue(rowValue(row, ['Status', 'status'])) || 'Inventory',
+      purchasePrice: numberValue(rowValue(row, ['Purchase Price', 'purchasePrice', 'Cost', 'Paid'])),
+      soldPrice: numberValue(rowValue(row, ['Sold Price', 'soldPrice'])),
+      fees: numberValue(rowValue(row, ['Fees', 'fees'])),
+      shipping: numberValue(rowValue(row, ['Shipping', 'shipping'])),
+      condition: textValue(rowValue(row, ['Condition', 'condition'])),
+      completeness: textValue(rowValue(row, ['Completeness', 'completeness'])),
+      complete: /^(y|yes|true|1)$/i.test(textValue(rowValue(row, ['Complete', 'complete']))),
+      manual: /^(y|yes|true|1)$/i.test(textValue(rowValue(row, ['Manual', 'manual']))),
+      aiDescription: textValue(rowValue(row, ['AI Description', 'aiDescription'])),
+      itemDisclosures,
+      confidence: textValue(rowValue(row, ['Confidence', 'confidence'])),
+      ebayTitle: ebayTitle || [title, author, mediaFormat, releaseYear].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 80),
+      ebayDescription,
+      ebayCategory: textValue(rowValue(row, ['eBay Category', 'ebayCategory'])),
+      ebayCategoryId: textValue(rowValue(row, ['eBay Category ID', 'Category ID', 'ebayCategoryId'])),
+      ebayCondition: textValue(rowValue(row, ['eBay Condition', 'ebayCondition'])),
+      ebayItemSpecifics: textValue(rowValue(row, ['eBay Item Specifics', 'ebayItemSpecifics'])),
+      ebayPrice: suggestedPrice,
+      ebayShipping: textValue(rowValue(row, ['eBay Shipping', 'ebayShipping'])),
+      notes,
       createdAt: now(),
       updatedAt: now()
     }];
