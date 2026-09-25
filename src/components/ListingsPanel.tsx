@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
 import { AlertTriangle, Archive, BadgeDollarSign, Boxes, Calculator, Camera, CheckCircle2, ChevronDown, CircleStop, Clock3, CloudUpload, DollarSign, Download, ExternalLink, Eye, Gauge, KeyRound, Link, ListChecks, ListTodo, LogOut, MapPin, MoreHorizontal, Package, PackageCheck, Pause, Pencil, Percent, Play, Plus, RefreshCw, Rocket, Save, ScanBarcode, Search, Send, Settings, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles, Tags, Trash2, Truck, Upload, WandSparkles, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
@@ -607,6 +607,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
   const [smartPrepareBusy, setSmartPrepareBusy] = useState(false);
   const [smartPrepareError, setSmartPrepareError] = useState('');
   const smartPrepareRequest = useRef(0);
+  const ebaySetupPanelRef = useRef<HTMLElement | null>(null);
   const [sandboxSetup, setSandboxSetup] = useState(EMPTY_SANDBOX_SETUP);
 
   useEffect(() => {
@@ -1567,6 +1568,12 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
     });
   }
 
+  function openEbaySettings(event?: MouseEvent<HTMLButtonElement>) {
+    event?.currentTarget.closest('details')?.removeAttribute('open');
+    setSellerSetupExpanded(true);
+    window.setTimeout(() => ebaySetupPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  }
+
   async function refreshSellerListingCount(sellerKey = adminKey) {
     if (!sellerKey) return;
     setSellerListingCountBusy(true);
@@ -2299,7 +2306,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
       <section className="panel listingWorkspaceHeader">
         <div className="listingWorkspaceTitle"><div><p className="eyebrow">Selling workspace</p><h2>Listings</h2><p>Work one stage at a time. Setup and maintenance stay available without crowding the queue.</p></div><div className="listingWorkspaceActions">
           {ebaySetup?.connected ? <span className="statusPill ebayConnected"><ShieldCheck size={14}/> eBay connected</span> : <span className="statusPill attention"><AlertTriangle size={14}/> eBay setup needed</span>}
-          <details className="listingUtilityMenu listingWorkspaceMenu"><summary aria-label="Open listing workspace settings" title="Workspace settings"><MoreHorizontal size={18}/></summary><div><button className="secondary" onClick={() => setTemplatesOpen(true)}><Tags size={16}/> Listing templates</button><button className="secondary" aria-expanded={sellerSetupExpanded} onClick={() => setSellerSetupExpanded((expanded) => !expanded)}><Settings size={16}/> eBay settings</button></div></details>
+          <details className="listingUtilityMenu listingWorkspaceMenu"><summary aria-label="Open listing workspace settings" title="Workspace settings"><MoreHorizontal size={18}/></summary><div><button className="secondary" onClick={() => setTemplatesOpen(true)}><Tags size={16}/> Listing templates</button><button className="secondary" aria-expanded={sellerSetupExpanded} onClick={openEbaySettings}><Settings size={16}/> eBay settings</button></div></details>
         </div></div>
       </section>
 
@@ -2378,7 +2385,7 @@ export default function ListingsPanel({ onAddOtherItem }: { onAddOtherItem: () =
         </div>
       </section> : null}
 
-      {(!ebaySetup?.connected || sellerSetupExpanded) ? <section className="panel ebaySetupPanel">
+      {(!ebaySetup?.connected || sellerSetupExpanded) ? <section ref={ebaySetupPanelRef} className="panel ebaySetupPanel">
         <div className="panelHeader">
           <div><h2>Link Your eBay Account</h2><p>{ebaySetup?.connected && !sellerSetupExpanded ? (sellerDefaultsReady ? 'Connected and ready. Expand to manage location, policies, categories, and account counts.' : 'Connected, but listing defaults need attention.') : 'Link the seller account, then choose its policies and inventory location before staging offers from FlipTracker.'}</p></div>
           <div className="ebayConnectionHeaderActions">
