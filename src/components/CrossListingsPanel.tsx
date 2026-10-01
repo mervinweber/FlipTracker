@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
-import { BadgeDollarSign, CheckCircle2, Copy, Download, ExternalLink, FolderPlus, Link as LinkIcon, PackageSearch, RefreshCw, Save, Search, ShoppingBag, Trash2, X } from 'lucide-react';
+import { BadgeDollarSign, CheckCircle2, Copy, Download, ExternalLink, FolderPlus, Link as LinkIcon, PackagePlus, PackageSearch, RefreshCw, Save, Search, ShoppingBag, Trash2, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import {
@@ -50,6 +50,15 @@ type CrossListing = {
   assetStatus?: string;
   assetLocation?: string;
   assetBarcode?: string;
+  bundleCount?: number;
+  bundleMembers?: {
+    assetId: Id<'assets'>;
+    title: string;
+    type?: string;
+    mediaFormat?: string;
+    barcode?: string;
+    purchasePrice?: number;
+  }[];
   assetPhotoUrl?: string;
   photoCount?: number;
   photoUrls?: string[];
@@ -63,8 +72,14 @@ type AssetOption = {
   title: string;
   type: string;
   mediaFormat?: string;
+  upc?: string;
+  barcode?: string;
   status?: string;
   storageLocation?: string;
+  purchasePrice?: number;
+  ebayPrice?: number;
+  estimatedLow?: number;
+  estimatedHigh?: number;
 };
 
 type SourceListingOption = {
@@ -125,6 +140,7 @@ function money(value?: number) {
 }
 
 function sourceLabel(row: CrossListing) {
+  if (row.sourceType === 'inventoryBundle') return 'Inventory Bundle';
   if (row.sourceType === 'ebayBundle') return 'eBay Bundle';
   if (row.sourceType === 'ebayListing') return 'eBay Listing';
   return 'Inventory';
@@ -161,6 +177,7 @@ export default function CrossListingsPanel() {
   const assets = useQuery(api.assets.list, {}) as AssetOption[] | undefined;
   const sourceListings = useQuery(api.crossListings.sourceListings) as SourceListingOption[] | undefined;
   const createFromAsset = useMutation(api.crossListings.createFromAsset);
+  const createBundleFromAssets = useMutation(api.crossListings.createBundleFromAssets);
   const createFromMarketplaceListing = useMutation(api.crossListings.createFromMarketplaceListing);
   const updateCrossListing = useMutation(api.crossListings.update);
   const removeCrossListing = useMutation(api.crossListings.remove);
@@ -172,10 +189,12 @@ export default function CrossListingsPanel() {
   const [sourceFilter, setSourceFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<Id<'crossListings'>>>(new Set());
-  const [sourceMode, setSourceMode] = useState<'asset' | 'listing' | null>(null);
+  const [sourceMode, setSourceMode] = useState<'asset' | 'listing' | 'bundle' | null>(null);
   const [sourceAssetId, setSourceAssetId] = useState('');
   const [sourceListingId, setSourceListingId] = useState('');
   const [sourcePlatform, setSourcePlatform] = useState('Mercari');
+  const [bundleAssetIds, setBundleAssetIds] = useState<Set<string>>(new Set());
+  const [bundleSearch, setBundleSearch] = useState('');
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [soldDraft, setSoldDraft] = useState<SoldDraft | null>(null);
   const [listedDraft, setListedDraft] = useState<ListedDraft | null>(null);
@@ -196,6 +215,19 @@ export default function CrossListingsPanel() {
 
   const selectedRows = useMemo(() => filtered.filter((row) => selectedIds.has(row._id)), [filtered, selectedIds]);
   const depopReady = selectedRows.filter((row) => row.platform === 'Depop');
+  const bundleCandidates = useMemo(() => {
+    const term = bundleSearch.trim().toLowerCase();
+    return (assets || [])
+      .filter((asset) => !['Sold', 'Written Off', 'Purged'].includes(asset.status || 'Inventory'))
+      .filter((asset) => {
+        if (!term) return true;
+        return [asset.title, asset.type, asset.mediaFormat, asset.storageLocation, asset.upc, asset.barcode].filter(Boolean).join(' ').toLowerCase().includes(term);
+      })
+      .slice(0, 80);
+  }, [assets, bundleSearch]);
+  const selectedBundleAssets = useMemo(() => (assets || []).filter((asset) => bundleAssetIds.has(asset._id)), [assets, bundleAssetIds]);
+  const selectedBundlePhotoNote = selectedBundleAssets.length ? `${selectedBundleAssets.length} inventory records selected. Photos from each record will be gathered into the Mercari handoff, with the first 12 public photos shown as the upload set.` : 'Choose the books or items that belong together.';
+  const selectedBundleValue = selectedBundleAssets.reduce((total, asset) => total + (asset.ebayPrice ?? asset.estimatedHigh ?? asset.estimatedLow ?? 0), 0);
   const dashboard = useMemo(() => {
     const base = rows || [];
     const needsPhotos = base.filter((row) => row.status === 'Needs Review' && rowNeeds(row).includes('public photo')).length;
@@ -229,6 +261,15 @@ export default function CrossListingsPanel() {
     });
   }
 
+  function toggleBundleAsset(id: Id<'assets'>) {
+    setBundleAssetIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 12) next.add(id);
+      return next;
+    });
+  }
+
   async function createSourceListing() {
     setBusy(true);
     setError('');
@@ -237,6 +278,10 @@ export default function CrossListingsPanel() {
       if (sourceMode === 'asset') {
         if (!sourceAssetId) throw new Error('Choose an inventory item.');
         await createFromAsset({ assetId: sourceAssetId as Id<'assets'>, platform: sourcePlatform });
+      } else if (sourceMode === 'bundle') {
+        const ids = [...bundleAssetIds] as Id<'assets'>[];
+        if (ids.length < 2) throw new Error('Choose at least two inventory items for the bundle.');
+        await createBundleFromAssets({ assetIds: ids, platform: sourcePlatform });
       } else {
         if (!sourceListingId) throw new Error('Choose an eBay listing.');
         await createFromMarketplaceListing({ listingId: sourceListingId as Id<'marketplaceListings'>, platform: sourcePlatform });
@@ -244,6 +289,8 @@ export default function CrossListingsPanel() {
       setSourceMode(null);
       setSourceAssetId('');
       setSourceListingId('');
+      setBundleAssetIds(new Set());
+      setBundleSearch('');
       setMessage(`${sourcePlatform} cross-list row created.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create cross-list row.');
@@ -409,6 +456,7 @@ export default function CrossListingsPanel() {
       price: row.price,
       sku: row.sku,
       barcode: row.assetBarcode,
+      photoUrls: row.photoUrls,
       platformCategory: row.platformCategory,
       notes: row.notes,
     }), `${row.platform} handoff pack`, setMessage);
@@ -429,6 +477,7 @@ export default function CrossListingsPanel() {
         </div>
         <div className="actions">
           <button className="secondary" onClick={() => setSourceMode('asset')}><PackageSearch size={16}/> From Inventory</button>
+          <button className="secondary" onClick={() => { setSourcePlatform('Mercari'); setSourceMode('bundle'); }}><PackagePlus size={16}/> Mercari Bundle</button>
           <button className="secondary" onClick={() => setSourceMode('listing')}><FolderPlus size={16}/> From eBay Listing</button>
           <button className="secondary" onClick={() => window.location.reload()}><RefreshCw size={16}/> Refresh</button>
         </div>
@@ -438,7 +487,7 @@ export default function CrossListingsPanel() {
         <div className="searchWrap"><Search size={16}/><input className="search" placeholder="Search title, SKU, UPC, source ID..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
         <select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option>All</option>{CROSS_LIST_PLATFORMS.map((platform) => <option key={platform}>{platform}</option>)}</select>
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>All</option>{CROSS_LIST_STATUSES.map((status) => <option key={status}>{status}</option>)}</select>
-        <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option>All</option><option>Inventory</option><option>eBay Listing</option><option>eBay Bundle</option></select>
+        <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option>All</option><option>Inventory</option><option>Inventory Bundle</option><option>eBay Listing</option><option>eBay Bundle</option></select>
       </section>
 
       <section className="crossListDashboard" aria-label="Cross-list status dashboard">
@@ -474,7 +523,7 @@ export default function CrossListingsPanel() {
                   <tr key={row._id}>
                     <td className="selectionCell"><input type="checkbox" checked={selectedIds.has(row._id)} onChange={() => toggleSelected(row._id)} aria-label={`Select ${row.title}`}/></td>
                     <td><span className="consoleTag">{row.platform}</span></td>
-                    <td className="listingIdentityCell"><strong>{row.title}</strong><small>{row.assetTitle}{row.assetBarcode ? ` · ${row.assetBarcode}` : ''}{row.photoCount ? ` · ${row.photoCount} photo${row.photoCount === 1 ? '' : 's'}` : ' · photos needed'}</small></td>
+                    <td className="listingIdentityCell"><strong>{row.title}</strong><small>{row.bundleCount && row.bundleCount > 1 ? `${row.bundleCount} items` : row.assetTitle}{row.assetBarcode ? ` · ${row.assetBarcode}` : ''}{row.photoCount ? ` · ${Math.min(row.photoCount, 12)}/${row.photoCount} photo${row.photoCount === 1 ? '' : 's'} usable` : ' · photos needed'}</small>{row.bundleMembers?.length ? <small>{row.bundleMembers.slice(0, 4).map((member) => member.title).join(' · ')}{row.bundleMembers.length > 4 ? ` · +${row.bundleMembers.length - 4} more` : ''}</small> : null}</td>
                     <td><span className="statusPill">{sourceLabel(row)}</span><small>{row.sourceExternalListingId ? `eBay ${row.sourceExternalListingId}` : row.sourceStatus || row.assetStatus || ''}</small></td>
                     <td><span className={badgeClass(row.status)}>{row.status}</span>{row.status === 'Needs Review' ? <small className="warningText">{row.handoffNotes || `Needs ${rowNeeds(row).join(', ') || 'review'}`}</small> : null}</td>
                     <td>{row.soldPrice !== undefined ? money(row.soldPrice) : money(row.price)}{row.shippingPrice !== undefined ? <small>Ship {money(row.shippingPrice)}</small> : null}</td>
@@ -503,16 +552,33 @@ export default function CrossListingsPanel() {
       {sourceMode ? (
         <div className="modalBackdrop">
           <section className="modal crossListingsModal">
-            <header className="modalHeader"><div><h2>{sourceMode === 'asset' ? 'Create from Inventory' : 'Create from eBay Listing'}</h2><p>Creates one prepared marketplace row. eBay bundles stay bundled.</p></div><button className="iconButton secondary" onClick={() => setSourceMode(null)} aria-label="Close source picker"><X size={18}/></button></header>
+            <header className="modalHeader"><div><h2>{sourceMode === 'asset' ? 'Create from Inventory' : sourceMode === 'bundle' ? 'Create Mercari Bundle' : 'Create from eBay Listing'}</h2><p>{sourceMode === 'bundle' ? 'Creates one marketplace handoff row from multiple inventory items, combined descriptions, and all available photos.' : 'Creates one prepared marketplace row. eBay bundles stay bundled.'}</p></div><button className="iconButton secondary" onClick={() => setSourceMode(null)} aria-label="Close source picker"><X size={18}/></button></header>
             <div className="formGrid">
               <label>Marketplace<select value={sourcePlatform} onChange={(event) => setSourcePlatform(event.target.value)}>{CROSS_LIST_PLATFORMS.map((platform) => <option key={platform}>{platform}</option>)}</select></label>
               {sourceMode === 'asset' ? (
                 <label className="span2">Inventory Item<select value={sourceAssetId} onChange={(event) => setSourceAssetId(event.target.value)}><option value="">Choose inventory item</option>{(assets || []).map((asset) => <option key={asset._id} value={asset._id}>{asset.title}{asset.storageLocation ? ` · ${asset.storageLocation}` : ''}</option>)}</select></label>
+              ) : sourceMode === 'bundle' ? (
+                <>
+                  <div className="crossListPreview span2">
+                    <div><span>Bundle</span><strong>{selectedBundleAssets.length} selected</strong><small>{selectedBundleValue ? `${money(Math.round(selectedBundleValue * 0.9 * 100) / 100)} suggested lot price` : 'Add pricing later'}</small></div>
+                    <p>{selectedBundlePhotoNote}</p>
+                  </div>
+                  <label className="span2">Find Inventory<input value={bundleSearch} onChange={(event) => setBundleSearch(event.target.value)} placeholder="Search title, ISBN/UPC, type, or bin"/></label>
+                  <div className="bundlePicker span2">
+                    {bundleCandidates.map((asset) => {
+                      const selected = bundleAssetIds.has(asset._id);
+                      return <button type="button" key={asset._id} className={selected ? 'selected' : ''} onClick={() => toggleBundleAsset(asset._id)}>
+                        <span><input type="checkbox" readOnly checked={selected}/><strong>{asset.title}</strong></span>
+                        <small>{[asset.type, asset.mediaFormat, asset.upc || asset.barcode, asset.storageLocation, asset.ebayPrice !== undefined ? money(asset.ebayPrice) : undefined].filter(Boolean).join(' · ')}</small>
+                      </button>;
+                    })}
+                  </div>
+                </>
               ) : (
                 <label className="span2">eBay Listing<select value={sourceListingId} onChange={(event) => setSourceListingId(event.target.value)}><option value="">Choose listing</option>{(sourceListings || []).filter((listing) => listing.platform === 'eBay').map((listing) => <option key={listing._id} value={listing._id}>{listing.title}{listing.bundleCount && listing.bundleCount > 1 ? ` · ${listing.bundleCount}-item bundle` : ''}{listing.currentPrice || listing.listedPrice ? ` · ${money(listing.currentPrice || listing.listedPrice)}` : ''}</option>)}</select></label>
               )}
             </div>
-            <div className="actions right"><button className="secondary" onClick={() => setSourceMode(null)}>Cancel</button><button disabled={busy} onClick={createSourceListing}><ShoppingBag size={16}/>{busy ? 'Creating...' : 'Create Cross-List Row'}</button></div>
+            <div className="actions right"><button className="secondary" onClick={() => setSourceMode(null)}>Cancel</button><button disabled={busy || (sourceMode === 'bundle' && bundleAssetIds.size < 2)} onClick={createSourceListing}><ShoppingBag size={16}/>{busy ? 'Creating...' : sourceMode === 'bundle' ? 'Create Bundle Row' : 'Create Cross-List Row'}</button></div>
           </section>
         </div>
       ) : null}

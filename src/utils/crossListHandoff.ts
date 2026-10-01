@@ -173,6 +173,7 @@ export function buildCrossListDescription(source: CrossListSource) {
 }
 
 export function buildCrossListClipboardPack(source: CrossListSource) {
+  const photos = publicCrossListPhotoUrls(source.photoUrls).slice(0, 12);
   return [
     `Title: ${source.title || ''}`,
     `Price: ${source.price !== undefined ? `$${source.price.toFixed(2)}` : ''}`,
@@ -180,6 +181,8 @@ export function buildCrossListClipboardPack(source: CrossListSource) {
     `Condition: ${normalizeCrossListCondition(source.condition, source.type, source.mediaFormat)}`,
     `SKU: ${source.sku || ''}`,
     source.barcode ? `Identifier: ${source.barcode}` : '',
+    photos.length ? `Photos (${photos.length}):` : '',
+    ...photos.map((url, index) => `${index + 1}. ${url}`),
     '',
     buildCrossListDescription(source),
   ].filter((line, index, lines) => line || lines[index - 1]).join('\n');

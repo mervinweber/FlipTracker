@@ -256,6 +256,20 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_platform_and_status", ["platform", "status"]),
 
+  crossListingBundleItems: defineTable({
+    ownerId: v.optional(v.string()),
+    crossListingId: v.id("crossListings"),
+    assetId: v.id("assets"),
+    position: v.number(),
+    titleSnapshot: v.string(),
+    barcodeSnapshot: v.optional(v.string()),
+    purchasePriceSnapshot: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_ownerId", ["ownerId"])
+    .index("by_crossListingId", ["crossListingId"])
+    .index("by_assetId", ["assetId"]),
+
   marketplaceListings: defineTable({
     ownerId: v.optional(v.string()),
     assetId: v.id("assets"),

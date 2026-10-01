@@ -207,6 +207,12 @@ td small { display:block; color:var(--muted); margin-top:3px; }
 .crossListPreview strong { min-width:0; overflow-wrap:anywhere; }
 .crossListPreview small { color:var(--muted); font-size:12px; }
 .crossListPreview p { margin:0; color:var(--muted); font-size:13px; line-height:1.4; overflow-wrap:anywhere; }
+.bundlePicker { display:grid; gap:8px; max-height:360px; overflow:auto; padding:8px; border:1px solid var(--border); border-radius:8px; background:#020617; }
+.bundlePicker button { display:grid; gap:5px; width:100%; padding:10px 12px; text-align:left; border:1px solid var(--border); border-radius:7px; background:var(--surface-3); }
+.bundlePicker button.selected { border-color:#60a5fa; background:rgba(47,111,237,.16); }
+.bundlePicker span { display:flex; min-width:0; align-items:center; gap:8px; }
+.bundlePicker strong { min-width:0; overflow-wrap:anywhere; }
+.bundlePicker small { color:var(--muted); line-height:1.3; overflow-wrap:anywhere; }
 .linkedAccountNotice { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border:1px solid rgba(20,184,166,.45); border-radius:8px; background:rgba(20,184,166,.08); color:#d1fae5; }
 .linkedAccountNotice strong, .linkedAccountNotice small { display:block; }
 .linkedAccountNotice small { margin-top:4px; color:var(--muted); line-height:1.35; }

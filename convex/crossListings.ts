@@ -98,6 +98,50 @@ function priceFromAsset(asset: Doc<"assets">) {
   return asset.estimatedLow ?? asset.estimatedHigh;
 }
 
+function cleanText(value?: string) {
+  return (value || "").replace(/\s+/g, " ").trim();
+}
+
+function bundleTitle(assets: Doc<"assets">[], platform: string) {
+  const familyName = family(assets[0]);
+  const titles = assets.map((asset) => cleanText(asset.ebayTitle || asset.title)).filter(Boolean);
+  const shared = familyName === "book" ? "Book Lot" : familyName === "media" ? "Media Lot" : familyName === "videoGame" ? "Video Game Lot" : "Bundle Lot";
+  const joined = titles.slice(0, 3).join(" + ");
+  const suffix = assets.length > 3 ? ` + ${assets.length - 3} More` : "";
+  return cleanText(`${assets.length} Item ${shared}: ${joined}${suffix}`).slice(0, titleLimit(platform));
+}
+
+function bundleDescription(assets: Doc<"assets">[]) {
+  const lines = [
+    `Bundle of ${assets.length} items. Each item shown in the photos is included.`,
+    "",
+    "Included:",
+    ...assets.map((asset, index) => {
+      const identifier = asset.upc || asset.barcode;
+      const details = [
+        asset.author ? `Author: ${asset.author}` : "",
+        asset.mediaFormat ? `Format: ${asset.mediaFormat}` : "",
+        asset.condition ? `Condition: ${asset.condition}` : "",
+        asset.completeness ? `Completeness: ${asset.completeness}` : "",
+        identifier ? `ISBN/UPC: ${identifier}` : "",
+      ].filter(Boolean).join(" · ");
+      const notes = cleanText(asset.itemDisclosures || asset.notes);
+      return `${index + 1}. ${cleanText(asset.title)}${details ? ` - ${details}` : ""}${notes ? `\n   Notes: ${notes}` : ""}`;
+    }),
+    "",
+    "Please review all photos for exact condition.",
+  ];
+  return lines.join("\n").slice(0, 3_000);
+}
+
+function bundlePrice(assets: Doc<"assets">[]) {
+  const prices = assets.map(priceFromAsset).filter((value): value is number => value !== undefined && Number.isFinite(value) && value > 0);
+  if (!prices.length) return undefined;
+  const sum = prices.reduce((total, value) => total + value, 0);
+  const discount = prices.length > 1 ? 0.9 : 1;
+  return Math.max(1, Math.round(sum * discount * 100) / 100);
+}
+
 async function assetPhotoUrls(ctx: any, assetIds: Id<"assets">[]) {
   const urls: string[] = [];
   for (const assetId of assetIds) {
@@ -111,6 +155,15 @@ async function assetPhotoUrls(ctx: any, assetIds: Id<"assets">[]) {
     if (asset?.coverImageUrl) urls.push(asset.coverImageUrl);
   }
   return [...new Set(urls)];
+}
+
+async function crossListingMembers(ctx: any, row: Doc<"crossListings">) {
+  const links = await ctx.db.query("crossListingBundleItems").withIndex("by_crossListingId", (q: any) => q.eq("crossListingId", row._id)).collect();
+  if (!links.length) {
+    const asset = await ctx.db.get(row.assetId);
+    return asset ? [asset] : [];
+  }
+  return (await Promise.all(links.sort((a: any, b: any) => a.position - b.position).map((link: any) => ctx.db.get(link.assetId)))).filter(Boolean);
 }
 
 async function listingMembers(ctx: any, listing: Doc<"marketplaceListings">) {
@@ -229,6 +282,35 @@ async function rowForListing(ctx: any, listing: Doc<"marketplaceListings">, plat
   };
 }
 
+async function rowForAssetBundle(ctx: any, assets: Doc<"assets">[], platform: string, overrides: any = {}) {
+  const primary = assets[0];
+  const photoUrls = await assetPhotoUrls(ctx, assets.map((asset) => asset._id));
+  const price = overrides.price ?? bundlePrice(assets);
+  const description = overrides.description ?? bundleDescription(assets);
+  const barcodes = assets.map((asset) => asset.upc || asset.barcode).filter(Boolean);
+  const title = overrides.title || bundleTitle(assets, platform);
+  return {
+    assetId: primary._id,
+    sourceType: "inventoryBundle",
+    sourceSnapshotJson: snapshotFromAssets(assets),
+    platform,
+    status: overrides.status ?? statusFor({ platform, title, description, price, photoUrls }),
+    title,
+    description,
+    sku: overrides.sku || `FT-BUNDLE-${Date.now().toString(36).toUpperCase()}`,
+    category: primary.type,
+    platformCategory: overrides.platformCategory || defaultCategory(platform, primary),
+    condition: overrides.condition || normalizeCondition(primary.condition, primary),
+    price,
+    shippingPrice: overrides.shippingPrice,
+    notes: [
+      overrides.notes,
+      `Inventory bundle: ${assets.length} items`,
+      barcodes.length ? `Identifiers: ${barcodes.join(", ")}` : "",
+    ].filter(Boolean).join("\n"),
+  };
+}
+
 export const list = query({
   args: {},
   handler: async (ctx) => {
@@ -239,9 +321,10 @@ export const list = query({
       const asset = await ctx.db.get(row.assetId);
       const sourceListing = row.sourceListingId ? await ctx.db.get(row.sourceListingId) : undefined;
       const linkedAccount = row.linkedAccountId ? await ctx.db.get(row.linkedAccountId) : undefined;
-      let assetIds = [row.assetId];
+      let members = await crossListingMembers(ctx, row);
+      let assetIds = members.map((member: Doc<"assets">) => member._id);
       if (sourceListing) {
-        const members = await listingMembers(ctx, sourceListing);
+        members = await listingMembers(ctx, sourceListing);
         assetIds = members.map((member: Doc<"assets">) => member._id);
       }
       const photoUrls = await assetPhotoUrls(ctx, assetIds);
@@ -253,6 +336,15 @@ export const list = query({
         assetLocation: asset?.storageLocation,
         assetPhotoUrl: photoUrls[0] || asset?.photoDataUrl || asset?.coverImageUrl,
         assetBarcode: asset?.upc || asset?.barcode,
+        bundleCount: members.length,
+        bundleMembers: members.map((member: Doc<"assets">) => ({
+          assetId: member._id,
+          title: member.title,
+          type: member.type,
+          mediaFormat: member.mediaFormat,
+          barcode: member.upc || member.barcode,
+          purchasePrice: member.purchasePrice,
+        })),
         photoCount: photoUrls.length,
         photoUrls,
         sourceListingTitle: sourceListing?.title,
@@ -350,6 +442,41 @@ export const createFromAsset = mutation({
     const now = Date.now();
     const row = await rowForAsset(ctx, asset!, args.platform);
     const result = await upsertCrossListing(ctx, ownerId, row, now);
+    return result.id;
+  },
+});
+
+export const createBundleFromAssets = mutation({
+  args: { assetIds: v.array(v.id("assets")), platform: v.string() },
+  handler: async (ctx, args) => {
+    const uniqueIds = [...new Set(args.assetIds)];
+    if (uniqueIds.length < 2) throw new Error("Choose at least two inventory items for a bundle.");
+    if (uniqueIds.length > 12) throw new Error("Mercari bundle handoff supports up to 12 inventory items.");
+    if (!platforms.includes(args.platform)) throw new Error("Choose Mercari, Depop, or Vinted.");
+    const ownerId = await currentOwnerId(ctx);
+    const assets: Doc<"assets">[] = [];
+    for (const assetId of uniqueIds) {
+      const asset = await ctx.db.get(assetId);
+      assertOwner(asset, ownerId, "Inventory item");
+      assets.push(asset!);
+    }
+    const now = Date.now();
+    const row = await rowForAssetBundle(ctx, assets, args.platform);
+    const result = await upsertCrossListing(ctx, ownerId, row, now);
+    const existingLinks = await ctx.db.query("crossListingBundleItems").withIndex("by_crossListingId", (q: any) => q.eq("crossListingId", result.id)).collect();
+    for (const link of existingLinks) await ctx.db.delete(link._id);
+    for (let index = 0; index < assets.length; index += 1) {
+      await ctx.db.insert("crossListingBundleItems", {
+        ownerId,
+        crossListingId: result.id,
+        assetId: assets[index]._id,
+        position: index,
+        titleSnapshot: assets[index].title,
+        barcodeSnapshot: assets[index].upc || assets[index].barcode,
+        purchasePriceSnapshot: assets[index].purchasePrice,
+        createdAt: now,
+      });
+    }
     return result.id;
   },
 });
@@ -463,7 +590,7 @@ export const prepareHandoff = mutation({
     for (const id of args.ids) {
       const row = await ctx.db.get(id);
       assertOwner(row, ownerId, "Cross listing");
-      let assetIds = [row.assetId];
+      let assetIds = (await crossListingMembers(ctx, row!)).map((asset: Doc<"assets">) => asset._id);
       if (row.sourceListingId) {
         const listing = await ctx.db.get(row.sourceListingId);
         if (listing) assetIds = (await listingMembers(ctx, listing)).map((asset: Doc<"assets">) => asset._id);
@@ -495,6 +622,8 @@ export const remove = mutation({
   args: { id: v.id("crossListings") },
   handler: async (ctx, args) => {
     assertOwner(await ctx.db.get(args.id), await currentOwnerId(ctx), "Cross listing");
+    const links = await ctx.db.query("crossListingBundleItems").withIndex("by_crossListingId", (q: any) => q.eq("crossListingId", args.id)).collect();
+    for (const link of links) await ctx.db.delete(link._id);
     await ctx.db.delete(args.id);
     return null;
   },
@@ -537,9 +666,8 @@ export const markSold = mutation({
         members = listing ? await listingMembers(ctx, listing) : [];
       }
       if (!members.length) {
-        const asset = await ctx.db.get(existing.assetId);
-        assertOwner(asset, ownerId, "Inventory item");
-        if (asset) members = [asset];
+        members = await crossListingMembers(ctx, existing);
+        for (const member of members) assertOwner(member, ownerId, "Inventory item");
       }
       const soldPriceAllocations = splitAmount(args.soldPrice, members.length);
       const feeAllocations = splitAmount(args.fees, members.length);
